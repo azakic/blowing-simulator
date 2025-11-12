@@ -8,6 +8,7 @@ import (
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
 )
+
 // JettingProtocol struct definition (restored)
 type JettingProtocol struct {
 	ID                int64   `db:"id"`
@@ -45,7 +46,9 @@ var db *sqlx.DB
 type Report struct {
 	ID      int64  `db:"id"`
 	Date    string `db:"date"`
+	Time    string `db:"time"`
 	Address string `db:"address"`
+	NVT     string `db:"nvt"`
 	Type    string `db:"type"` // "jetting", "fremco", etc.
 }
 
@@ -91,7 +94,9 @@ func Migrate() error {
 	CREATE TABLE IF NOT EXISTS reports (
 		id SERIAL PRIMARY KEY,
 		date TEXT,
+		time TEXT,
 		address TEXT,
+		nvt TEXT,
 		type TEXT
 	);
 
@@ -138,18 +143,22 @@ func Migrate() error {
 }
 
 // InsertReport inserts a new report and returns its ID.
-func InsertReport(date, address, typ string) (int64, error) {
+func InsertReport(date, time, address, nvt, typ string) (int64, error) {
+	if db == nil {
+		fmt.Printf("[MOCK] InsertReport: date=%s, time=%s, address=%s, nvt=%s, type=%s\n", date, time, address, nvt, typ)
+		return 1, nil // mock ID
+	}
 	dbType := os.Getenv("DB_TYPE")
 	var err error
 	if dbType == "postgres" {
 		var id int64
-		err = db.QueryRow("INSERT INTO reports (date, address, type) VALUES ($1, $2, $3) RETURNING id", date, address, typ).Scan(&id)
+		err = db.QueryRow("INSERT INTO reports (date, time, address, nvt, type) VALUES ($1, $2, $3, $4, $5) RETURNING id", date, time, address, nvt, typ).Scan(&id)
 		if err != nil {
 			return 0, err
 		}
 		return id, nil
 	} else {
-		res, err := db.Exec("INSERT INTO reports (date, address, type) VALUES (?, ?, ?)", date, address, typ)
+		res, err := db.Exec("INSERT INTO reports (date, time, address, nvt, type) VALUES (?, ?, ?, ?, ?)", date, time, address, nvt, typ)
 		if err != nil {
 			return 0, err
 		}
@@ -163,6 +172,10 @@ func InsertReport(date, address, typ string) (int64, error) {
 
 // InsertMeasurement inserts a new measurement for a report.
 func InsertMeasurement(reportID int64, length, speed, pressure, torque float64) error {
+	if db == nil {
+		fmt.Printf("[MOCK] InsertMeasurement: reportID=%d, length=%.2f, speed=%.2f, pressure=%.2f, torque=%.2f\n", reportID, length, speed, pressure, torque)
+		return nil
+	}
 	dbType := os.Getenv("DB_TYPE")
 	var err error
 	if dbType == "postgres" {
@@ -212,23 +225,27 @@ func MigrateJettingProtocol() error {
 }
 
 func InsertJettingProtocol(p JettingProtocol) error {
+	if db == nil {
+		fmt.Printf("[MOCK] InsertJettingProtocol: %+v\n", p)
+		return nil
+	}
 	dbType := os.Getenv("DB_TYPE")
 	var err error
 	query := `
-		INSERT INTO jetting_protocols (
-			report_id, bauvorhaben, streckenabschnitt, firma, einblaeser, bemerkungen, gps, datum, uhrzeit,
-			rohr_hersteller, kabel_hersteller, rohrtyp, kabeltyp, gleitmittel,
-			start_meter, end_meter, luftfeuchtigkeit, temperatur, wetter, wind, druck, schubkraft, laenge, gleitmittelmenge
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
+	       INSERT INTO jetting_protocols (
+		       report_id, bauvorhaben, streckenabschnitt, firma, einblaeser, bemerkungen, gps, datum, uhrzeit,
+		       rohr_hersteller, kabel_hersteller, rohrtyp, kabeltyp, gleitmittel,
+		       start_meter, end_meter, luftfeuchtigkeit, temperatur, wetter, wind, druck, schubkraft, laenge, gleitmittelmenge
+	       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       `
 	if dbType == "postgres" {
 		query = `
-			INSERT INTO jetting_protocols (
-				report_id, bauvorhaben, streckenabschnitt, firma, einblaeser, bemerkungen, gps, datum, uhrzeit,
-				rohr_hersteller, kabel_hersteller, rohrtyp, kabeltyp, gleitmittel,
-				start_meter, end_meter, luftfeuchtigkeit, temperatur, wetter, wind, druck, schubkraft, laenge, gleitmittelmenge
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
-		`
+		       INSERT INTO jetting_protocols (
+			       report_id, bauvorhaben, streckenabschnitt, firma, einblaeser, bemerkungen, gps, datum, uhrzeit,
+			       rohr_hersteller, kabel_hersteller, rohrtyp, kabeltyp, gleitmittel,
+			       start_meter, end_meter, luftfeuchtigkeit, temperatur, wetter, wind, druck, schubkraft, laenge, gleitmittelmenge
+		       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+	       `
 	}
 	_, err = db.Exec(query,
 		p.ReportID, p.Bauvorhaben, p.Streckenabschnitt, p.Firma, p.Einblaeser, p.Bemerkungen, p.GPS, p.Datum, p.Uhrzeit,

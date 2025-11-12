@@ -5,6 +5,28 @@ import (
 	"strings"
 )
 
+// ExtractJettingMetadata scans normalized Jetting TXT for metadata fields.
+func ExtractJettingMetadata(normalized string) map[string]string {
+	meta := make(map[string]string)
+	lines := strings.Split(normalized, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "Datum:") {
+			meta["Date"] = strings.TrimSpace(strings.TrimPrefix(line, "Datum:"))
+		}
+		if strings.HasPrefix(line, "Uhrzeit:") {
+			meta["Time"] = strings.TrimSpace(strings.TrimPrefix(line, "Uhrzeit:"))
+		}
+		if strings.HasPrefix(line, "Adresse:") {
+			meta["Address"] = strings.TrimSpace(strings.TrimPrefix(line, "Adresse:"))
+		}
+		if strings.HasPrefix(line, "NVT:") {
+			meta["NVT"] = strings.TrimSpace(strings.TrimPrefix(line, "NVT:"))
+		}
+	}
+	return meta
+}
+
 // SimpleMeasurement is defined in parse_fremco.go
 
 // Block header detection for Jetting format
@@ -51,64 +73,43 @@ func min(vals ...int) int {
 func ParseJettingTxt(normalized string) []SimpleMeasurement {
 	lines := strings.Split(normalized, "\n")
 	var measurements []SimpleMeasurement
-
-	// Remove empty lines and trim
-	var values []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if line != "" {
-			values = append(values, line)
+		if line == "" {
+			continue
 		}
-	}
-	println("Jetting Parser Debug: values count =", len(values))
-
-	// Robust row parser: scan for plausible length values, treat next 5 values as row
-	var rows [][]string
-	for i := 0; i+5 < len(values); i++ {
-		length, err := strconv.ParseFloat(values[i], 64)
-		// Accept plausible length values (e.g., 0 < length < 1000)
-		if err == nil && length >= 0 && length < 1000 {
-			row := values[i : i+6]
-			rows = append(rows, row)
-			i += 5 // advance to next possible row
+		fields := strings.Fields(line)
+		// Accept rows with 6 columns (Jetting format)
+		if len(fields) >= 6 {
+			length, _ := strconv.ParseFloat(fields[0], 64)
+			// temp := fields[1] // not used
+			force, _ := strconv.ParseFloat(fields[2], 64)
+			pressure, _ := strconv.ParseFloat(fields[3], 64)
+			speed, _ := strconv.ParseFloat(fields[4], 64)
+			time := fields[5]
+			measurements = append(measurements, SimpleMeasurement{
+				Length:   length,
+				Speed:    speed,
+				Pressure: pressure,
+				Torque:   force, // use force as torque for now
+				Time:     time,
+			})
+		} else if len(fields) == 5 {
+			// Accept alternate format if present
+			length, _ := strconv.ParseFloat(fields[0], 64)
+			speed, _ := strconv.ParseFloat(fields[1], 64)
+			pressure, _ := strconv.ParseFloat(fields[2], 64)
+			torque, _ := strconv.ParseFloat(fields[3], 64)
+			time := fields[4]
+			measurements = append(measurements, SimpleMeasurement{
+				Length:   length,
+				Speed:    speed,
+				Pressure: pressure,
+				Torque:   torque,
+				Time:     time,
+			})
 		}
-	}
-	println("Jetting Parser Debug: Robust row parser, rows =", len(rows))
-
-	// Find max force for torque calculation
-	maxForce := 1.0
-	for _, row := range rows {
-		force, err := strconv.ParseFloat(row[2], 64)
-		if err == nil && force > maxForce {
-			maxForce = force
-		}
-	}
-
-	for _, row := range rows {
-		length, _ := strconv.ParseFloat(row[0], 64)
-		force, _ := strconv.ParseFloat(row[2], 64)
-		pressure, _ := strconv.ParseFloat(row[3], 64)
-		speed, _ := strconv.ParseFloat(row[4], 64)
-		// time := row[5] // ignored
-
-		// Calculate torque as percentage of max force, clamp to 1-100
-		torque := 1.0
-		if maxForce > 0 {
-			torque = (force / maxForce) * 100
-			if torque < 1 {
-				torque = 1
-			}
-			if torque > 100 {
-				torque = 100
-			}
-		}
-
-		measurements = append(measurements, SimpleMeasurement{
-			Length:   length,
-			Speed:    speed,
-			Pressure: pressure,
-			Torque:   int(torque + 0.5),
-		})
+		// Ignore rows with fewer than 5 columns
 	}
 	return measurements
 }

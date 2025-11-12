@@ -27,25 +27,14 @@ var lastCSVExport string
 func NormalizeJettingTxt(raw string) string {
 	raw = strings.ReplaceAll(raw, "\f", "\n")
 	lines := strings.Split(raw, "\n")
-	var blocks []string
-	var currentBlock []string
+	var normalizedLines []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
+		if line != "" {
+			normalizedLines = append(normalizedLines, line)
 		}
-		if strings.Contains(line, "[") && strings.Contains(line, "]") {
-			if len(currentBlock) > 0 {
-				blocks = append(blocks, strings.Join(currentBlock, "\n"))
-				currentBlock = []string{}
-			}
-		}
-		currentBlock = append(currentBlock, line)
 	}
-	if len(currentBlock) > 0 {
-		blocks = append(blocks, strings.Join(currentBlock, "\n"))
-	}
-	return strings.Join(blocks, "\n\n")
+	return strings.Join(normalizedLines, "\n")
 }
 
 func NormalizeFremcoTxt(raw string) string {
@@ -184,7 +173,14 @@ func runCommand(cmd string, args []string) error {
 }
 
 func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFiles("web/templates/pdf2text.html")
+	tmpl := template.New("pdf2text.html").Funcs(template.FuncMap{
+		"formatTime": func(t string) string {
+			t = strings.TrimSpace(t)
+			t = strings.ReplaceAll(t, " ", ".")
+			return t
+		},
+	})
+	tmpl, err := tmpl.ParseFiles("web/templates/pdf2text.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -213,6 +209,44 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	baseName := strings.TrimSuffix(header.Filename, filepath.Ext(header.Filename))
+	// Support both Jetting and Fremco filename formats
+	var date, time, address, nvt, project string
+	if strings.Contains(baseName, ",") {
+		// Jetting format: "29.10.2025, 11 20, Eiermarkt 15 B NVT 1V2200"
+		parts := strings.Split(baseName, ",")
+		if len(parts) >= 3 {
+			date = strings.TrimSpace(parts[0])
+			time = strings.TrimSpace(parts[1])
+			rest := strings.TrimSpace(parts[2])
+			nvtIdx := strings.Index(rest, "NVT ")
+			if nvtIdx != -1 {
+				address = strings.TrimSpace(rest[:nvtIdx])
+				nvt = strings.TrimSpace(rest[nvtIdx+4:])
+			} else {
+				address = rest
+			}
+		}
+		log.Printf("[Jetting] Parsed filename: %s | Date: %s | Time: %s | Address: %s | NVT: %s", baseName, date, time, address, nvt)
+	} else {
+		// Fremco format: "SM209214964_2025-10-23 15_30_Oldenburger Koppel 23_NVT1V3400"
+		parts := strings.Split(baseName, "_")
+		if len(parts) >= 6 {
+			project = parts[0]
+			dateParts := strings.Split(parts[1], "-")
+			if len(dateParts) == 3 {
+				date = dateParts[2] + "." + dateParts[1] + "." + dateParts[0]
+			} else {
+				date = strings.ReplaceAll(parts[1], "-", ".")
+			}
+			time = parts[2] + "." + parts[3]
+			// Address is everything between time and NVT
+			addressParts := parts[4 : len(parts)-1]
+			address = strings.TrimSpace(strings.Join(addressParts, " "))
+			nvt = parts[len(parts)-1]
+		}
+		log.Printf("[Fremco] Parsed filename: %s | Project: %s | Date: %s | Time: %s | Address: %s | NVT: %s", baseName, project, date, time, address, nvt)
+	}
+
 	tempTxt := filepath.Join(os.TempDir(), baseName+".txt")
 	format := r.FormValue("format")
 	var normalized string
@@ -237,7 +271,9 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 	rawStr := string(raw)
 
 	var measurements []simulator.SimpleMeasurement
-	if strings.Contains(rawStr, "Streckenlänge") && strings.Contains(rawStr, "Drehmoment") {
+	var pdfMeta map[string]string
+	if strings.Contains(rawStr, "Länge") && strings.Contains(rawStr, "Schubkraft") {
+		pdfMeta = simulator.ExtractJettingMetadata(rawStr)
 		// Fremco format detected, use pdftotext extraction
 		text, err := extractTextWithPdftotext(tempPdf)
 		if err != nil {
@@ -305,8 +341,7 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 			"Torque":     last.Torque,
 			"Time":       "", // Add time if available
 		}
-		var totalSpeed, totalPressure float64
-		var totalTorque int
+		var totalSpeed, totalPressure, totalTorque float64
 		for _, m := range measurements {
 			totalLength += m.Length
 			totalSpeed += m.Speed
@@ -320,17 +355,31 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 			"Torque":   totalTorque,
 		}
 	}
+	var fremcoMeta map[string]string
+	if format == "fremco" {
+		fremcoMeta = simulator.ExtractFremcoMetadata(normalized)
+	}
 	tmpl.Execute(w, map[string]interface{}{
-		"Text":            normalized,
+		"Text":            rawStr,
+		"Normalized":      normalized,
 		"JSON":            string(jsonOutput),
 		"Format":          format,
 		"LastMeasurement": lastMeasurement,
 		"SumMeasurement":  sumMeasurement,
 		"TotalLength":     totalLength,
+		"Date":            date,
+		"Time":            time,
+		"Address":         address,
+		"NVT":             nvt,
+		"Project":         project,
+		"Filename":        header.Filename,
+		"PDFDate":         pdfMeta["Date"],
+		"PDFTime":         pdfMeta["Time"],
+		"PDFAddress":      pdfMeta["Address"],
+		"PDFNVT":          pdfMeta["NVT"],
+		"FremcoMeta":      fremcoMeta,
 	})
 }
-
-// --- Main ---
 
 func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "web/templates/index.html")

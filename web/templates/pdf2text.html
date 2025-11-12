@@ -69,6 +69,29 @@
     </head>
     <body>
         <h1>PDF to Text Converter</h1>
+        <div class="result">
+            <h2>Report Info</h2>
+            <table>
+                <tr><th>Project Number</th><td>{{ .Project }}</td></tr>
+                <tr><th>Filename</th><td>{{ .Filename }}</td></tr>
+                <tr><th>Date</th><td>{{ .Date }}</td></tr>
+                <tr><th>Time (hh.mm)</th><td>{{ formatTime .Time }}</td></tr>
+                <tr><th>Address</th><td>{{ .Address }}</td></tr>
+                <tr><th>NVT</th><td>{{ .NVT }}</td></tr>
+            </table>
+        </div>
+        {{ if .FremcoMeta }}
+        <div class="result">
+            <h2>Fremco Metadata</h2>
+            <table>
+                <tbody>
+                {{ range $key, $val := .FremcoMeta }}
+                    <tr><th>{{ $key }}</th><td>{{ $val }}</td></tr>
+                {{ end }}
+                </tbody>
+            </table>
+        </div>
+        {{ end }}
         <form action="/pdf2text" method="post" enctype="multipart/form-data">
             <label for="pdfFile">Select PDF file:</label>
             <input
@@ -92,79 +115,68 @@
                         <th>Uhrzeit [hh:mm:ss]</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <!-- JS will insert rows here -->
-                </tbody>
+                <tbody id="measurements-tbody"></tbody>
             </table>
+            <div id="no-measurements" style="display:none;color:#b00;font-weight:bold;display:none;">No measurement data found.</div>
         </div>
-
         <div class="result">
-            <h2>Messwerte Diagramm</h2>
-            <canvas id="measurements-chart" width="900" height="400"></canvas>
+            <h2>Messwerte Chart</h2>
+            <canvas id="measurements-chart" width="800" height="300"></canvas>
+            <div id="no-chart" style="display:none;color:#b00;font-weight:bold;">No chart data available.</div>
         </div>
-
         <div class="result">
-            <h2>Uniform JSON Output</h2>
-            <button onclick="downloadJSON()">Download JSON</button>
-            {{ if .JSON }}
+            <h2>JSON Report</h2>
             <pre id="json-output">{{ .JSON }}</pre>
-            {{ else }}
-            <pre id="json-output">[]</pre>
-            {{ end }}
+            <button onclick="downloadJSON()">Download JSON</button>
+            <div id="no-json" style="display:none;color:#b00;font-weight:bold;">No JSON data available.</div>
         </div>
-
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
-            function downloadJSON() {
-                var data = document.getElementById("json-output").textContent;
-                var blob = new Blob([data], { type: "application/json" });
-                var url = URL.createObjectURL(blob);
-                var a = document.createElement("a");
-                a.href = url;
-                a.download = "report.json";
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }
+        function downloadJSON() {
+            var data = document.getElementById("json-output").textContent;
+            var blob = new Blob([data], { type: "application/json" });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement("a");
+            a.href = url;
+            a.download = "report.json";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
 
-            // Parse JSON from the pre block
-            let measurements = [];
-            try {
-                measurements = JSON.parse(
-                    document.getElementById("json-output").textContent,
-                );
-            } catch (e) {}
+        // Parse JSON from the pre block
+        let measurements = [];
+        try {
+            measurements = JSON.parse(document.getElementById("json-output").textContent);
+        } catch (e) {}
 
-            // Render table
-            const tbody = document
-                .getElementById("measurements-table")
-                .querySelector("tbody");
-            if (measurements && measurements.length > 0) {
-                measurements.forEach((m) => {
-                    const row = document.createElement("tr");
-                    row.innerHTML = `
-                <td>${m.length}</td>
-                <td>${m.speed}</td>
-                <td>${m.pressure}</td>
-                <td>${m.torque}</td>
-                <td>${m.datetime || ""}</td>
-            `;
-                    tbody.appendChild(row);
-                });
-            }
+        // Render table
+        const tbody = document.getElementById("measurements-tbody");
+        if (measurements && measurements.length > 0) {
+            measurements.forEach((m) => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                    <td>${m.length}</td>
+                    <td>${m.speed}</td>
+                    <td>${m.pressure}</td>
+                    <td>${m.torque}</td>
+                    <td>${m.time || ""}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            document.getElementById("no-measurements").style.display = "none";
+        } else {
+            document.getElementById("no-measurements").style.display = "block";
+        }
 
-            // Prepare data for chart
-            const length = measurements.map((m) => m.length);
-            const speed = measurements.map((m) => m.speed);
-            const pressure = measurements.map((m) => m.pressure);
-            const torque = measurements.map((m) => m.torque);
-
-            // Basic Chart.js axis: no custom tick logic
-
-            const ctx = document
-                .getElementById("measurements-chart")
-                .getContext("2d");
+        // Prepare data for chart
+        const length = measurements.map((m) => m.length);
+        const speed = measurements.map((m) => m.speed);
+        const pressure = measurements.map((m) => m.pressure);
+        const torque = measurements.map((m) => m.torque);
+        const ctx = document.getElementById("measurements-chart").getContext("2d");
+        if (measurements && measurements.length > 0) {
             new Chart(ctx, {
                 type: "line",
                 data: {
@@ -197,17 +209,12 @@
                     scales: {
                         x: {
                             title: { display: true, text: "Strecke [m]" },
-                            ticks: {
-                                maxTicksLimit: 12,
-                            },
+                            ticks: { maxTicksLimit: 12 },
                         },
                         y: {
                             type: "linear",
                             position: "left",
-                            title: {
-                                display: true,
-                                text: "Geschwindigkeit [m/min]",
-                            },
+                            title: { display: true, text: "Geschwindigkeit [m/min]" },
                             max: 90,
                         },
                         y1: {
@@ -226,13 +233,27 @@
                     },
                 },
             });
+            document.getElementById("no-chart").style.display = "none";
+        } else {
+            document.getElementById("no-chart").style.display = "block";
+        }
+
+        // JSON fallback message
+        const jsonBlock = document.getElementById("json-output");
+        if (!measurements || measurements.length === 0 || jsonBlock.textContent.trim() === "[]") {
+            document.getElementById("no-json").style.display = "block";
+        } else {
+            document.getElementById("no-json").style.display = "none";
+        }
         </script>
 
-        {{ if .Text }}
         <div class="result">
-            <h2>Extracted Text</h2>
+            <h2>Extracted Text (Raw)</h2>
             <pre>{{ .Text }}</pre>
         </div>
-        {{ end }}
+        <div class="result">
+            <h2>Normalized Text (for Jetting parser)</h2>
+            <pre>{{ .Normalized }}</pre>
+        </div>
     </body>
 </html>
