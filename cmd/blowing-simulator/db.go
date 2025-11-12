@@ -3,33 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
 )
-
-var db *sqlx.DB
-
-// --- Main Entities ---
-
-type Report struct {
-	ID      int64  `db:"id"`
-	Date    string `db:"date"`
-	Address string `db:"address"`
-	Type    string `db:"type"` // "jetting", "fremco", etc.
-}
-
-type Measurement struct {
-	ID       int64   `db:"id"`
-	ReportID int64   `db:"report_id"`
-	Length   float64 `db:"length"`
-	Speed    float64 `db:"speed"`
-	Pressure float64 `db:"pressure"`
-	Torque   float64 `db:"torque"`
-}
-
+// JettingProtocol struct definition (restored)
 type JettingProtocol struct {
 	ID                int64   `db:"id"`
 	ReportID          int64   `db:"report_id"`
@@ -57,6 +36,26 @@ type JettingProtocol struct {
 	Laenge            string  `db:"laenge"`
 	Gleitmittelmenge  string  `db:"gleitmittelmenge"`
 	// Add more fields as needed
+}
+
+var db *sqlx.DB
+
+// --- Main Entities ---
+
+type Report struct {
+	ID      int64  `db:"id"`
+	Date    string `db:"date"`
+	Address string `db:"address"`
+	Type    string `db:"type"` // "jetting", "fremco", etc.
+}
+
+type Measurement struct {
+	ID       int64   `db:"id"`
+	ReportID int64   `db:"report_id"`
+	Length   float64 `db:"length"`
+	Speed    float64 `db:"speed"`
+	Pressure float64 `db:"pressure"`
+	Torque   float64 `db:"torque"`
 }
 
 // InitDB initializes the database connection for SQLite or PostgreSQL based on environment variables.
@@ -141,25 +140,26 @@ func Migrate() error {
 // InsertReport inserts a new report and returns its ID.
 func InsertReport(date, address, typ string) (int64, error) {
 	dbType := os.Getenv("DB_TYPE")
-	var res sqlx.Result
 	var err error
 	if dbType == "postgres" {
-		res, err = db.Exec("INSERT INTO reports (date, address, type) VALUES ($1, $2, $3)", date, address, typ)
-	} else {
-		func InsertReport(date, address, typ string) (int64, error) {
-			dbType := os.Getenv("DB_TYPE")
-			var res sqlx.Result
-			var err error
-			if dbType == "postgres" {
-				res, err = db.Exec("INSERT INTO reports (date, address, type) VALUES ($1, $2, $3)", date, address, typ)
-			} else {
-				res, err = db.Exec("INSERT INTO reports (date, address, type) VALUES (?, ?, ?)", date, address, typ)
-			}
-			if err != nil {
-				return 0, err
-			}
-			return res.LastInsertId()
+		var id int64
+		err = db.QueryRow("INSERT INTO reports (date, address, type) VALUES ($1, $2, $3) RETURNING id", date, address, typ).Scan(&id)
+		if err != nil {
+			return 0, err
 		}
+		return id, nil
+	} else {
+		res, err := db.Exec("INSERT INTO reports (date, address, type) VALUES (?, ?, ?)", date, address, typ)
+		if err != nil {
+			return 0, err
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			return 0, err
+		}
+		return id, nil
+	}
+}
 
 // InsertMeasurement inserts a new measurement for a report.
 func InsertMeasurement(reportID int64, length, speed, pressure, torque float64) error {
@@ -176,36 +176,6 @@ func InsertMeasurement(reportID int64, length, speed, pressure, torque float64) 
 }
 
 // --- Jetting Protocol Struct, Migration, and Insert ---
-
-type JettingProtocol struct {
-	ID                int64   `db:"id"`
-	ReportID          int64   `db:"report_id"`
-	Bauvorhaben       string  `db:"bauvorhaben"`
-	Streckenabschnitt string  `db:"streckenabschnitt"`
-	Firma             string  `db:"firma"`
-	Einblaeser        string  `db:"einblaeser"`
-	Bemerkungen       string  `db:"bemerkungen"`
-	GPS               string  `db:"gps"`
-	Datum             string  `db:"datum"`
-	Uhrzeit           string  `db:"uhrzeit"`
-	RohrHersteller    string  `db:"rohr_hersteller"`
-	KabelHersteller   string  `db:"kabel_hersteller"`
-	Rohrtyp           string  `db:"rohrtyp"`
-	Kabeltyp          string  `db:"kabeltyp"`
-	Gleitmittel       string  `db:"gleitmittel"`
-	StartMeter        float64 `db:"start_meter"`
-	EndMeter          float64 `db:"end_meter"`
-	Luftfeuchtigkeit  string  `db:"luftfeuchtigkeit"`
-	Temperatur        string  `db:"temperatur"`
-	Wetter            string  `db:"wetter"`
-	Wind              string  `db:"wind"`
-	Druck             string  `db:"druck"`
-	Schubkraft        string  `db:"schubkraft"`
-	Laenge            string  `db:"laenge"`
-	Gleitmittelmenge  string  `db:"gleitmittelmenge"`
-	// Add more fields as needed
-}
-}
 
 func MigrateJettingProtocol() error {
 	schema := `
