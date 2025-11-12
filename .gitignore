@@ -1,0 +1,20 @@
+# Go build artifacts
+*.exe
+*.out
+*.test
+*.log
+
+# SQLite database
+blowing.db
+
+# Dependency directories
+vendor/
+
+# IDE/editor files
+.idea/
+.vscode/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db

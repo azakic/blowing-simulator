@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="de">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Jetting Einblas-Protokoll</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 2em;
+                background: #f9f9f9;
+            }
+            table {
+                border-collapse: collapse;
+                width: 100%;
+                background: #fff;
+            }
+            th,
+            td {
+                border: 1px solid #333;
+                padding: 6px 10px;
+                text-align: left;
+            }
+            th {
+                background: #eee;
+            }
+            .section-header {
+                background: #ccc;
+                font-weight: bold;
+                text-align: center;
+            }
+            .group-header {
+                background: #ddd;
+                font-weight: bold;
+                text-align: left;
+            }
+            .actions {
+                margin-top: 2em;
+                text-align: center;
+            }
+            input[type="text"],
+            input[type="number"] {
+                width: 100%;
+                box-sizing: border-box;
+            }
+            input[type="checkbox"],
+            input[type="radio"] {
+                width: auto;
+            }
+        </style>
+        <!-- Leaflet CSS -->
+        <link
+            rel="stylesheet"
+            href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        />
+        <style>
+            #gps-map {
+                height: 300px;
+                margin-top: 10px;
+                margin-bottom: 10px;
+                border: 1px solid #333;
+            }
+            #gps-search-bar {
+                margin-top: 10px;
+                margin-bottom: 5px;
+                display: flex;
+                gap: 8px;
+            }
+            #gps-search-input {
+                flex: 1;
+                padding: 4px 8px;
+            }
+            #gps-search-btn {
+                padding: 4px 12px;
+            }
+            #gps-search-error {
+                color: #b00;
+                font-size: 0.95em;
+                margin-top: 4px;
+            }
+        </style>
+    </head>
+    <body>
+        <form method="post" action="/submit-jetting-report">
+            <table>
+                <tr>
+                    <th colspan="3" class="section-header">Jetting Report</th>
+                    <th colspan="3" class="section-header">
+                        Einblas-Protokoll
+                    </th>
+                </tr>
+                <tr>
+                    <td>Bauvorhaben</td>
+                    <td colspan="2">
+                        <input type="text" name="bauvorhaben" />
+                    </td>
+                    <td>Streckenabschnitt / NVt</td>
+                    <td colspan="2">
+                        <input type="text" name="streckenabschnitt" />
+                    </td>
+                </tr>
+                <tr>
+                    <td>Firma</td>
+                    <td colspan="2"><input type="text" name="firma" /></td>
+                    <td>Einbläser</td>
+                    <td colspan="2"><input type="text" name="einblaeser" /></td>
+                </tr>
+                <tr>
+                    <td>Bemerkungen</td>
+                    <td colspan="5">
+                        <input type="text" name="bemerkungen" />
+                    </td>
+                </tr>
+                <tr>
+                    <td>Ort(GPS)</td>
+                    <td colspan="5">
+                        <input type="text" name="gps" id="gps-input" />
+                        <div id="gps-search-bar">
+                            <input
+                                type="text"
+                                id="gps-search-input"
+                                placeholder="Adresse suchen (z.B. Berlin, Alexanderplatz)"
+                            />
+                            <button type="button" id="gps-search-btn">
+                                Suchen
+                            </button>
+                        </div>
+                        <div id="gps-search-error"></div>
+                        <div id="gps-map"></div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Datum</td>
+                    <td><input type="date" name="datum" lang="de" /></td>
+                    <td>Uhrzeit</td>
+                    <td><input type="time" name="uhrzeit" lang="de" /></td>
+                    <td colspan="2"></td>
+                </tr>
+
+                <tr>
+                    <th colspan="2" class="group-header">Rohrparameter</th>
+                    <th colspan="2" class="group-header">Kabelparameter</th>
+                    <th colspan="2" class="group-header">
+                        Einblasgerät / Kompressor
+                    </th>
+                </tr>
+                <tr>
+                    <td>Hersteller</td>
+                    <td>
+                        <select name="rohr_hersteller">
+                            <option value="" selected>Bitte wählen</option>
+                            <option value="gabocom">gabocom</option>
+                            <option value="egeplast">egeplast</option>
+                            <option value="FRÄNKISCHE">FRÄNKISCHE</option>
+                            <option value="Pipelife">Pipelife</option>
+                            <option value="Rehau">Rehau</option>
+                        </select>
+                    </td>
+                    <td>Hersteller</td>
+                    <td>
+                        <select name="kabel_hersteller">
+                            <option value="" selected>Bitte wählen</option>
+                            <option value="gabocom">gabocom</option>
+                            <option value="Corning">Corning</option>
+                            <option value="Prysmian">Prysmian</option>
+                            <option value="Draka">Draka</option>
+                            <option value="TKF">TKF</option>
+                            <option value="NBG Fiber Optics">
+                                NBG Fiber Optics
+                            </option>
+                            <option value="R&M">
+                                Reichle & De-Massari (R&M)
+                            </option>
+                        </select>
+                    </td>
+                    <td>Einblasgerät</td>
+                    <td><input type="text" name="einblaeser" /></td>
+                </tr>
+                <tr>
+                    <td>Rohrtyp</td>
+                    <td>
+                        <select name="rohrtyp">
+                            <option value="" selected>Bitte wählen</option>
+                            <option value="22x7x1.5">22x7x1.5</option>
+                            <option value="eon 24x7x1.5">eon 24x7x1.5</option>
+                            <option value="19x10x2">19x10x2</option>
+                            <option value="7x5x1">7x5x1</option>
+                            <option value="10x8x1">10x8x1</option>
+                            <option value="12x10x1">12x10x1</option>
+                            <option value="16x12x2">16x12x2</option>
+                            <option value="20x16x2">20x16x2</option>
+                            <option value="32x28x2">32x28x2</option>
+                            <option value="40x36x2">40x36x2</option>
+                            <option value="50x44x3">50x44x3</option>
+                            <option value="gabocom speedpipe">
+                                gabocom speedpipe
+                            </option>
+                            <option value="gabocom Mikrorohr">
+                                gabocom Mikrorohr
+                            </option>
+                            <option value="HDPE">HDPE</option>
+                            <option value="PE">PE</option>
+                            <option value="PVC">PVC</option>
+                            <option value="Mikrorohr">Mikrorohr</option>
+                            <option value="Speedpipe">Speedpipe</option>
+                            <option value="custom">Andere...</option>
+                        </select>
+                    </td>
+                    <td>Kabeltyp</td>
+                    <td>
+                        <select name="kabeltyp">
+                            <option value="" selected>Bitte wählen</option>
+                            <option value="LWL">LWL (Lichtwellenleiter)</option>
+                            <option value="Glasfaser">Glasfaser</option>
+                            <option value="Singlemode">Singlemode</option>
+                            <option value="Multimode">Multimode</option>
+                            <option value="Mini-Bundle">Mini-Bundle</option>
+                            <option value="Microkabel">Microkabel</option>
+                            <option value="Bündelader">Bündelader</option>
+                            <option value="Outdoor">Outdoor</option>
+                            <option value="Indoor">Indoor</option>
+                            <option value="A-D2Y 1x4">A-D2Y 1x4</option>
+                            <option value="A-D2Y 1x6">A-D2Y 1x6</option>
+                            <option value="A-D2Y 1x12">A-D2Y 1x12</option>
+                            <option value="A-D2Y 1x24">A-D2Y 1x24</option>
+                            <option value="GYAXY 1x4">GYAXY 1x4</option>
+                            <option value="GYAXY 1x6">GYAXY 1x6</option>
+                            <option value="GYAXY 1x12">GYAXY 1x12</option>
+                            <option value="GYAXY 1x24">GYAXY 1x24</option>
+                            <option value="GYTY 1x4">GYTY 1x4</option>
+                            <option value="GYTY 1x6">GYTY 1x6</option>
+                            <option value="GYTY 1x12">GYTY 1x12</option>
+                            <option value="GYTY 1x24">GYTY 1x24</option>
+                            <option value="GYTA 1x4">GYTA 1x4</option>
+                            <option value="GYTA 1x6">GYTA 1x6</option>
+                            <option value="GYTA 1x12">GYTA 1x12</option>
+                            <option value="GYTA 1x24">GYTA 1x24</option>
+                            <option value="GYFTA 1x4">GYFTA 1x4</option>
+                            <option value="GYFTA 1x6">GYFTA 1x6</option>
+                            <option value="GYFTA 1x12">GYFTA 1x12</option>
+                            <option value="GYFTA 1x24">GYFTA 1x24</option>
+                            <option value="GYFXTY 1x4">GYFXTY 1x4</option>
+                            <option value="GYFXTY 1x6">GYFXTY 1x6</option>
+                            <option value="GYFXTY 1x12">GYFXTY 1x12</option>
+                            <option value="GYFXTY 1x24">GYFXTY 1x24</option>
+                            <option value="GYTA53 1x4">GYTA53 1x4</option>
+                            <option value="GYTA53 1x6">GYTA53 1x6</option>
+                            <option value="GYTA53 1x12">GYTA53 1x12</option>
+                            <option value="GYTA53 1x24">GYTA53 1x24</option>
+                            <option value="GYTA33 1x4">GYTA33 1x4</option>
+                            <option value="GYTA33 1x6">GYTA33 1x6</option>
+                            <option value="GYTA33 1x12">GYTA33 1x12</option>
+                            <option value="GYTA33 1x24">GYTA33 1x24</option>
+                            <option value="GYTS 1x4">GYTS 1x4</option>
+                            <option value="GYTS 1x6">GYTS 1x6</option>
+                            <option value="GYTS 1x12">GYTS 1x12</option>
+                            <option value="GYTS 1x24">GYTS 1x24</option>
+                            <option value="GYFTY 1x4">GYFTY 1x4</option>
+                            <option value="GYFTY 1x6">GYFTY 1x6</option>
+                            <option value="GYFTY 1x12">GYFTY 1x12</option>
+                            <option value="GYFTY 1x24">GYFTY 1x24</option>
+                            <option value="GYXTW 1x4">GYXTW 1x4</option>
+                            <option value="GYXTW 1x6">GYXTW 1x6</option>
+                            <option value="GYXTW 1x12">GYXTW 1x12</option>
+                            <option value="GYXTW 1x24">GYXTW 1x24</option>
+                            <option value="E(GYAXY-4B6a1)">
+                                E(GYAXY-4B6a1)
+                            </option>
+                        </select>
+                    </td>
+                    <td>Gleitmittel</td>
+                    <td>
+                        <select
+                            name="gleitmittel"
+                            onchange="if(this.value=='custom'){this.style.display='none';document.getElementById('gleitmittel_custom').style.display='inline';}"
+                        >
+                            <option value="" selected>Bitte wählen</option>
+                            <option value="Prelube 5000">Prelube 5000</option>
+                            <option value="custom">Andere...</option>
+                        </select>
+                        <input
+                            type="text"
+                            name="gleitmittel"
+                            id="gleitmittel_custom"
+                            style="display: none"
+                            placeholder="Eigener Wert"
+                        />
+                    </td>
+                </tr>
+                <tr>
+                    <td>Farbe / Kennung</td>
+                    <td>
+                        <style>
+                            .fiber-dropdown {
+                                position: relative;
+                                width: 220px;
+                            }
+                            .fiber-dropdown-selected {
+                                border: 1px solid #333;
+                                padding: 6px;
+                                background: #fff;
+                                cursor: pointer;
+                            }
+                            .fiber-dropdown-list {
+                                display: none;
+                                position: absolute;
+                                z-index: 10;
+                                background: #fff;
+                                border: 1px solid #333;
+                                width: 100%;
+                                max-height: 300px;
+                                overflow-y: auto;
+                            }
+                            .fiber-dropdown-list .fiber-option {
+                                display: flex;
+                                align-items: center;
+                                padding: 6px;
+                                cursor: pointer;
+                            }
+                            .fiber-square {
+                                width: 22px;
+                                height: 22px;
+                                margin-right: 8px;
+                                border: 1px solid #aaa;
+                                position: relative;
+                            }
+                            .fiber-square.white-line::after {
+                                content: "";
+                                position: absolute;
+                                left: 0;
+                                top: 50%;
+                                width: 100%;
+                                height: 4px;
+                                background: #fff;
+                                transform: translateY(-50%);
+                            }
+                        </style>
+                        <div class="fiber-dropdown" id="fiberDropdown">
+                            <div
+                                class="fiber-dropdown-selected"
+                                id="fiberDropdownSelected"
+                            >
+                                Bitte wählen
+                            </div>
+                            <div
+                                class="fiber-dropdown-list"
+                                id="fiberDropdownList"
+                            >
+                                <!-- First 12 colors -->
+                                <div class="fiber-option" data-value="rot">
+                                    <div
+                                        class="fiber-square"
+                                        style="background: #e00"
+                                    ></div>
+                                    rot (DIN 1)
+                                </div>
+                                <div class="fiber-option" data-value="grün">
+                                    <div
+                                        class="fiber-square"
+                                        style="background: #0a0"
+                                    ></div>
+                                    grün (DIN 2)
+                                </div>
+                                <div class="fiber-option" data-value="blau">
+                                    <div
+                                        class="fiber-square"
+                                        style="background: #08f"
+                                    ></div>
+                                    blau (DIN 3)
+                                </div>
+                                <div class="fiber-option" data-value="gelb">
+                                    <div
+                                        class="fiber-square"
+                                        style="background: #ff0"
+                                    ></div>
+                                    gelb (DIN 4)
+                                </div>
+                                <div class="fiber-option" data-value="weiß">
+                                    <div
+                                        class="fiber-square"
+                                        style="background: #fff"
+                                    ></div>
+                                    weiß (DIN 5)
+                                </div>
+                                <div class="fiber-option" data-value="grau">
+                                    <div
+                                        class="fiber-square"
+                                        style="background: #888"
+                                    ></div>
+                                    grau (DIN 6)
+                                </div>
+                                <div class="fiber-option" data-value="braun">
+                                    <div
+                                        class="fiber-square"
+                                        style="background: #a52a2a"
+                                    ></div>
+                                    braun (DIN 7)
+                                </div>
+                                <div class="fiber-option" data-value="violett">
+                                    <div
+                                        class="fiber-square"
+                                        style="background: #a0a"
+                                    ></div>
+                                    violett (DIN 8)
+                                </div>
+                                <div class="fiber-option" data-value="türkis">
+                                    <div
+                                        class="fiber-square"
+                                        style="background: #0ff"
+                                    ></div>
+                                    türkis (DIN 9)
+                                </div>
+                                <div class="fiber-option" data-value="schwarz">
+                                    <div
+                                        class="fiber-square"
+                                        style="background: #000"
+                                    ></div>
+                                    schwarz (DIN 10)
+                                </div>
+                                <div class="fiber-option" data-value="orange">
+                                    <div
+                                        class="fiber-square"
+                                        style="background: #ffa500"
+                                    ></div>
+                                    orange (DIN 11)
+                                </div>
+                                <div class="fiber-option" data-value="rosa">
+                                    <div
+                                        class="fiber-square"
+                                        style="background: #f9c"
+                                    ></div>
+                                    rosa (DIN 12)
+                                </div>
+                                <!-- Second 12 colors with white line -->
+                                <div class="fiber-option" data-value="rot 2">
+                                    <div
+                                        class="fiber-square white-line"
+                                        style="background: #e00"
+                                    ></div>
+                                    rot (DIN 13, 2. Satz, mit weißem Ring)
+                                </div>
+                                <div class="fiber-option" data-value="grün 2">
+                                    <div
+                                        class="fiber-square white-line"
+                                        style="background: #0a0"
+                                    ></div>
+                                    grün (DIN 14, 2. Satz, mit weißem Ring)
+                                </div>
+                                <div class="fiber-option" data-value="blau 2">
+                                    <div
+                                        class="fiber-square white-line"
+                                        style="background: #08f"
+                                    ></div>
+                                    blau (DIN 15, 2. Satz, mit weißem Ring)
+                                </div>
+                                <div class="fiber-option" data-value="gelb 2">
+                                    <div
+                                        class="fiber-square white-line"
+                                        style="background: #ff0"
+                                    ></div>
+                                    gelb (DIN 16, 2. Satz, mit weißem Ring)
+                                </div>
+                                <div class="fiber-option" data-value="weiß 2">
+                                    <div
+                                        class="fiber-square white-line"
+                                        style="background: #fff"
+                                    ></div>
+                                    weiß (DIN 17, 2. Satz, mit weißem Ring)
+                                </div>
+                                <div class="fiber-option" data-value="grau 2">
+                                    <div
+                                        class="fiber-square white-line"
+                                        style="background: #888"
+                                    ></div>
+                                    grau (DIN 18, 2. Satz, mit weißem Ring)
+                                </div>
+                                <div class="fiber-option" data-value="braun 2">
+                                    <div
+                                        class="fiber-square white-line"
+                                        style="background: #a52a2a"
+                                    ></div>
+                                    braun (DIN 19, 2. Satz, mit weißem Ring)
+                                </div>
+                                <div
+                                    class="fiber-option"
+                                    data-value="violett 2"
+                                >
+                                    <div
+                                        class="fiber-square white-line"
+                                        style="background: #a0a"
+                                    ></div>
+                                    violett (DIN 20, 2. Satz, mit weißem Ring)
+                                </div>
+                                <div class="fiber-option" data-value="türkis 2">
+                                    <div
+                                        class="fiber-square white-line"
+                                        style="background: #0ff"
+                                    ></div>
+                                    türkis (DIN 21, 2. Satz, mit weißem Ring)
+                                </div>
+                                <div
+                                    class="fiber-option"
+                                    data-value="schwarz 2"
+                                >
+                                    <div
+                                        class="fiber-square white-line"
+                                        style="background: #000"
+                                    ></div>
+                                    schwarz (DIN 22, 2. Satz, mit weißem Ring)
+                                </div>
+                                <div class="fiber-option" data-value="orange 2">
+                                    <div
+                                        class="fiber-square white-line"
+                                        style="background: #ffa500"
+                                    ></div>
+                                    orange (DIN 23, 2. Satz, mit weißem Ring)
+                                </div>
+                                <div class="fiber-option" data-value="rosa 2">
+                                    <div
+                                        class="fiber-square white-line"
+                                        style="background: #f9c"
+                                    ></div>
+                                    rosa (DIN 24, 2. Satz, mit weißem Ring)
+                                </div>
+                                <div class="fiber-option" data-value="custom">
+                                    <div
+                                        class="fiber-square"
+                                        style="background: #fff"
+                                    ></div>
+                                    Andere...
+                                </div>
+                            </div>
+                            <input
+                                type="hidden"
+                                name="farbe_kennung"
+                                id="fiberDropdownInput"
+                            />
+                        </div>
+                        <input
+                            type="text"
+                            name="farbe_kennung"
+                            id="farbe_kennung_custom"
+                            style="display: none"
+                            placeholder="Eigener Wert"
+                        />
+                        <script>
+                            const dropdown =
+                                document.getElementById("fiberDropdown");
+                            const selected = document.getElementById(
+                                "fiberDropdownSelected",
+                            );
+                            const list =
+                                document.getElementById("fiberDropdownList");
+                            const input =
+                                document.getElementById("fiberDropdownInput");
+                            selected.onclick = () => {
+                                list.style.display =
+                                    list.style.display === "block"
+                                        ? "none"
+                                        : "block";
+                            };
+                            list.onclick = (e) => {
+                                let target = e.target;
+                                while (
+                                    target &&
+                                    !target.classList.contains("fiber-option")
+                                ) {
+                                    target = target.parentElement;
+                                }
+                                if (
+                                    target &&
+                                    target.classList.contains("fiber-option")
+                                ) {
+                                    selected.innerHTML = target.innerHTML;
+                                    input.value =
+                                        target.getAttribute("data-value");
+                                    list.style.display = "none";
+                                    if (input.value === "custom") {
+                                        document.getElementById(
+                                            "farbe_kennung_custom",
+                                        ).style.display = "inline";
+                                    } else {
+                                        document.getElementById(
+                                            "farbe_kennung_custom",
+                                        ).style.display = "none";
+                                    }
+                                }
+                                // Always set to "Bitte wählen" if nothing selected
+                                if (!input.value || input.value === "") {
+                                    selected.innerHTML = "Bitte wählen";
+                                }
+                            };
+                            document.addEventListener("click", (e) => {
+                                if (!dropdown.contains(e.target))
+                                    list.style.display = "none";
+                            });
+                            // On page load, set custom dropdown to "Bitte wählen"
+                            window.addEventListener(
+                                "DOMContentLoaded",
+                                function () {
+                                    document.getElementById(
+                                        "fiberDropdownSelected",
+                                    ).innerHTML = "Bitte wählen";
+                                    document.getElementById(
+                                        "fiberDropdownInput",
+                                    ).value = "";
+                                    // Hide custom input field on load
+                                    document.getElementById(
+                                        "farbe_kennung_custom",
+                                    ).style.display = "none";
+                                },
+                            );
+                        </script>
+                    </td>
+                    <td>Kabel-Ø</td>
+                    <td>
+                        <select
+                            name="kabel_durchmesser"
+                            onchange="if(this.value=='custom'){this.style.display='none';document.getElementById('kabel_durchmesser_custom').style.display='inline';}"
+                        >
+                            <option value="" selected>Bitte wählen</option>
+                            <option value="2.4">2.4</option>
+                            <option value="2.5">2.5</option>
+                            <option value="2.6">2.6</option>
+                            <option value="custom">Andere...</option>
+                        </select>
+                        <input
+                            type="text"
+                            name="kabel_durchmesser"
+                            id="kabel_durchmesser_custom"
+                            style="display: none"
+                            placeholder="Eigener Wert"
+                        />
+                    </td>
+                    <td>Kompressor</td>
+                    <td>
+                        <select
+                            name="kompressor"
+                            onchange="if(this.value=='custom'){this.style.display='none';document.getElementById('kompressor_custom').style.display='inline';}"
+                        >
+                            <option value="" selected>Bitte wählen</option>
+                            <option value="M17">M17</option>
+                            <option value="custom">Andere...</option>
+                        </select>
+                        <input
+                            type="text"
+                            name="kompressor"
+                            id="kompressor_custom"
+                            style="display: none"
+                            placeholder="Eigener Wert"
+                        />
+                    </td>
+                </tr>
+                <tr>
+                    <td>Verlegungsart des Rohres</td>
+                    <td><input type="text" name="verlegungsart" /></td>
+                    <td>Faseranzahl</td>
+                    <td><input type="number" name="faseranzahl" /></td>
+                    <td>Ölabscheider</td>
+                    <td><input type="checkbox" name="oelabscheider" /> Ja</td>
+                </tr>
+                <tr>
+                    <td>Rohrinnendurchmesser</td>
+                    <td>
+                        <select
+                            name="rohrinnendurchmesser"
+                            onchange="if(this.value=='custom'){this.style.display='none';document.getElementById('rohrinnendurchmesser_custom').style.display='inline';}"
+                        >
+                            <option value="">Bitte wählen</option>
+                            <option value="4">4</option>
+                            <option value="custom">Andere...</option>
+                        </select>
+                        <input
+                            type="number"
+                            name="rohrinnendurchmesser"
+                            id="rohrinnendurchmesser_custom"
+                            style="display: none"
+                            placeholder="Eigener Wert"
+                        />
+                    </td>
+                    <td>Kabeltrommel-Nr</td>
+                    <td><input type="text" name="kabeltrommel_nr" /></td>
+                    <td>Nachkühler</td>
+                    <td><input type="checkbox" name="nachkuehler" /> Ja</td>
+                </tr>
+                <tr>
+                    <td>Roraußendurchmesser</td>
+                    <td>
+                        <select
+                            name="rohraussendurchmesser"
+                            onchange="if(this.value=='custom'){this.style.display='none';document.getElementById('rohraussendurchmesser_custom').style.display='inline';}"
+                        >
+                            <option value="">Bitte wählen</option>
+                            <option value="7">7</option>
+                            <option value="custom">Andere...</option>
+                        </select>
+                        <input
+                            type="number"
+                            name="rohraussendurchmesser"
+                            id="rohraussendurchmesser_custom"
+                            style="display: none"
+                            placeholder="Eigener Wert"
+                        />
+                    </td>
+                    <td>Kabeleinblaskapp</td>
+                    <td>
+                        <label
+                            ><input
+                                type="radio"
+                                name="kabeleinblaskapp"
+                                value="ja"
+                                checked
+                            />
+                            Ja</label
+                        >
+                        <label
+                            ><input
+                                type="radio"
+                                name="kabeleinblaskapp"
+                                value="nein"
+                            />
+                            Nein</label
+                        >
+                    </td>
+                    <td>Crash Test ausgeführt</td>
+                    <td>
+                        <label
+                            ><input type="radio" name="crashtest" value="ja" />
+                            Ja</label
+                        >
+                        <label
+                            ><input
+                                type="radio"
+                                name="crashtest"
+                                value="nein"
+                                checked
+                            />
+                            Nein</label
+                        >
+                    </td>
+                </tr>
+                <tr>
+                    <td>Rohrtemperatur</td>
+                    <td><input type="text" name="rohrtemperatur" /></td>
+                    <td>Kabeltemperatur</td>
+                    <td><input type="text" name="kabeltemperatur" /></td>
+                    <td>Sicherheitsabschaltung</td>
+                    <td>
+                        <label
+                            ><input
+                                type="radio"
+                                name="sicherheitsabschaltung"
+                                value="ja"
+                            />
+                            Ja</label
+                        >
+                        <label
+                            ><input
+                                type="radio"
+                                name="sicherheitsabschaltung"
+                                value="nein"
+                                checked
+                            />
+                            Nein</label
+                        >
+                    </td>
+                </tr>
+                <tr>
+                    <td>Rohrinnenwand</td>
+                    <td colspan="5">
+                        <label
+                            ><input
+                                type="radio"
+                                name="rohrinnenwand"
+                                value="glatt"
+                                checked
+                            />
+                            glatt</label
+                        >
+                        <label
+                            ><input
+                                type="radio"
+                                name="rohrinnenwand"
+                                value="gerieft"
+                            />
+                            gerieft</label
+                        >
+                    </td>
+                </tr>
+                <tr>
+                    <th colspan="6" class="group-header">
+                        Metrierung / Umgebung
+                    </th>
+                </tr>
+                <tr>
+                    <td>Start</td>
+                    <td><input type="number" name="start" /></td>
+                    <td>Ende</td>
+                    <td><input type="number" name="ende" /></td>
+                    <td>Streckenlänge</td>
+                    <td><input type="number" name="streckenlaenge" /></td>
+                </tr>
+                <tr>
+                    <td>Umgebungsluft temp</td>
+                    <td><input type="text" name="umgebungsluft_temp" /></td>
+                    <td>Luftfeuchtigkeit</td>
+                    <td><input type="text" name="luftfeuchtigkeit" /></td>
+                    <td colspan="2"></td>
+                </tr>
+            </table>
+            <div class="actions">
+                <button type="submit">Create Jetting Report</button>
+            </div>
+        </form>
+        <!-- Leaflet JS -->
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script>
+            // Default map center (Germany)
+            var defaultLat = 51.1657;
+            var defaultLng = 10.4515;
+            var map = L.map("gps-map").setView([defaultLat, defaultLng], 6);
+
+            // Add OpenStreetMap tiles
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                maxZoom: 19,
+                attribution: "© OpenStreetMap",
+            }).addTo(map);
+
+            var marker;
+
+            // If GPS input already has a value, set marker
+            function setMarkerFromInput() {
+                var val = document.getElementById("gps-input").value;
+                if (val) {
+                    var parts = val.split(",");
+                    if (parts.length === 2) {
+                        var lat = parseFloat(parts[0]);
+                        var lng = parseFloat(parts[1]);
+                        if (!isNaN(lat) && !isNaN(lng)) {
+                            if (marker) map.removeLayer(marker);
+                            marker = L.marker([lat, lng]).addTo(map);
+                            map.setView([lat, lng], 14);
+                        }
+                    }
+                }
+            }
+
+            // On map click, set marker and update input
+            map.on("click", function (e) {
+                var lat = e.latlng.lat.toFixed(6);
+                var lng = e.latlng.lng.toFixed(6);
+                if (marker) map.removeLayer(marker);
+                marker = L.marker([lat, lng]).addTo(map);
+                document.getElementById("gps-input").value = lat + "," + lng;
+            });
+
+            // On input change, update marker
+            document
+                .getElementById("gps-input")
+                .addEventListener("change", setMarkerFromInput);
+
+            // Address search bar logic
+            document.getElementById("gps-search-btn").onclick = function () {
+                var address = document
+                    .getElementById("gps-search-input")
+                    .value.trim();
+                var errorDiv = document.getElementById("gps-search-error");
+                errorDiv.textContent = "";
+                if (!address) {
+                    errorDiv.textContent = "Bitte geben Sie eine Adresse ein.";
+                    return;
+                }
+                // Nominatim API for geocoding
+                var url =
+                    "https://nominatim.openstreetmap.org/search?format=json&q=" +
+                    encodeURIComponent(address) +
+                    "&addressdetails=1&limit=1";
+                fetch(url)
+                    .then(function (response) {
+                        return response.json();
+                    })
+                    .then(function (data) {
+                        if (data && data.length > 0) {
+                            var lat = parseFloat(data[0].lat).toFixed(6);
+                            var lon = parseFloat(data[0].lon).toFixed(6);
+                            if (marker) map.removeLayer(marker);
+                            marker = L.marker([lat, lon]).addTo(map);
+                            map.setView([lat, lon], 16);
+                            document.getElementById("gps-input").value =
+                                lat + "," + lon;
+                        } else {
+                            errorDiv.textContent = "Adresse nicht gefunden.";
+                        }
+                    })
+                    .catch(function () {
+                        errorDiv.textContent = "Fehler bei der Adresssuche.";
+                    });
+            };
+
+            // Allow pressing Enter in search input to trigger search
+            document
+                .getElementById("gps-search-input")
+                .addEventListener("keydown", function (e) {
+                    if (e.key === "Enter") {
+                        e.preventDefault();
+                        document.getElementById("gps-search-btn").click();
+                    }
+                });
+
+            // Initialize marker if input has value
+            window.onload = setMarkerFromInput;
+        </script>
+    </body>
+</html>
