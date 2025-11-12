@@ -1,5 +1,62 @@
 # Blowing Simulator
 
+## Directory Structure
+
+```
+blowing-simulator/
+├── api/                # API definitions and related code
+├── cmd/                # Main application entry points (main.go, handlers, db.go)
+├── docs/               # Documentation files
+├── internal/           # Internal Go packages (business logic, parsing, etc.)
+├── pkg/                # Reusable Go packages (if any)
+├── scripts/            # Utility scripts (PDF extraction, batch tools, etc.)
+├── test/               # Test files and test data
+├── venv/               # Python virtual environment (if used)
+├── web/                # Web assets and templates (HTML, CSS, JS)
+│   └── templates/      # HTML templates for handlers and reports
+├── .gitignore          # Git ignore rules
+├── README.md           # Project overview and instructions
+├── database.md         # Database schema and entity documentation
+├── go.mod, go.sum      # Go module files
+├── blowing-simulator   # Built binary (excluded by .gitignore)
+└── test.txt            # Example/test file (excluded by .gitignore)
+```
+
+## Project Description
+
+Blowing Simulator is a Go web application for extracting, normalizing, and parsing measurement data from Jetting and Fremco PDF reports into a unified format. It provides a full workflow from PDF upload to HTML report, CSV/JSON export, and database storage.
+
+### Features
+
+- **PDF to Text Conversion:** Extracts data from Jetting and Fremco PDF reports.
+- **Measurement Parsing:** Normalizes and parses measurements (length, speed, pressure, torque, etc.).
+- **Protocol Data:** Captures full Einblas Protokoll (blowing protocol) info, including cable meter marks, environmental data, and operator info.
+- **Database Integration:** Stores reports, measurements, and protocols in SQLite or PostgreSQL with robust relations.
+- **Web UI:** Upload PDFs, create/edit reports, view summaries, and export results.
+- **CSV/JSON/PDF Export:** Download processed data in multiple formats.
+- **Main Menu Navigation:** Quick access to all major workflows (Jetting, Fremco, Export, etc.).
+- **Extensible Schema:** Easily add new fields or entities as your workflow evolves.
+
+### Typical Workflow
+
+1. **Upload a PDF report** via the web UI.
+2. **Parse and normalize measurements** and protocol data.
+3. **Store results in the database** (reports, measurements, protocols).
+4. **View and export summaries** (CSV, JSON, PDF).
+5. **Navigate between Jetting, Fremco, and other workflows from the main menu.
+
+### Technologies Used
+
+- Go (Golang)
+- SQLite / PostgreSQL
+- HTML/CSS/JS (web templates)
+- GitHub Actions (optional for CI/CD)
+- Python (optional for legacy scripts)
+
+---
+
+For full database schema and entity documentation, see [`database.md`](./database.md).
+
 ## Main Features & Navigation
 
 The Blowing Simulator web app provides the following main features, accessible from the index page:
