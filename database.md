@@ -66,10 +66,37 @@ Stores protocol data for Jetting reports, linked to a report.
 
 ---
 
+### 4. `fremco_protocols`
+Stores protocol data for Fremco reports, linked to a report.
+
+| Field             | Type    | Description                                 |
+|-------------------|---------|---------------------------------------------|
+| id                | SERIAL/INTEGER | Unique identifier (primary key)           |
+| report_id         | INTEGER | Foreign key referencing `reports.id`         |
+| project           | TEXT    | Project name/number                         |
+| date              | TEXT    | Date                                        |
+| time              | TEXT    | Time                                        |
+| address           | TEXT    | Address/location                            |
+| nvt               | TEXT    | NVT number                                  |
+| company           | TEXT    | Company                                     |
+| device            | TEXT    | Device/Einblasgerät                         |
+| cable             | TEXT    | Cable/Bezeichnung                           |
+| meter_range       | TEXT    | Meter range                                 |
+| weather           | TEXT    | Weather                                     |
+| gps               | TEXT    | GPS location                                |
+| bemerkungen       | TEXT    | Comments                                    |
+| filename          | TEXT    | Original filename                           |
+| measurements_json | TEXT    | Measurements as JSON                        |
+| created_at        | DATETIME| Creation timestamp                          |
+| ...               | ...     | (Add more fields as needed)                 |
+
+---
+
 ## Relationships
 
 - **reports (1) <--- (many) measurements**
 - **reports (1) <--- (1) jetting_protocols**
+- **reports (1) <--- (1) fremco_protocols**
 
 ---
 
@@ -118,6 +145,27 @@ type JettingProtocol struct {
     Schubkraft        string  `db:"schubkraft"`
     Laenge            string  `db:"laenge"`
     Gleitmittelmenge  string  `db:"gleitmittelmenge"`
+    // Add more fields as needed
+}
+
+type FremcoProtocol struct {
+    ID           int64  `db:"id"`
+    ReportID     int64  `db:"report_id"`
+    Project      string `db:"project"`
+    Date         string `db:"date"`
+    Time         string `db:"time"`
+    Address      string `db:"address"`
+    NVT          string `db:"nvt"`
+    Company      string `db:"company"`
+    Device       string `db:"device"`
+    Cable        string `db:"cable"`
+    MeterRange   string `db:"meter_range"`
+    Weather      string `db:"weather"`
+    GPS          string `db:"gps"`
+    Bemerkungen  string `db:"bemerkungen"`
+    Filename     string `db:"filename"`
+    Measurements string `db:"measurements_json"`
+    CreatedAt    string `db:"created_at"`
     // Add more fields as needed
 }
 ```
@@ -171,6 +219,27 @@ CREATE TABLE IF NOT EXISTS jetting_protocols (
     gleitmittelmenge TEXT
     -- Add more fields as needed
 );
+
+CREATE TABLE IF NOT EXISTS fremco_protocols (
+    id SERIAL PRIMARY KEY,
+    report_id INTEGER REFERENCES reports(id),
+    project TEXT,
+    date TEXT,
+    time TEXT,
+    address TEXT,
+    nvt TEXT,
+    company TEXT,
+    device TEXT,
+    cable TEXT,
+    meter_range TEXT,
+    weather TEXT,
+    gps TEXT,
+    bemerkungen TEXT,
+    filename TEXT,
+    measurements_json TEXT,
+    created_at DATETIME
+    -- Add more fields as needed
+);
 ```
 
 ---
@@ -180,6 +249,7 @@ CREATE TABLE IF NOT EXISTS jetting_protocols (
 - When processing a PDF, create a `Report` entry.
 - Insert all `Measurement` rows linked to that report.
 - Insert a `JettingProtocol` entry linked to the same report.
+- For Fremco reports, insert a `FremcoProtocol` entry linked to the report.
 
 ---
 
