@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: blowing_simulator
       POSTGRES_USER: blowing
-  POSTGRES_PASSWORD: 7fG2vQp9sXw3Lk8r
+      POSTGRES_PASSWORD: 7fG2vQp9sXw3Lk8r
     ports:
       - "5432:5432"
     volumes:
@@ -19,7 +19,7 @@ services:
       DB_HOST: db
       DB_PORT: 5432
       DB_USER: blowing
-  DB_PASSWORD: 7fG2vQp9sXw3Lk8r
+      DB_PASSWORD: 7fG2vQp9sXw3Lk8r
       DB_NAME: blowing_simulator
       PORT: 8080
     ports:
