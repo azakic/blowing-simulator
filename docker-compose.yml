@@ -1,0 +1,30 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_DB: blowing_simulator
+      POSTGRES_USER: blowing
+  POSTGRES_PASSWORD: 7fG2vQp9sXw3Lk8r
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  app:
+    build: .
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: blowing
+  DB_PASSWORD: 7fG2vQp9sXw3Lk8r
+      DB_NAME: blowing_simulator
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+volumes:
+  pgdata:
