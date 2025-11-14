@@ -196,7 +196,15 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	tempPdf := filepath.Join(os.TempDir(), header.Filename)
+	
+	// Ensure temp directory exists
+	tempDir := os.TempDir()
+	if err := os.MkdirAll(tempDir, 0755); err != nil {
+		http.Error(w, "Cannot create temp directory", http.StatusInternalServerError)
+		return
+	}
+	
+	tempPdf := filepath.Join(tempDir, header.Filename)
 	out, err := os.Create(tempPdf)
 	if err != nil {
 		http.Error(w, "Cannot save PDF", http.StatusInternalServerError)
