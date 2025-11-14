@@ -279,9 +279,13 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 	rawStr := string(raw)
 
 	var measurements []simulator.SimpleMeasurement
+	var jettingMeasurements []simulator.JettingMeasurement
 	var pdfMeta map[string]string
-	if strings.Contains(rawStr, "Länge") && strings.Contains(rawStr, "Schubkraft") {
-		pdfMeta = simulator.ExtractJettingMetadata(rawStr)
+	
+	// Check for Fremco first (most specific indicators)
+	if (strings.Contains(rawStr, "Streckenabschnitt") && strings.Contains(rawStr, "Einblasgerät")) || 
+	   strings.Contains(rawStr, "Fremco") || 
+	   (strings.Contains(rawStr, "Streckenlänge [m]") && strings.Contains(rawStr, "Geschwindigkeit [m/min]") && strings.Contains(rawStr, "Rohr-Druck [bar]") && strings.Contains(rawStr, "Drehmoment [%]")) {
 		// Fremco format detected, use pdftotext extraction
 		text, err := extractTextWithPdftotext(tempPdf)
 		if err != nil {
@@ -299,13 +303,27 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		format = "fremco"
 	} else if strings.Contains(rawStr, "Länge") && strings.Contains(rawStr, "Schubkraft") {
-		// Jetting format detected, use Go-native extraction
+		// Old Jetting format detected (vertical block format), use Go-native extraction
+		pdfMeta = simulator.ExtractJettingMetadata(rawStr)
 		normalized = simulator.NormalizeJettingTxt(rawStr)
-		log.Println("Normalized text (Jetting):")
+		log.Println("Normalized text (Old Jetting):")
 		log.Println(normalized)
-		measurements = simulator.ParseJettingTxt(normalized)
-		log.Printf("Parsed measurements (Jetting): %+v\n", measurements)
-		jsonOutput, _ = json.MarshalIndent(measurements, "", "  ")
+		jettingMeasurements = simulator.ParseJettingTxt(normalized)
+		log.Printf("Parsed measurements (Old Jetting): %+v\n", jettingMeasurements)
+		jsonOutput, _ = json.MarshalIndent(jettingMeasurements, "", "  ")
+		if string(jsonOutput) == "null" {
+			jsonOutput = []byte("[]")
+		}
+		format = "jetting"
+	} else if strings.Contains(rawStr, "Streckenlänge") && strings.Contains(rawStr, "Drehmoment") && !strings.Contains(rawStr, "Fremco") {
+		// New Jetting format detected (Messwerte Tabelle), use Go-native extraction
+		pdfMeta = simulator.ExtractJettingMetadata(rawStr)
+		normalized = simulator.NormalizeJettingTxt(rawStr)
+		log.Println("Normalized text (New Jetting - Messwerte Tabelle):")
+		log.Println(normalized)
+		jettingMeasurements = simulator.ParseJettingTxt(normalized)
+		log.Printf("Parsed measurements (New Jetting): %+v\n", jettingMeasurements)
+		jsonOutput, _ = json.MarshalIndent(jettingMeasurements, "", "  ")
 		if string(jsonOutput) == "null" {
 			jsonOutput = []byte("[]")
 		}
@@ -316,9 +334,9 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 			normalized = simulator.NormalizeJettingTxt(rawStr)
 			log.Println("Normalized text (Jetting fallback):")
 			log.Println(normalized)
-			measurements = simulator.ParseJettingTxt(normalized)
-			log.Printf("Parsed measurements (Jetting fallback): %+v\n", measurements)
-			jsonOutput, _ = json.MarshalIndent(measurements, "", "  ")
+			jettingMeasurements = simulator.ParseJettingTxt(normalized)
+			log.Printf("Parsed measurements (Jetting fallback): %+v\n", jettingMeasurements)
+			jsonOutput, _ = json.MarshalIndent(jettingMeasurements, "", "  ")
 		} else {
 			// Fallback to Fremco, use pdftotext
 			text, err := extractTextWithPdftotext(tempPdf)

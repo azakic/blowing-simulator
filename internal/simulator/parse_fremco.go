@@ -5,13 +5,23 @@ import (
 	"strings"
 )
 
-// SimpleMeasurement represents a single measurement in the uniform format.
+// SimpleMeasurement represents a single measurement in the uniform format (for Fremco).
 type SimpleMeasurement struct {
 	Length   float64 `json:"length"`
 	Speed    float64 `json:"speed"`
 	Pressure float64 `json:"pressure"`
 	Torque   float64 `json:"torque"`
 	Time     string  `json:"time"`
+}
+
+// JettingMeasurement represents a Jetting measurement with German field names.
+type JettingMeasurement struct {
+	Length      float64 `json:"länge_m"`
+	Temperature float64 `json:"lufttemperatur_c"`
+	Force       float64 `json:"schubkraft_n"`
+	Pressure    float64 `json:"einblasdruck_bar"`
+	Speed       float64 `json:"geschwindigkeit_m_min"`
+	Time        string  `json:"zeit_dauer_hh_mm_ss"`
 }
 
 // ExtractFremcoMetadata parses normalized Fremco text and returns a map of metadata fields.

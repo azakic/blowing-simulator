@@ -108,11 +108,12 @@
             <table id="measurements-table">
                 <thead>
                     <tr>
-                        <th>Streckenlänge [m]</th>
-                        <th>Geschwindigkeit [m/min]</th>
-                        <th>Rohr-Druck [bar]</th>
-                        <th>Drehmoment [%]</th>
-                        <th>Uhrzeit [hh:mm:ss]</th>
+                        <th>Länge[m]</th>
+                        <th>Lufttemperatur[°C]</th>
+                        <th>Schubkraft[N]</th>
+                        <th>Einblasdruck[bar]</th>
+                        <th>Geschwindigkeit[m/min]</th>
+                        <th>Zeit - Dauer[hh:mm:ss]</th>
                     </tr>
                 </thead>
                 <tbody id="measurements-tbody"></tbody>
@@ -154,34 +155,93 @@
         // Render table
         const tbody = document.getElementById("measurements-tbody");
         if (measurements && measurements.length > 0) {
-            measurements.forEach((m) => {
-                const row = document.createElement("tr");
-                row.innerHTML = `
-                    <td>${m.length}</td>
-                    <td>${m.speed}</td>
-                    <td>${m.pressure}</td>
-                    <td>${m.torque}</td>
-                    <td>${m.time || ""}</td>
-                `;
-                tbody.appendChild(row);
-            });
+            // Check if this is Jetting format (has German field names) or Fremco format (has English field names)
+            const isJetting = measurements[0] && measurements[0].hasOwnProperty('länge_m');
+            
+            if (isJetting) {
+                // Jetting format with 6 columns
+                measurements.forEach((m) => {
+                    const row = document.createElement("tr");
+                    row.innerHTML = `
+                        <td>${(m.länge_m !== null && m.länge_m !== undefined) ? m.länge_m : ""}</td>
+                        <td>${(m.lufttemperatur_c !== null && m.lufttemperatur_c !== undefined) ? m.lufttemperatur_c : ""}</td>
+                        <td>${(m.schubkraft_n !== null && m.schubkraft_n !== undefined) ? m.schubkraft_n : ""}</td>
+                        <td>${(m.einblasdruck_bar !== null && m.einblasdruck_bar !== undefined) ? m.einblasdruck_bar : ""}</td>
+                        <td>${(m.geschwindigkeit_m_min !== null && m.geschwindigkeit_m_min !== undefined) ? m.geschwindigkeit_m_min : ""}</td>
+                        <td>${m.zeit_dauer_hh_mm_ss || ""}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } else {
+                // Fremco format with 5 columns (hide temperature column)
+                measurements.forEach((m) => {
+                    const row = document.createElement("tr");
+                    row.innerHTML = `
+                        <td>${(m.length !== null && m.length !== undefined) ? m.length : ""}</td>
+                        <td style="display:none;"></td>
+                        <td>${(m.torque !== null && m.torque !== undefined) ? m.torque : ""}</td>
+                        <td>${(m.pressure !== null && m.pressure !== undefined) ? m.pressure : ""}</td>
+                        <td>${(m.speed !== null && m.speed !== undefined) ? m.speed : ""}</td>
+                        <td>${m.time || ""}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
             document.getElementById("no-measurements").style.display = "none";
+            
+            // Update table headers based on format
+            const thead = document.querySelector("#measurements-table thead tr");
+            if (!isJetting) {
+                // Hide temperature column for Fremco
+                thead.children[1].style.display = "none";
+            }
         } else {
             document.getElementById("no-measurements").style.display = "block";
         }
 
         // Prepare data for chart
-        const length = measurements.map((m) => m.length);
-        const speed = measurements.map((m) => m.speed);
-        const pressure = measurements.map((m) => m.pressure);
-        const torque = measurements.map((m) => m.torque);
+        const isJettingData = measurements.length > 0 && measurements[0].hasOwnProperty('länge_m');
+        const length = measurements.map((m) => isJettingData ? m.länge_m : m.length);
+        const temperature = isJettingData ? measurements.map((m) => m.lufttemperatur_c) : [];
+        const force = measurements.map((m) => isJettingData ? m.schubkraft_n : m.torque);
+        const pressure = measurements.map((m) => isJettingData ? m.einblasdruck_bar : m.pressure);
+        const speed = measurements.map((m) => isJettingData ? m.geschwindigkeit_m_min : m.speed);
         const ctx = document.getElementById("measurements-chart").getContext("2d");
         if (measurements && measurements.length > 0) {
             new Chart(ctx, {
                 type: "line",
                 data: {
                     labels: length,
-                    datasets: [
+                    datasets: isJettingData ? [
+                        {
+                            label: "Geschwindigkeit [m/min]",
+                            data: speed,
+                            borderColor: "green",
+                            yAxisID: "y",
+                            fill: false,
+                        },
+                        {
+                            label: "Einblasdruck [bar]",
+                            data: pressure,
+                            borderColor: "blue",
+                            yAxisID: "y1",
+                            fill: false,
+                        },
+                        {
+                            label: "Schubkraft [N]",
+                            data: force,
+                            borderColor: "red",
+                            yAxisID: "y2",
+                            fill: false,
+                        },
+                        {
+                            label: "Lufttemperatur [°C]",
+                            data: temperature,
+                            borderColor: "orange",
+                            yAxisID: "y3",
+                            fill: false,
+                        },
+                    ] : [
                         {
                             label: "Geschwindigkeit [m/min]",
                             data: speed,
@@ -198,7 +258,7 @@
                         },
                         {
                             label: "Drehmoment [%]",
-                            data: torque,
+                            data: force,
                             borderColor: "red",
                             yAxisID: "y2",
                             fill: false,
@@ -208,7 +268,7 @@
                 options: {
                     scales: {
                         x: {
-                            title: { display: true, text: "Strecke [m]" },
+                            title: { display: true, text: "Länge [m]" },
                             ticks: { maxTicksLimit: 12 },
                         },
                         y: {
@@ -220,15 +280,23 @@
                         y1: {
                             type: "linear",
                             position: "right",
-                            title: { display: true, text: "Rohr-Druck [bar]" },
+                            title: { display: true, text: "Einblasdruck [bar]" },
                             grid: { drawOnChartArea: false },
                             max: 25,
                         },
                         y2: {
                             type: "linear",
                             position: "right",
-                            title: { display: true, text: "Drehmoment [%]" },
+                            title: { display: true, text: "Schubkraft [N]" },
                             grid: { drawOnChartArea: false },
+                        },
+                        y3: {
+                            type: "linear",
+                            position: "right",
+                            title: { display: true, text: "Lufttemperatur [°C]" },
+                            grid: { drawOnChartArea: false },
+                            min: 10,
+                            max: 20,
                         },
                     },
                 },

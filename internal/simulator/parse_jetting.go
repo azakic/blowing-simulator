@@ -1,6 +1,7 @@
 package simulator
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -32,6 +33,7 @@ func ExtractJettingMetadata(normalized string) map[string]string {
 // Block header detection for Jetting format
 func isBlockHeader(line string) bool {
 	headers := []string{
+		"Streckenlänge [m]", "Geschwindigkeit [m/min]", "Rohr-Druck [bar]", "Drehmoment [%]", "Uhrzeit [hh:mm:ss]",
 		"Länge[m]", "Lufttemperatur[°C]", "Schubkraft[N]", "Einblasdruck[bar]", "Geschwindigkeit[m/min]", "Zeit - Dauer[hh:mm:ss]",
 	}
 	for _, h := range headers {
@@ -45,7 +47,7 @@ func isBlockHeader(line string) bool {
 // Unit line detection for Jetting format
 func isUnitLine(line string) bool {
 	units := []string{
-		"[m]", "[°C]", "[N]", "[bar]", "[m/min]", "[hh:mm:ss]",
+		"[m]", "[°C]", "[N]", "[bar]", "[m/min]", "[hh:mm:ss]", "[%]",
 	}
 	for _, u := range units {
 		if strings.HasPrefix(strings.TrimSpace(line), u) {
@@ -69,47 +71,217 @@ func min(vals ...int) int {
 	return m
 }
 
-// ParseJettingTxt parses normalized Jetting TXT data in vertical block format and returns a slice of SimpleMeasurement.
-func ParseJettingTxt(normalized string) []SimpleMeasurement {
+// isJettingNumeric checks if a string is a valid number (including decimals)
+func isJettingNumeric(s string) bool {
+	_, err := strconv.ParseFloat(s, 64)
+	return err == nil
+}
+
+// isTimeFormat checks if a string matches time format (hh:mm:ss)
+func isTimeFormat(s string) bool {
+	timePattern := `^\d{2}:\d{2}:\d{2}$`
+	matched, _ := regexp.MatchString(timePattern, s)
+	return matched
+}
+
+// ParseJettingTxt parses normalized Jetting TXT data and returns a slice of JettingMeasurement.
+func ParseJettingTxt(normalized string) []JettingMeasurement {
 	lines := strings.Split(normalized, "\n")
-	var measurements []SimpleMeasurement
+	var measurements []JettingMeasurement
+	
+	// First try: Parse as individual values per line (6 consecutive lines = 1 measurement)
+	var valueBuffer []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		fields := strings.Fields(line)
-		// Accept rows with 6 columns (Jetting format)
-		if len(fields) >= 6 {
-			length, _ := strconv.ParseFloat(fields[0], 64)
-			// temp := fields[1] // not used
-			force, _ := strconv.ParseFloat(fields[2], 64)
-			pressure, _ := strconv.ParseFloat(fields[3], 64)
-			speed, _ := strconv.ParseFloat(fields[4], 64)
-			time := fields[5]
-			measurements = append(measurements, SimpleMeasurement{
-				Length:   length,
-				Speed:    speed,
-				Pressure: pressure,
-				Torque:   force, // use force as torque for now
-				Time:     time,
-			})
-		} else if len(fields) == 5 {
-			// Accept alternate format if present
-			length, _ := strconv.ParseFloat(fields[0], 64)
-			speed, _ := strconv.ParseFloat(fields[1], 64)
-			pressure, _ := strconv.ParseFloat(fields[2], 64)
-			torque, _ := strconv.ParseFloat(fields[3], 64)
-			time := fields[4]
-			measurements = append(measurements, SimpleMeasurement{
-				Length:   length,
-				Speed:    speed,
-				Pressure: pressure,
-				Torque:   torque,
-				Time:     time,
-			})
+		
+		// Skip header lines and company names
+		if isBlockHeader(line) || strings.Contains(line, "M.A.X.") || strings.Contains(line, "Bauservice") || strings.Contains(line, "Wolken-ASM") || strings.Contains(line, "GMBH") {
+			continue
 		}
-		// Ignore rows with fewer than 5 columns
+		
+		// Collect numeric values and time values
+		if isJettingNumeric(line) || isTimeFormat(line) {
+			valueBuffer = append(valueBuffer, line)
+			
+			// When we have 6 values, create a measurement
+			if len(valueBuffer) == 6 {
+				length, _ := strconv.ParseFloat(valueBuffer[0], 64)    // Länge[m]
+				temp, _ := strconv.ParseFloat(valueBuffer[1], 64)      // Lufttemperatur[°C]
+				force, _ := strconv.ParseFloat(valueBuffer[2], 64)     // Schubkraft[N]
+				pressure, _ := strconv.ParseFloat(valueBuffer[3], 64)  // Einblasdruck[bar] 
+				speed, _ := strconv.ParseFloat(valueBuffer[4], 64)     // Geschwindigkeit[m/min]
+				time := valueBuffer[5]                                 // Zeit - Dauer[hh:mm:ss]
+				
+				measurements = append(measurements, JettingMeasurement{
+					Length:      length,
+					Temperature: temp,
+					Force:       force,
+					Pressure:    pressure,
+					Speed:       speed,
+					Time:        time,
+				})
+				valueBuffer = []string{} // Reset buffer
+			}
+			continue
+		}
+		
+		// Second try: Parse as fields in same line (legacy support)
+		fields := strings.Fields(line)
+		if len(fields) >= 6 {
+			// Only parse lines that start with a valid number (skip text headers)
+			if length, err := strconv.ParseFloat(fields[0], 64); err == nil {
+				temp, _ := strconv.ParseFloat(fields[1], 64)     
+				force, _ := strconv.ParseFloat(fields[2], 64)    
+				pressure, _ := strconv.ParseFloat(fields[3], 64) 
+				speed, _ := strconv.ParseFloat(fields[4], 64)    
+				time := fields[5]                                
+				measurements = append(measurements, JettingMeasurement{
+					Length:      length,
+					Temperature: temp,
+					Force:       force,
+					Pressure:    pressure,
+					Speed:       speed,
+					Time:        time,
+				})
+			}
+		}
 	}
+	
+	// If no measurements found with individual line parsing, try vertical block format
+	if len(measurements) == 0 {
+		measurements = parseVerticalBlocks(normalized)
+	}
+	return measurements
+}
+
+// parseVerticalBlocks parses the vertical block format where each column header is followed by all its values
+func parseVerticalBlocks(normalized string) []JettingMeasurement {
+	lines := strings.Split(normalized, "\n")
+	
+	// Find the data blocks for each column
+	var lengthValues, tempValues, forceValues, pressureValues, speedValues, timeValues []string
+	
+	currentBlock := ""
+	collectingData := false
+	
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		
+		// Skip company header
+		if strings.HasPrefix(line, "M.A.X.") || strings.Contains(line, "Bauservice") || strings.Contains(line, "Wolken-ASM") || strings.Contains(line, "GMBH") {
+			continue
+		}
+		
+		// Detect which block we're in by flexible header match
+		isHeader := false
+		if strings.Contains(line, "Länge[m]") || strings.Contains(line, "Laenge[m]") {
+			println("DEBUG: Found length header:", line)
+			currentBlock = "length"
+			collectingData = true
+			isHeader = true
+		} else if strings.Contains(line, "Lufttemperatur") && strings.Contains(line, "C") {
+			println("DEBUG: Found temp header:", line)
+			currentBlock = "temp"
+			collectingData = true
+			isHeader = true
+		} else if strings.Contains(line, "Schubkraft[N]") {
+			println("DEBUG: Found force header:", line)
+			currentBlock = "force"
+			collectingData = true
+			isHeader = true
+		} else if strings.Contains(line, "Einblasdruck[bar]") {
+			println("DEBUG: Found pressure header:", line)
+			currentBlock = "pressure"
+			collectingData = true
+			isHeader = true
+		} else if strings.Contains(line, "Geschwindigkeit[m/min]") {
+			println("DEBUG: Found speed header:", line)
+			currentBlock = "speed"
+			collectingData = true
+			isHeader = true
+		} else if strings.Contains(line, "Zeit") && (strings.Contains(line, "Dauer") || strings.Contains(line, "hh:mm:ss")) {
+			println("DEBUG: Found time header:", line)
+			currentBlock = "time"
+			collectingData = true
+			isHeader = true
+		}
+		
+		// If this is a header line, skip to next iteration 
+		if isHeader {
+			continue
+		}
+		
+		// Collect values for current block only if we're actively collecting
+		if collectingData && currentBlock != "" {
+			println("DEBUG: Collecting for block:", currentBlock, "line:", line)
+			switch currentBlock {
+			case "length":
+				lengthValues = append(lengthValues, line)
+			case "temp":
+				tempValues = append(tempValues, line)
+			case "force":
+				forceValues = append(forceValues, line)
+			case "pressure":
+				pressureValues = append(pressureValues, line)
+			case "speed":
+				speedValues = append(speedValues, line)
+			case "time":
+				timeValues = append(timeValues, line)
+			}
+		} else if strings.TrimSpace(line) != "" && !isHeader {
+			println("DEBUG: Skipping line (not collecting):", line, "currentBlock:", currentBlock, "collectingData:", collectingData)
+		}
+	}
+	
+	// Build measurements from collected values - use the shortest array to avoid index errors
+	var measurements []JettingMeasurement
+	
+	// Debug output
+	println("DEBUG: parseVerticalBlocks collected data:")
+	println("lengthValues count:", len(lengthValues))
+	println("tempValues count:", len(tempValues)) 
+	println("forceValues count:", len(forceValues))
+	println("pressureValues count:", len(pressureValues))
+	println("speedValues count:", len(speedValues))
+	println("timeValues count:", len(timeValues))
+	
+	maxLen := len(lengthValues)
+	if len(forceValues) < maxLen {
+		maxLen = len(forceValues)
+	}
+	if len(pressureValues) < maxLen {
+		maxLen = len(pressureValues)
+	}
+	if len(speedValues) < maxLen {
+		maxLen = len(speedValues)
+	}
+	if len(timeValues) < maxLen {
+		maxLen = len(timeValues)
+	}
+	
+		for i := 0; i < maxLen; i++ {
+		length, _ := strconv.ParseFloat(lengthValues[i], 64)
+		temp, _ := strconv.ParseFloat(tempValues[i], 64)        // Lufttemperatur[°C] -> Temperature
+		force, _ := strconv.ParseFloat(forceValues[i], 64)      // Schubkraft[N] -> Force 
+		pressure, _ := strconv.ParseFloat(pressureValues[i], 64) // Einblasdruck[bar] -> Pressure
+		speed, _ := strconv.ParseFloat(speedValues[i], 64)      // Geschwindigkeit[m/min] -> Speed
+		time := timeValues[i]                                   // Zeit - Dauer[hh:mm:ss] -> Time
+		
+		measurements = append(measurements, JettingMeasurement{
+			Length:      length,
+			Temperature: temp,
+			Force:       force,
+			Pressure:    pressure,  
+			Speed:       speed,     
+			Time:        time,
+		})
+	}
+	
 	return measurements
 }
