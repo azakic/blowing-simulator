@@ -1,99 +1,234 @@
 # Blowing Simulator
-#test github, commit
-## Directory Structure
+
+A Go-based web application for processing and analyzing PDF reports from cable blowing operations. Supports both Jetting and Fremco PDF formats with intelligent parsing and data visualization.
+
+## 🚀 Quick Start
+
+### Using Docker (Recommended)
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd blowing-simulator
+
+# Start the application with Docker Compose
+docker compose up -d
+
+# Access the web interface
+open http://localhost:8080
+```
+
+### Manual Setup
+
+```bash
+# Install dependencies (Ubuntu/Debian)
+sudo apt-get install poppler-utils
+
+# Build and run
+go build -o blowing-simulator ./cmd/blowing-simulator
+./blowing-simulator
+```
+
+## 📁 Project Structure
 
 ```
 blowing-simulator/
-├── api/                # API definitions and related code
-├── cmd/                # Main application entry points (main.go, handlers, db.go)
-├── docs/               # Documentation files
-├── internal/           # Internal Go packages (business logic, parsing, etc.)
-├── pkg/                # Reusable Go packages (if any)
-├── scripts/            # Utility scripts (PDF extraction, batch tools, etc.)
-├── test/               # Test files and test data
-├── venv/               # Python virtual environment (if used)
-├── web/                # Web assets and templates (HTML, CSS, JS)
-│   └── templates/      # HTML templates for handlers and reports
-├── .gitignore          # Git ignore rules
-├── README.md           # Project overview and instructions
-├── database.md         # Database schema and entity documentation
-├── go.mod, go.sum      # Go module files
-├── blowing-simulator   # Built binary (excluded by .gitignore)
-└── test.txt            # Example/test file (excluded by .gitignore)
+├── cmd/blowing-simulator/          # Main application
+│   ├── main.go                     # Web server & PDF processing
+│   ├── db.go                       # Database operations
+│   └── download_json_handler.go    # Export functionality
+├── internal/                       # Core business logic
+│   ├── simulator/                  # PDF parsing engines
+│   │   ├── parse_fremco.go        # Fremco PDF parser (pdftotext)
+│   │   ├── parse_jetting.go       # Jetting PDF parser (Go native)
+│   │   └── normalize.go           # Text normalization
+│   ├── config/                    # Configuration management
+│   ├── fremco/                    # Fremco-specific logic
+│   └── jetting/                   # Jetting-specific logic
+├── web/templates/                 # Frontend templates
+│   ├── pdf2text.html             # Main PDF processing interface
+│   ├── index.html                 # Landing page
+│   └── report/                    # Report templates
+├── migrations/                    # Database schema
+├── docker-compose.yml             # Multi-container setup
+├── Dockerfile                     # Container configuration
+└── README.md                      # This file
 ```
 
-## Project Description
+## 🔍 Supported PDF Formats
 
-Blowing Simulator is a Go web application for extracting, normalizing, and parsing measurement data from Jetting and Fremco PDF reports into a unified format. It provides a full workflow from PDF upload to HTML report, CSV/JSON export, and database storage.
+### Jetting PDFs
+- **Extraction Method**: Go native library (`github.com/ledongthuc/pdf`)
+- **Data Format**: Vertical columns or individual lines
+- **Fields**: German field names (Länge[m], Lufttemperatur[°C], etc.)
+- **Example Filename**: `29.10.2025, 11 20, Eiermarkt 15 B NVT 1V2200.pdf`
 
-### Features
+### Fremco PDFs  
+- **Extraction Method**: pdftotext CLI tool with `-layout` flag
+- **Data Format**: Horizontal table format
+- **Fields**: English field names (Length, Speed, Pressure, etc.)
+- **Example Filename**: `SM209214964_2025-10-22 10_51_Oldenburger Koppel_10_NVT1V3400.pdf`
 
-- **PDF to Text Conversion:** Extracts data from Jetting and Fremco PDF reports.
-- **Measurement Parsing:** Normalizes and parses measurements (length, speed, pressure, torque, etc.).
-- **Protocol Data:** Captures full Einblas Protokoll (blowing protocol) info, including cable meter marks, environmental data, and operator info.
-- **Database Integration:** Stores reports, measurements, and protocols in SQLite or PostgreSQL with robust relations.
-- **Web UI:** Upload PDFs, create/edit reports, view summaries, and export results.
-- **CSV/JSON/PDF Export:** Download processed data in multiple formats.
-- **Main Menu Navigation:** Quick access to all major workflows (Jetting, Fremco, Export, etc.).
-- **Extensible Schema:** Easily add new fields or entities as your workflow evolves.
+## 📊 Data Processing Pipeline
 
-### Typical Workflow
+1. **Format Detection**: Automatically identifies Jetting vs Fremco format
+2. **PDF Extraction**: Uses appropriate extraction method per format
+3. **Text Normalization**: Cleans and standardizes extracted text
+4. **Data Parsing**: Converts to structured measurement data
+5. **Visualization**: Generates tables and charts
+6. **Export**: Provides JSON/CSV download options
 
-1. **Upload a PDF report** via the web UI.
-2. **Parse and normalize measurements** and protocol data.
-3. **Store results in the database** (reports, measurements, protocols).
-4. **View and export summaries** (CSV, JSON, PDF).
-5. **Navigate between Jetting, Fremco, and other workflows from the main menu.
+## 🎯 Key Features
 
-### Technologies Used
+### Intelligent Format Detection
+```go
+// Fremco indicators (processed first - higher priority)
+if strings.Contains(rawStr, "Streckenabschnitt") || 
+   strings.Contains(rawStr, "Fremco") ||
+   strings.Contains(rawStr, "Streckenlänge [m]") {
+   // Use pdftotext extraction
+}
 
-- Go (Golang)
-- SQLite / PostgreSQL
-- HTML/CSS/JS (web templates)
-- GitHub Actions (optional for CI/CD)
-- Python (optional for legacy scripts)
+// Jetting indicators  
+if strings.Contains(rawStr, "Länge") && 
+   strings.Contains(rawStr, "Schubkraft") {
+   // Use Go native extraction
+}
+```
 
----
+### Dual Parser Architecture
+- **SimpleMeasurement**: Fremco format (5 columns)
+- **JettingMeasurement**: Jetting format (6 columns with German fields)
 
-For full database schema and entity documentation, see [`database.md`](./database.md).
+### Smart Data Display
+- Shows `0.0` values when actual zeros exist
+- Hides empty cells for missing data
+- Dynamic table headers based on format
+- Responsive chart visualization
 
-## Main Features & Navigation
+## 🔧 Configuration
 
-The Blowing Simulator web app provides the following main features, accessible from the index page:
+### Environment Variables
+- `PORT`: Web server port (default: 8080)
+- `DATABASE_URL`: PostgreSQL connection string (optional)
 
-- **Fremco**: Navigate to `/create-fremco` for Fremco report creation.
-- **Jetting**: Navigate to `/create-jetting` for Jetting report creation.
-- **Export Report**: Upload a PDF and process it via `/pdf2text` to extract and summarize measurements.
+### Docker Compose Services
+- **app**: Go application server
+- **db**: PostgreSQL database (persistent volume)
 
-### Main Handlers
+## 📈 Usage Examples
 
-| Handler/Route         | Description                                 |
-|---------------------- |---------------------------------------------|
-| `/pdf2text`           | PDF to Text conversion and report export    |
-| `/create-fremco`      | Create Fremco report                        |
-| `/create-jetting`     | Create Jetting report                       |
-| `/download-json`      | Download processed report as JSON           |
-| `/download-csv`       | Download processed report as CSV            |
-| `/download-pdf`       | Download processed report as PDF            |
-| `/jetting-report`     | View Jetting report                         |
+### Processing a Jetting PDF
+1. Upload PDF through web interface
+2. System detects Jetting format automatically
+3. Extracts data using Go library
+4. Displays 6-column table with German headers
+5. Shows measurement chart with multiple datasets
 
-### Index Page
+### Processing a Fremco PDF
+1. Upload PDF through web interface  
+2. System detects Fremco format automatically
+3. Extracts data using pdftotext
+4. Displays 5-column table with English headers
+5. Shows measurement chart with torque/pressure data
 
-The index page provides:
-- Navigation buttons for Fremco and Jetting workflows
-- An "Export Report" form to upload and process Jetting PDFs
+## 🛠 Development
 
-**How to use:**
-1. Go to the main page (`/`).
-2. Choose Fremco or Jetting workflow, or use the Export Report form.
-3. After uploading a PDF, view and download results in various formats.
+### Adding New PDF Formats
+1. Add detection logic in `main.go`
+2. Create new parser in `internal/simulator/`
+3. Define measurement structure
+4. Update frontend templates
 
+### Database Schema
+See `migrations/001_create_universal_schema.sql` for complete schema.
 
-A Go web application for extracting, normalizing, and parsing measurement data from Jetting and Fremco PDF reports into a unified JSON format, with a full workflow from PDF upload to HTML report and visualization.
+## 🐛 Troubleshooting
 
----
+### "pdftotext: executable file not found"
+- **Docker**: Ensure `poppler-utils` is in Dockerfile
+- **Manual**: Install with `apt-get install poppler-utils`
 
-## Directory Structure
+### "No measurement data found"
+- Check PDF format matches expected structure
+- Verify text extraction in "Extracted Text (Raw)" section
+- Check debug logs: `docker logs blowing-simulator-app-1`
+
+### ARM64 Compatibility
+Application builds natively for ARM64 (Apple Silicon, Raspberry Pi).
+
+## 📝 Technologies Used
+
+- **Backend**: Go 1.24, Gorilla Mux
+- **Database**: PostgreSQL, SQLite
+- **PDF Processing**: pdftotext, ledongthuc/pdf
+- **Frontend**: HTML5, Chart.js, Bootstrap
+- **Containerization**: Docker, Docker Compose
+- **Architecture**: ARM64, x86_64
+
+## 🗺️ API Routes
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/` | GET | Main landing page |
+| `/pdf2text` | GET/POST | PDF processing interface |
+| `/create-fremco` | GET/POST | Fremco report creation |
+| `/create-jetting` | GET/POST | Jetting report creation |
+| `/download-json` | POST | Export as JSON |
+| `/download-csv` | POST | Export as CSV |
+| `/download-pdf` | POST | Export as PDF |
+| `/jetting-report` | GET | View Jetting reports |
+
+## 📋 Measurement Data Structures
+
+### Jetting Format (German)
+```go
+type JettingMeasurement struct {
+    Length      float64 `json:"länge_m"`                    // Länge[m]
+    Temperature float64 `json:"lufttemperatur_c"`           // Lufttemperatur[°C]
+    Force       float64 `json:"schubkraft_n"`               // Schubkraft[N]
+    Pressure    float64 `json:"einblasdruck_bar"`           // Einblasdruck[bar]
+    Speed       float64 `json:"geschwindigkeit_m_min"`      // Geschwindigkeit[m/min]
+    Time        string  `json:"zeit_dauer_hh_mm_ss"`        // Zeit - Dauer[hh:mm:ss]
+}
+```
+
+### Fremco Format (English)
+```go
+type SimpleMeasurement struct {
+    Length   float64 `json:"length"`   // Streckenlänge [m]
+    Speed    float64 `json:"speed"`    // Geschwindigkeit [m/min]
+    Pressure float64 `json:"pressure"` // Rohr-Druck [bar]
+    Torque   float64 `json:"torque"`   // Drehmoment [%]
+    Time     string  `json:"time"`     // Uhrzeit [hh:mm:ss]
+}
+```
+
+## 🎨 Frontend Features
+
+- **Responsive Design**: Works on desktop and mobile
+- **Dynamic Tables**: Auto-adjusting columns based on format
+- **Interactive Charts**: Multi-axis visualization with Chart.js
+- **Real-time Processing**: Live feedback during PDF processing
+- **Export Options**: JSON, CSV download buttons
+
+## 📚 Documentation
+
+- **Database Schema**: See [`database.md`](./database.md)
+- **API Documentation**: Route handlers in `cmd/blowing-simulator/main.go`
+- **Parser Logic**: Individual parsers in `internal/simulator/`
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ```
 BlowingSimulator/

@@ -236,21 +236,43 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("[Jetting] Parsed filename: %s | Date: %s | Time: %s | Address: %s | NVT: %s", baseName, date, time, address, nvt)
 	} else {
-		// Fremco format: "SM209214964_2025-10-23 15_30_Oldenburger Koppel 23_NVT1V3400"
+		// Fremco format: "SM209214964_2025-10-22 10_51_Oldenburger Koppel_10_NVT1V3400"
 		parts := strings.Split(baseName, "_")
-		if len(parts) >= 6 {
+		if len(parts) >= 4 {
 			project = parts[0]
-			dateParts := strings.Split(parts[1], "-")
-			if len(dateParts) == 3 {
-				date = dateParts[2] + "." + dateParts[1] + "." + dateParts[0]
-			} else {
-				date = strings.ReplaceAll(parts[1], "-", ".")
+			
+			// Parse date and time from second part "2025-10-22 10"
+			dateTimePart := parts[1]
+			if strings.Contains(dateTimePart, " ") {
+				dateTimeFields := strings.Fields(dateTimePart)
+				if len(dateTimeFields) >= 2 {
+					// Date part: "2025-10-22"
+					dateParts := strings.Split(dateTimeFields[0], "-")
+					if len(dateParts) == 3 {
+						date = dateParts[2] + "." + dateParts[1] + "." + dateParts[0] // Convert to DD.MM.YYYY
+					}
+					// Time part: combine hour from dateTimePart and minutes from parts[2]
+					hour := dateTimeFields[1]
+					minute := parts[2]
+					time = hour + ":" + minute
+				}
 			}
-			time = parts[2] + "." + parts[3]
-			// Address is everything between time and NVT
-			addressParts := parts[4 : len(parts)-1]
-			address = strings.TrimSpace(strings.Join(addressParts, " "))
-			nvt = parts[len(parts)-1]
+			
+			// Find NVT part (starts with "NVT")
+			nvtIndex := -1
+			for i, part := range parts {
+				if strings.HasPrefix(part, "NVT") {
+					nvtIndex = i
+					nvt = part
+					break
+				}
+			}
+			
+			// Address is everything between time part and NVT
+			if nvtIndex > 3 {
+				addressParts := parts[3:nvtIndex]
+				address = strings.TrimSpace(strings.Join(addressParts, " "))
+			}
 		}
 		log.Printf("[Fremco] Parsed filename: %s | Project: %s | Date: %s | Time: %s | Address: %s | NVT: %s", baseName, project, date, time, address, nvt)
 	}
