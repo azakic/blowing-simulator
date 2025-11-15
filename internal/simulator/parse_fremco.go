@@ -1,6 +1,7 @@
 package simulator
 
 import (
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -216,21 +217,34 @@ func extractFremcoProtocolInfo(lines []string) FremcoProtocolInfo {
 		DocumentType: "Einblas - Protokoll",
 	}
 	
+	// Debug: log first 20 lines to understand structure
+	log.Printf("extractFremcoProtocolInfo: Parsing %d lines of text", len(lines))
+	for i := 0; i < len(lines) && i < 20; i++ {
+		log.Printf("Line %d: '%s'", i, strings.TrimSpace(lines[i]))
+	}
+	
 	for i, line := range lines {
 		line = strings.TrimSpace(line)
 		
-		// Project number
-		if strings.Contains(line, "Bauvorhaben Nr.") && i+1 < len(lines) {
-			info.ProjectNumber = strings.TrimSpace(lines[i+1])
-		}
-		
-		// Date and time
-		if strings.Contains(line, "Datum, Startzeit:") && i+1 < len(lines) {
-			dateTime := strings.TrimSpace(lines[i+1])
-			parts := strings.Fields(dateTime)
-			if len(parts) >= 2 {
-				info.Date = parts[0]
-				info.StartTime = parts[1]
+		// Project number - extract from same line after "Bauvorhaben Nr."
+		if strings.Contains(line, "Bauvorhaben Nr.") {
+			// Extract project number from same line
+			projectMatch := regexp.MustCompile(`Bauvorhaben Nr\.\s*(.+)`).FindStringSubmatch(line)
+			if len(projectMatch) > 1 {
+				info.ProjectNumber = strings.TrimSpace(projectMatch[1])
+				log.Printf("extractFremcoProtocolInfo: Found Project Number - Line %d: '%s' -> Extracted: '%s'", i, line, info.ProjectNumber)
+				
+				// Date and time should be on the next line after project number
+				if i+1 < len(lines) {
+					dateTime := strings.TrimSpace(lines[i+1])
+					parts := strings.Fields(dateTime)
+					log.Printf("extractFremcoProtocolInfo: Found Date/Time - Line %d: '%s' -> Parts: %v", i+1, dateTime, parts)
+					if len(parts) >= 2 {
+						info.Date = parts[0]
+						info.StartTime = parts[1]
+						log.Printf("extractFremcoProtocolInfo: Parsed Date: '%s', Time: '%s'", info.Date, info.StartTime)
+					}
+				}
 			}
 		}
 		
@@ -239,9 +253,14 @@ func extractFremcoProtocolInfo(lines []string) FremcoProtocolInfo {
 			info.SectionNVT = strings.TrimSpace(lines[i+1])
 		}
 		
-		// Company
-		if strings.Contains(line, "Firma") && i+1 < len(lines) {
-			info.Company = strings.TrimSpace(lines[i+1])
+		// Company - extract from same line after "Firma"
+		if strings.Contains(line, "Firma") {
+			// Extract company from same line
+			companyMatch := regexp.MustCompile(`Firma\s+(.+)`).FindStringSubmatch(line)
+			if len(companyMatch) > 1 {
+				info.Company = strings.TrimSpace(companyMatch[1])
+				log.Printf("extractFremcoProtocolInfo: Found Company - Line %d: '%s' -> Extracted: '%s'", i, line, info.Company)
+			}
 		}
 		
 		// Service provider

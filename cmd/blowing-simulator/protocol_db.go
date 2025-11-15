@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -106,7 +107,12 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol) (int, e
 	}
 
 	// Insert measurement data points
+	log.Printf("SaveFremcoProtocol: Starting to insert %d measurements for protocol ID %d", len(protocol.Measurements.DataPoints), protocolID)
 	for i, dataPoint := range protocol.Measurements.DataPoints {
+		parsedTimestamp := parseTimestamp(dataPoint.Timestamp)
+		log.Printf("SaveFremcoProtocol: Inserting measurement %d - Length: %f, Speed: %f, Timestamp: %s -> Parsed: %v", 
+			i, dataPoint.LengthM, dataPoint.SpeedMMin, dataPoint.Timestamp, parsedTimestamp)
+		
 		_, err = tx.Exec(`
 			INSERT INTO protocol_measurements (
 				protocol_id, length_m, speed_m_min, pressure_bar, torque_percent,
@@ -117,19 +123,28 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol) (int, e
 			dataPoint.SpeedMMin,
 			dataPoint.PressureBar,
 			dataPoint.TorquePercent,
-			parseTimestamp(dataPoint.Timestamp),
+			parsedTimestamp,
 			i+1,
 		)
 
 		if err != nil {
+			log.Printf("SaveFremcoProtocol: Failed to insert measurement %d: %v", i, err)
 			return 0, fmt.Errorf("failed to insert measurement %d: %v", i, err)
 		}
+		
+		if i < 3 {  // Log first few measurements
+			log.Printf("SaveFremcoProtocol: Successfully inserted measurement %d", i)
+		}
 	}
+	log.Printf("SaveFremcoProtocol: Completed inserting all %d measurements", len(protocol.Measurements.DataPoints))
 
+	log.Printf("SaveFremcoProtocol: Attempting to commit transaction for protocol ID %d", protocolID)
 	if err = tx.Commit(); err != nil {
+		log.Printf("SaveFremcoProtocol: Transaction commit failed: %v", err)
 		return 0, fmt.Errorf("failed to commit transaction: %v", err)
 	}
 
+	log.Printf("SaveFremcoProtocol: Transaction committed successfully for protocol ID %d", protocolID)
 	return protocolID, nil
 }
 
@@ -325,20 +340,31 @@ func parseDuration(durationStr string) *time.Duration {
 
 func parseTimestamp(timestampStr string) *time.Time {
 	if timestampStr == "" {
+		log.Printf("parseTimestamp: Empty timestamp string")
 		return nil
 	}
+	
+	log.Printf("parseTimestamp: Parsing timestamp: '%s'", timestampStr)
 	
 	// Try multiple timestamp formats
 	formats := []string{
 		"2006-01-02 15:04:05",
+		"2006-01-02 15:04",      // Added this format for timestamps without seconds
 		"2006-01-02T15:04:05",
+		"2006-01-02T15:04",      // Added this format too
 		"02.01.2006 15:04:05",
+		"02.01.2006 15:04",      // And this one
 	}
 	
-	for _, format := range formats {
+	for i, format := range formats {
 		if t, err := time.Parse(format, timestampStr); err == nil {
+			log.Printf("parseTimestamp: Successfully parsed '%s' using format %d (%s) -> %v", timestampStr, i, format, t)
 			return &t
+		} else {
+			log.Printf("parseTimestamp: Failed format %d (%s): %v", i, format, err)
 		}
 	}
+	
+	log.Printf("parseTimestamp: All formats failed for '%s'", timestampStr)
 	return nil
 }

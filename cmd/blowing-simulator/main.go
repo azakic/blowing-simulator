@@ -10,10 +10,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -230,7 +232,16 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(baseName, ",")
 		if len(parts) >= 3 {
 			date = strings.TrimSpace(parts[0])
-			time = strings.TrimSpace(parts[1])
+			timeRaw := strings.TrimSpace(parts[1])
+			// Convert space-separated time to colon-separated (e.g., "11 09" -> "11:09")
+			if strings.Contains(timeRaw, " ") {
+				timeParts := strings.Fields(timeRaw)
+				if len(timeParts) == 2 {
+					time = timeParts[0] + ":" + timeParts[1]
+				}
+			} else {
+				time = timeRaw
+			}
 			rest := strings.TrimSpace(parts[2])
 			nvtIdx := strings.Index(rest, "NVT ")
 			if nvtIdx != -1 {
@@ -581,6 +592,9 @@ func main() {
 	http.HandleFunc("/protocols", ProtocolsHandler)
 	http.HandleFunc("/protocols/view", ViewProtocolHandler)
 	http.HandleFunc("/protocols/measurements", ProtocolMeasurementsHandler)
+	http.HandleFunc("/protocols/length-report", LengthReportHandler)
+	http.HandleFunc("/bulk-upload", BulkUploadHandler)
+	http.HandleFunc("/debug-pdf", DebugPDFHandler)
 	http.HandleFunc("/health", HealthCheckHandler)
 	log.Println("Server started at http://0.0.0.0:8080/")
 	log.Println("Available routes:")
@@ -662,6 +676,22 @@ type ProtocolMeasurement struct {
 	TemperatureC     sql.NullFloat64 `db:"temperature_c"`
 	ForceN           sql.NullFloat64 `db:"force_n"`
 	TimeDuration     sql.NullString  `db:"time_duration"`
+	CreatedAt        string          `db:"created_at"`
+}
+
+// LengthReportData represents aggregated length data for reporting
+type LengthReportData struct {
+	ProtocolID       int             `db:"protocol_id"`
+	ProtocolType     string          `db:"protocol_type"`
+	ProtocolDate     sql.NullString  `db:"protocol_date"`
+	Company          sql.NullString  `db:"company"`
+	ServiceProvider  sql.NullString  `db:"service_provider"`
+	SourceFilename   sql.NullString  `db:"source_filename"`
+	MaxLength        sql.NullFloat64 `db:"max_length"`
+	MinLength        sql.NullFloat64 `db:"min_length"`
+	AvgLength        sql.NullFloat64 `db:"avg_length"`
+	MeasurementCount int             `db:"measurement_count"`
+	TotalLength      sql.NullFloat64 `db:"total_length"`
 	CreatedAt        string          `db:"created_at"`
 }
 
@@ -952,7 +982,158 @@ func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"status": "healthy", "timestamp": "%s", "routes": ["/", "/protocols", "/protocols/view", "/protocols/measurements"]}`, time.Now().Format(time.RFC3339))
+	fmt.Fprintf(w, `{"status": "healthy", "timestamp": "%s", "routes": ["/", "/protocols", "/protocols/view", "/protocols/measurements", "/protocols/length-report"]}`, time.Now().Format(time.RFC3339))
+}
+
+// LengthReportHandler displays length reports with date filtering and format selection
+func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("LengthReportHandler called with URL: %s, Query: %s", r.URL.Path, r.URL.RawQuery)
+	
+	// Get filter parameters
+	startDate := r.URL.Query().Get("start_date")
+	endDate := r.URL.Query().Get("end_date")
+	includeFremco := r.URL.Query().Get("fremco") == "on" || r.URL.Query().Get("fremco") == "true"
+	includeJetting := r.URL.Query().Get("jetting") == "on" || r.URL.Query().Get("jetting") == "true"
+	
+	// Default to both if none selected
+	if !includeFremco && !includeJetting {
+		includeFremco = true
+		includeJetting = true
+	}
+	
+	// Build query
+	query := `
+		SELECT 
+			p.id as protocol_id,
+			p.protocol_type,
+			p.protocol_date,
+			p.company,
+			p.service_provider,
+			p.source_filename,
+			COALESCE(MAX(m.length_m), 0) as max_length,
+			COALESCE(MIN(m.length_m), 0) as min_length,
+			COALESCE(AVG(m.length_m), 0) as avg_length,
+			COUNT(m.id) as measurement_count,
+			COALESCE(SUM(m.length_m), 0) as total_length,
+			p.created_at::text
+		FROM protocols p
+		LEFT JOIN protocol_measurements m ON p.id = m.protocol_id
+		WHERE 1=1`
+	
+	args := []interface{}{}
+	argCount := 0
+	
+	// Add date filters
+	if startDate != "" {
+		argCount++
+		query += fmt.Sprintf(" AND p.protocol_date >= $%d", argCount)
+		args = append(args, startDate)
+	}
+	
+	if endDate != "" {
+		argCount++
+		query += fmt.Sprintf(" AND p.protocol_date <= $%d", argCount)
+		args = append(args, endDate)
+	}
+	
+	// Add format filters
+	var formatConditions []string
+	if includeFremco {
+		formatConditions = append(formatConditions, "p.protocol_type = 'fremco'")
+	}
+	if includeJetting {
+		formatConditions = append(formatConditions, "p.protocol_type = 'jetting'")
+	}
+	
+	if len(formatConditions) > 0 {
+		query += " AND (" + strings.Join(formatConditions, " OR ") + ")"
+	}
+	
+	query += `
+		GROUP BY p.id, p.protocol_type, p.protocol_date, p.company, 
+		         p.service_provider, p.source_filename, p.created_at
+		ORDER BY p.protocol_date DESC, p.created_at DESC`
+	
+	// Execute query
+	var reports []LengthReportData
+	err := db.Select(&reports, query, args...)
+	if err != nil {
+		http.Error(w, "Error fetching length report: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	
+	// Calculate totals
+	var totalMeasurementCount int     // Count of all measurement records
+	var totalMaxLengthSum float64     // Sum of maximum lengths from each protocol
+	var totalProtocols = len(reports)
+	var maxLengthOverall float64
+	
+	for _, report := range reports {
+		totalMeasurementCount += report.MeasurementCount
+		if report.MaxLength.Valid && report.MaxLength.Float64 > maxLengthOverall {
+			maxLengthOverall = report.MaxLength.Float64
+		}
+		// Add up the maximum length from each protocol
+		if report.MaxLength.Valid {
+			totalMaxLengthSum += report.MaxLength.Float64
+		}
+	}
+	
+	// Overall average is average of maximum lengths from each protocol
+	var overallAverage float64
+	if totalProtocols > 0 {
+		// Calculate average of max lengths (same as totalMaxLengthSum / number of protocols)
+		overallAverage = totalMaxLengthSum / float64(totalProtocols)
+	}
+	
+	// Render template
+	funcMap := template.FuncMap{
+		"dateFormat": func(dateStr string) string {
+			// Accepts date in YYYY-MM-DD or RFC3339, returns DD.MM.YYYY
+			if len(dateStr) >= 10 {
+				parts := strings.Split(dateStr, "-")
+				if len(parts) == 3 {
+					return parts[2] + "." + parts[1] + "." + parts[0]
+				}
+				// Try RFC3339
+				if strings.Contains(dateStr, "T") {
+					dateOnly := strings.Split(dateStr, "T")[0]
+					parts = strings.Split(dateOnly, "-")
+					if len(parts) == 3 {
+						return parts[2] + "." + parts[1] + "." + parts[0]
+					}
+				}
+			}
+			return dateStr
+		},
+		"extractNVT": func(filename string) string {
+			// Extract NVT number from filename, e.g. "NVT 1V2800" or similar
+			re := regexp.MustCompile(`(?i)(NVT\s*\w+)`)
+			match := re.FindStringSubmatch(filename)
+			if len(match) > 1 {
+				return match[1]
+			}
+			return ""
+		},
+	}
+	tmpl := template.Must(template.New("length-report.html").Funcs(funcMap).ParseFiles("web/templates/length-report.html"))
+	data := map[string]interface{}{
+		"Reports":           reports,
+		"StartDate":         startDate,
+		"EndDate":           endDate,
+		"IncludeFremco":     includeFremco,
+		"IncludeJetting":    includeJetting,
+		"TotalProtocols":    totalProtocols,
+		"TotalMeasurements": totalMaxLengthSum,     // Now shows sum of max lengths
+		"MaxLengthOverall":  maxLengthOverall,
+		"OverallAverage":    overallAverage,
+	}
+
+	err = tmpl.Execute(w, data)
+	if err != nil {
+		http.Error(w, "Error rendering template: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 // Helper function to get environment variable with default
@@ -961,6 +1142,711 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// isJettingFormatWithFilename detects format using both content and filename
+func isJettingFormatWithFilename(text string, filename string) bool {
+	// Check filename patterns first - strong indicator
+	filenameHints := 0
+	
+	// German Jetting filename pattern: "DD.MM.YYYY, HH MM, Location NVT XXXXX.pdf"
+	if strings.Contains(filename, "NVT") && strings.Contains(filename, ",") {
+		filenameHints += 3 // Strong Jetting indicator
+	}
+	
+	// Date pattern: DD.MM.YYYY
+	if matched, _ := regexp.MatchString(`\d{2}\.\d{2}\.\d{4}`, filename); matched {
+		filenameHints++
+	}
+	
+	// Time pattern: HH MM
+	if matched, _ := regexp.MatchString(`\d{2} \d{2}`, filename); matched {
+		filenameHints++
+	}
+	
+	return isJettingFormat(text) || filenameHints >= 3
+}
+
+// isJettingFormat detects if the text is from a Jetting protocol
+func isJettingFormat(text string) bool {
+	// Check for Jetting-specific indicators (more comprehensive)
+	jettingIndicators := 0
+	
+	// German language indicators (primary)
+	if strings.Contains(text, "Streckenlänge") { jettingIndicators += 2 }
+	if strings.Contains(text, "Geschwindigkeit") { jettingIndicators += 2 }
+	if strings.Contains(text, "Drehmoment") { jettingIndicators += 2 }
+	if strings.Contains(text, "Schubkraft") { jettingIndicators += 2 }
+	if strings.Contains(text, "Uhrzeit") { jettingIndicators += 1 }
+	
+	// Common patterns
+	if strings.Contains(text, "Länge") && strings.Contains(text, "m/min") { jettingIndicators += 2 }
+	if strings.Contains(text, "[m]") && strings.Contains(text, "[bar]") { jettingIndicators += 1 }
+	
+	// Additional German indicators
+	if strings.Contains(text, "Rohr-Druck") { jettingIndicators += 2 }
+	if strings.Contains(text, "Lufttemperatur") { jettingIndicators += 1 }
+	if strings.Contains(text, "Einblasdruck") { jettingIndicators += 1 }
+	
+	// Time format patterns (German)
+	if strings.Contains(text, "[hh:mm:ss]") { jettingIndicators++ }
+	if strings.Contains(text, "Zeit - Dauer") { jettingIndicators++ }
+	
+	// Unit patterns
+	if strings.Contains(text, "[°C]") { jettingIndicators++ }
+	if strings.Contains(text, "[N]") { jettingIndicators++ }
+	if strings.Contains(text, "[%]") { jettingIndicators++ }
+	
+	// Additional fallback patterns for difficult-to-detect files
+	if strings.Contains(text, "Protokoll") && (strings.Contains(text, "Meter") || strings.Contains(text, "Zeit")) {
+		jettingIndicators++
+	}
+	
+	// Very generic patterns as last resort
+	if strings.Contains(text, "bar") && strings.Contains(text, "min") {
+		jettingIndicators++
+	}
+	
+	// If text contains measurement-like patterns
+	if matched, _ := regexp.MatchString(`\d+[.,]\d+\s*(m|bar|°C|N|%)`, text); matched {
+		jettingIndicators++
+	}
+	
+	// Exclude Fremco files (strong exclusion)
+	if strings.Contains(text, "Fremco") { return false }
+	if strings.Contains(text, "SpeedNet") { return false }
+	if strings.Contains(text, "MicroFlow") { return false }
+	
+	// Very low threshold - be more permissive
+	return jettingIndicators >= 1
+}
+
+// isFremcoFormat detects if the text is from a Fremco protocol
+func isFremcoFormat(text string) bool {
+	// Check for Fremco-specific indicators (prioritized detection)
+	fremcoIndicators := 0
+	
+	// Primary indicators
+	if strings.Contains(text, "Fremco") { fremcoIndicators += 3 }
+	if strings.Contains(text, "SpeedNet") { fremcoIndicators += 2 }
+	if strings.Contains(text, "MicroFlow") { fremcoIndicators += 2 }
+	
+	// Secondary indicators
+	if strings.Contains(text, "Blowing distance") { fremcoIndicators++ }
+	if strings.Contains(text, "Blowing time") { fremcoIndicators++ }
+	if strings.Contains(text, "Streckenabschnitt") { fremcoIndicators++ }
+	if strings.Contains(text, "Equipment") && strings.Contains(text, "Serial") { fremcoIndicators++ }
+	
+	return fremcoIndicators >= 2
+}
+
+// truncateString helper function for logging
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+// DebugPDFHandler helps debug PDF format detection issues
+func DebugPDFHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`
+<!DOCTYPE html>
+<html>
+<head><title>PDF Debug Tool</title></head>
+<body>
+<h1>PDF Format Detection Debug</h1>
+<form method="POST" enctype="multipart/form-data">
+    <input type="file" name="pdfFile" accept=".pdf" required>
+    <button type="submit">Debug PDF</button>
+</form>
+</body>
+</html>`))
+		return
+	}
+
+	// Parse the uploaded file
+	err := r.ParseMultipartForm(10 << 20) // 10MB limit
+	if err != nil {
+		http.Error(w, "Error parsing form: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	files := r.MultipartForm.File["pdfFile"]
+	if len(files) == 0 {
+		http.Error(w, "No file provided", http.StatusBadRequest)
+		return
+	}
+
+	file := files[0]
+	f, err := file.Open()
+	if err != nil {
+		http.Error(w, "Error opening file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	// Read file content
+	content, err := io.ReadAll(f)
+	if err != nil {
+		http.Error(w, "Error reading file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Debug the processing
+	result := debugPDFProcessing(file.Filename, content)
+
+	// Return JSON response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+// debugPDFProcessing provides detailed debugging information
+func debugPDFProcessing(filename string, content []byte) map[string]interface{} {
+	result := map[string]interface{}{
+		"filename": filename,
+		"fileSize": len(content),
+	}
+
+	// Basic validation
+	if len(content) < 100 {
+		result["error"] = "File too small"
+		return result
+	}
+
+	if !strings.HasPrefix(string(content[:4]), "%PDF") {
+		result["error"] = "Invalid PDF header"
+		return result
+	}
+
+	// Create temp file and extract text
+	tempFile, err := os.CreateTemp("", "debug_*.pdf")
+	if err != nil {
+		result["error"] = "Failed to create temp file: " + err.Error()
+		return result
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	_, err = tempFile.Write(content)
+	if err != nil {
+		result["error"] = "Failed to write temp file: " + err.Error()
+		return result
+	}
+	tempFile.Close()
+
+	// Try pdftotext first
+	cmd := exec.Command("pdftotext", "-layout", tempFile.Name(), "-")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	extractMethod := "pdftotext"
+	err = cmd.Run()
+	if err != nil {
+		result["pdftotext_error"] = stderr.String()
+		// Try Go library
+		text, err := extractTextWithGoLib(tempFile.Name())
+		if err != nil {
+			result["go_lib_error"] = err.Error()
+			result["extraction_failed"] = true
+			return result
+		}
+		stdout.WriteString(text)
+		extractMethod = "go-library"
+	}
+
+	rawText := stdout.String()
+	result["extraction_method"] = extractMethod
+	result["text_length"] = len(rawText)
+	result["text_sample"] = truncateString(rawText, 1000)
+
+	// Format detection analysis
+	isJetting := isJettingFormatWithFilename(rawText, filename)
+	isFremco := isFremcoFormat(rawText)
+	isJettingContentOnly := isJettingFormat(rawText)
+	
+	result["format_detection"] = map[string]interface{}{
+		"is_jetting": isJetting,
+		"is_jetting_content_only": isJettingContentOnly,
+		"is_fremco":  isFremco,
+		"jetting_indicators": analyzeJettingIndicators(rawText),
+		"fremco_indicators":  analyzeFremcoIndicators(rawText),
+		"filename_hints": analyzeFilenameHints(filename),
+	}
+
+	// Try parsing if format detected
+	if isJetting {
+		normalized := simulator.NormalizeJettingTxt(rawText)
+		result["normalized_sample"] = truncateString(normalized, 500)
+		protocol := simulator.ParseJettingProtocol(normalized)
+		if protocol != nil {
+			result["parsing_success"] = true
+			result["measurements"] = len(protocol.Measurements.DataPoints)
+		} else {
+			result["parsing_success"] = false
+		}
+	} else if isFremco {
+		normalized := simulator.NormalizeFremcoTxt(rawText)
+		result["normalized_sample"] = truncateString(normalized, 500)
+		protocol := simulator.ParseFremcoProtocol(normalized)
+		if protocol != nil {
+			result["parsing_success"] = true
+			result["measurements"] = len(protocol.Measurements.DataPoints)
+		} else {
+			result["parsing_success"] = false
+		}
+	}
+
+	return result
+}
+
+// analyzeJettingIndicators provides detailed analysis of Jetting format indicators
+func analyzeJettingIndicators(text string) map[string]bool {
+	return map[string]bool{
+		"has_streckenlänge": strings.Contains(text, "Streckenlänge"),
+		"has_geschwindigkeit": strings.Contains(text, "Geschwindigkeit"),
+		"has_drehmoment": strings.Contains(text, "Drehmoment"),
+		"has_schubkraft": strings.Contains(text, "Schubkraft"),
+		"has_uhrzeit": strings.Contains(text, "Uhrzeit"),
+		"has_länge": strings.Contains(text, "Länge"),
+		"has_m_min": strings.Contains(text, "m/min"),
+		"has_m_bracket": strings.Contains(text, "[m]"),
+		"has_bar_bracket": strings.Contains(text, "[bar]"),
+		"has_fremco": strings.Contains(text, "Fremco"),
+	}
+}
+
+// analyzeFremcoIndicators provides detailed analysis of Fremco format indicators  
+func analyzeFremcoIndicators(text string) map[string]bool {
+	return map[string]bool{
+		"has_fremco": strings.Contains(text, "Fremco"),
+		"has_speednet": strings.Contains(text, "SpeedNet"),
+		"has_microflow": strings.Contains(text, "MicroFlow"),
+		"has_blowing_distance": strings.Contains(text, "Blowing distance"),
+		"has_blowing_time": strings.Contains(text, "Blowing time"),
+		"has_streckenabschnitt": strings.Contains(text, "Streckenabschnitt"),
+		"has_equipment_serial": strings.Contains(text, "Equipment") && strings.Contains(text, "Serial"),
+	}
+}
+
+// analyzeFilenameHints provides detailed analysis of filename-based format indicators
+func analyzeFilenameHints(filename string) map[string]bool {
+	datePattern, _ := regexp.MatchString(`\d{2}\.\d{2}\.\d{4}`, filename)
+	timePattern, _ := regexp.MatchString(`\d{2} \d{2}`, filename)
+	
+	return map[string]bool{
+		"has_nvt": strings.Contains(filename, "NVT"),
+		"has_comma_separation": strings.Contains(filename, ","),
+		"has_date_pattern": datePattern,
+		"has_time_pattern": timePattern,
+		"probable_jetting_filename": strings.Contains(filename, "NVT") && strings.Contains(filename, ",") && datePattern,
+	}
+}
+
+// BulkUploadHandler serves the bulk upload page and handles bulk processing
+func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		// Serve the bulk upload page
+		tmpl, err := template.ParseFiles("web/templates/bulk-upload.html")
+		if err != nil {
+			http.Error(w, "Error loading template: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		
+		err = tmpl.Execute(w, nil)
+		if err != nil {
+			http.Error(w, "Error rendering template: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		return
+	}
+	
+	if r.Method == "POST" {
+		// Handle bulk file upload processing
+		err := r.ParseMultipartForm(100 << 20) // 100 MB max memory
+		if err != nil {
+			http.Error(w, "Error parsing multipart form: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		
+		files := r.MultipartForm.File["pdfFiles"]
+		if len(files) == 0 {
+			http.Error(w, "No files provided", http.StatusBadRequest)
+			return
+		}
+		
+		// Get options
+		autoSave := r.FormValue("autoSave") == "true"
+		skipExisting := r.FormValue("skipExisting") == "true"
+		
+		results := make([]map[string]interface{}, 0)
+		var mutex sync.Mutex
+		var wg sync.WaitGroup
+		
+		// Process files in parallel (limit concurrency to avoid overwhelming system)
+		semaphore := make(chan struct{}, 5) // Max 5 concurrent processing
+		
+		for _, fileHeader := range files {
+			wg.Add(1)
+			go func(fh *multipart.FileHeader) {
+				defer wg.Done()
+				semaphore <- struct{}{} // Acquire semaphore
+				defer func() { <-semaphore }() // Release semaphore
+				
+				file, err := fh.Open()
+				if err != nil {
+					mutex.Lock()
+					results = append(results, map[string]interface{}{
+						"filename": fh.Filename,
+						"success":  false,
+						"error":    "Failed to open file: " + err.Error(),
+					})
+					mutex.Unlock()
+					return
+				}
+				defer file.Close()
+				
+				// Check if file exists in database if skipExisting is enabled
+				if skipExisting && db != nil {
+					var count int
+					err = db.QueryRow("SELECT COUNT(*) FROM protocols WHERE source_filename = $1", fh.Filename).Scan(&count)
+					if err == nil && count > 0 {
+						mutex.Lock()
+						results = append(results, map[string]interface{}{
+							"filename": fh.Filename,
+							"success":  true,
+							"skipped":  true,
+							"message":  "File already exists in database",
+						})
+						mutex.Unlock()
+						return
+					}
+				}
+				
+				// Read file content
+				content, err := io.ReadAll(file)
+				if err != nil {
+					mutex.Lock()
+					results = append(results, map[string]interface{}{
+						"filename": fh.Filename,
+						"success":  false,
+						"error":    "Failed to read file: " + err.Error(),
+					})
+					mutex.Unlock()
+					return
+				}
+				
+				// Process the PDF
+				result := processBulkPDF(fh.Filename, content, autoSave)
+				
+				mutex.Lock()
+				results = append(results, result)
+				mutex.Unlock()
+				
+			}(fileHeader)
+		}
+		
+		wg.Wait()
+		
+		// Return results as JSON
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"results": results,
+		})
+		return
+	}
+	
+	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+}
+
+// processBulkPDF processes a single PDF file for bulk upload
+func processBulkPDF(filename string, content []byte, autoSave bool) map[string]interface{} {
+	result := map[string]interface{}{
+		"filename": filename,
+		"success":  false,
+	}
+	
+	// Validate input
+	if len(content) == 0 {
+		result["error"] = "Empty file content"
+		log.Printf("Bulk upload error - %s: Empty file content", filename)
+		return result
+	}
+	
+	if len(content) < 100 {
+		result["error"] = "File too small (likely not a valid PDF)"
+		log.Printf("Bulk upload error - %s: File size %d bytes - too small", filename, len(content))
+		return result
+	}
+	
+	// Check PDF header
+	if !strings.HasPrefix(string(content[:4]), "%PDF") {
+		result["error"] = "Not a valid PDF file (missing PDF header)"
+		log.Printf("Bulk upload error - %s: Invalid PDF header", filename)
+		return result
+	}
+	
+	// Save to temporary file
+	tempFile, err := os.CreateTemp("", "bulk_*.pdf")
+	if err != nil {
+		result["error"] = "Failed to create temporary file: " + err.Error()
+		log.Printf("Bulk upload error - %s: Temp file creation failed - %v", filename, err)
+		return result
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+	
+	_, err = tempFile.Write(content)
+	if err != nil {
+		result["error"] = "Failed to write temporary file: " + err.Error()
+		log.Printf("Bulk upload error - %s: Temp file write failed - %v", filename, err)
+		return result
+	}
+	tempFile.Close()
+	
+	// Extract text using pdftotext first
+	cmd := exec.Command("pdftotext", "-layout", tempFile.Name(), "-")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+	extractMethod := "pdftotext"
+	if err != nil {
+		log.Printf("Bulk upload - %s: pdftotext failed, trying Go library - %v", filename, err)
+		// Try Go PDF library as fallback
+		text, err := extractTextWithGoLib(tempFile.Name())
+		if err != nil {
+			result["error"] = "Both PDF extraction methods failed: pdftotext: " + stderr.String() + ", Go library: " + err.Error()
+			log.Printf("Bulk upload error - %s: All extraction methods failed - pdftotext: %v, Go library: %v", filename, stderr.String(), err)
+			return result
+		}
+		stdout.WriteString(text)
+		extractMethod = "go-library"
+	}
+	
+	rawText := stdout.String()
+	if rawText == "" {
+		result["error"] = "No text extracted from PDF"
+		log.Printf("Bulk upload error - %s: No text extracted using %s", filename, extractMethod)
+		return result
+	}
+
+	if len(strings.TrimSpace(rawText)) < 50 {
+		result["error"] = "Extracted text too short (likely extraction failed)"
+		log.Printf("Bulk upload error - %s: Extracted text too short (%d chars)", filename, len(rawText))
+		return result
+	}
+
+	log.Printf("Bulk upload - %s: Successfully extracted %d characters using %s", filename, len(rawText), extractMethod)
+	
+	// Detect format and parse (with filename hints)
+	isJetting := isJettingFormatWithFilename(rawText, filename)
+	isFremco := isFremcoFormat(rawText)
+	
+	log.Printf("Bulk upload - %s: Format detection - Jetting: %v, Fremco: %v", filename, isJetting, isFremco)
+	
+	if isJetting {
+		normalized := simulator.NormalizeJettingTxt(rawText)
+		protocol := simulator.ParseJettingProtocol(normalized)
+		if protocol == nil {
+			result["error"] = "Jetting parsing failed - unable to parse normalized text"
+			log.Printf("Bulk upload error - %s: Jetting parsing failed. First 200 chars of normalized text: %q", filename, truncateString(normalized, 200))
+			return result
+		}
+		
+		// Parse filename for metadata (Jetting format: "29.10.2025, 11 09, Eiemarkt 14 NVT 1V2200.pdf")
+		baseName := strings.TrimSuffix(filename, filepath.Ext(filename))
+		var date, time, address, nvt string
+		if strings.Contains(baseName, ",") {
+			parts := strings.Split(baseName, ",")
+			if len(parts) >= 3 {
+				date = strings.TrimSpace(parts[0])
+				timeRaw := strings.TrimSpace(parts[1])
+				// Convert space-separated time to colon-separated (e.g., "11 09" -> "11:09")
+				if strings.Contains(timeRaw, " ") {
+					timeParts := strings.Fields(timeRaw)
+					if len(timeParts) == 2 {
+						time = timeParts[0] + ":" + timeParts[1]
+					}
+				} else {
+					time = timeRaw
+				}
+				rest := strings.TrimSpace(parts[2])
+				nvtIdx := strings.Index(rest, "NVT ")
+				if nvtIdx != -1 {
+					address = strings.TrimSpace(rest[:nvtIdx])
+					nvt = strings.TrimSpace(rest[nvtIdx+4:])
+				} else {
+					address = rest
+				}
+			}
+			log.Printf("Bulk upload - %s [Jetting] Parsed filename: Date: %s | Time: %s | Address: %s | NVT: %s", filename, date, time, address, nvt)
+		}
+		
+		// Fill in filename-based metadata
+		protocol.ExportMetadata.SourceFilename = filename
+		if date != "" {
+			protocol.ProtocolInfo.Date = date
+		}
+		if time != "" {
+			protocol.ProtocolInfo.StartTime = time
+		}
+		if address != "" && nvt != "" {
+			protocol.ProtocolInfo.SectionNVT = address + " / " + nvt
+		} else if address != "" {
+			protocol.ProtocolInfo.SectionNVT = address
+		}
+		
+		result["format"] = "jetting"
+		measurementCount := len(protocol.Measurements.DataPoints)
+		result["measurements"] = measurementCount
+		
+		log.Printf("Bulk upload - %s: Jetting protocol parsed successfully - %d measurements", filename, measurementCount)
+		
+		if autoSave && db != nil {
+			_, err := SaveJettingProtocol(db, protocol)
+			if err != nil {
+				result["error"] = "Database save failed: " + err.Error()
+				log.Printf("Bulk upload error - %s: Jetting database save failed - %v", filename, err)
+				return result
+			}
+			result["saved"] = true
+			log.Printf("Bulk upload - %s: Jetting protocol saved to database successfully", filename)
+		}
+	} else if isFremco {
+		normalized := simulator.NormalizeFremcoTxt(rawText)
+		protocol := simulator.ParseFremcoProtocol(normalized)
+		if protocol == nil {
+			result["error"] = "Fremco parsing failed - unable to parse normalized text"
+			log.Printf("Bulk upload error - %s: Fremco parsing failed. First 200 chars of normalized text: %q", filename, truncateString(normalized, 200))
+			return result
+		}
+		
+		// Parse filename for metadata (Fremco format: "SM209214964_2025-10-22 10_51_Oldenburger Koppel_10_NVT1V3400.pdf")
+		baseName := strings.TrimSuffix(filename, filepath.Ext(filename))
+		var date, time, address, nvt, project string
+		if strings.Contains(baseName, "_") {
+			parts := strings.Split(baseName, "_")
+			if len(parts) >= 4 {
+				project = parts[0]
+				
+				// Parse date and time from second part "2025-10-22 10"
+				dateTimePart := parts[1]
+				if strings.Contains(dateTimePart, " ") {
+					dateTimeFields := strings.Fields(dateTimePart)
+					if len(dateTimeFields) >= 2 {
+						// Date part: "2025-10-22"
+						dateParts := strings.Split(dateTimeFields[0], "-")
+						if len(dateParts) == 3 {
+							date = dateParts[2] + "." + dateParts[1] + "." + dateParts[0] // Convert to DD.MM.YYYY
+						}
+						// Time part: combine hour from dateTimePart and minutes from parts[2]
+						hour := dateTimeFields[1]
+						minute := parts[2]
+						time = hour + ":" + minute
+					}
+				}
+				
+				// Find NVT part (starts with "NVT")
+				nvtIndex := -1
+				for i, part := range parts {
+					if strings.HasPrefix(part, "NVT") {
+						nvtIndex = i
+						nvt = part
+						break
+					}
+				}
+				
+				// Address is everything between time part and NVT
+				if nvtIndex > 3 {
+					addressParts := parts[3:nvtIndex]
+					address = strings.TrimSpace(strings.Join(addressParts, " "))
+				}
+			}
+			log.Printf("Bulk upload - %s [Fremco] Parsed filename: Project: %s | Date: %s | Time: %s | Address: %s | NVT: %s", filename, project, date, time, address, nvt)
+		}
+		
+		// Fill in filename-based metadata
+		protocol.ExportMetadata.SourceFilename = filename
+		if date != "" {
+			protocol.ProtocolInfo.Date = date
+		}
+		if time != "" {
+			protocol.ProtocolInfo.StartTime = time
+		}
+		if project != "" {
+			protocol.ProtocolInfo.ProjectNumber = project
+		}
+		if address != "" && nvt != "" {
+			protocol.ProtocolInfo.SectionNVT = address + " / " + nvt
+		} else if address != "" {
+			protocol.ProtocolInfo.SectionNVT = address
+		}
+		
+		result["format"] = "fremco"
+		measurementCount := len(protocol.Measurements.DataPoints)
+		result["measurements"] = measurementCount
+		
+		log.Printf("Bulk upload - %s: Fremco protocol parsed successfully - %d measurements", filename, measurementCount)
+		
+		if autoSave && db != nil {
+			_, err := SaveFremcoProtocol(db, protocol)
+			if err != nil {
+				result["error"] = "Database save failed: " + err.Error()
+				log.Printf("Bulk upload error - %s: Fremco database save failed - %v", filename, err)
+				return result
+			}
+			result["saved"] = true
+			log.Printf("Bulk upload - %s: Fremco protocol saved to database successfully", filename)
+		}
+	} else {
+		// Last resort: if filename looks like Jetting but content detection failed, try Jetting anyway
+		filenameHints := analyzeFilenameHints(filename)
+		if filenameHints["probable_jetting_filename"] {
+			log.Printf("Bulk upload - %s: Content detection failed but filename suggests Jetting, attempting Jetting parse", filename)
+			
+			normalized := simulator.NormalizeJettingTxt(rawText)
+			protocol := simulator.ParseJettingProtocol(normalized)
+			if protocol != nil {
+				// Filename-based detection succeeded
+				protocol.ExportMetadata.SourceFilename = filename
+				
+				result["format"] = "jetting"
+				measurementCount := len(protocol.Measurements.DataPoints)
+				result["measurements"] = measurementCount
+				result["filename_fallback"] = true
+				
+				log.Printf("Bulk upload - %s: Filename-based Jetting fallback successful - %d measurements", filename, measurementCount)
+				
+				if autoSave && db != nil {
+					_, err := SaveJettingProtocol(db, protocol)
+					if err != nil {
+						result["error"] = "Database save failed: " + err.Error()
+						log.Printf("Bulk upload error - %s: Jetting database save failed - %v", filename, err)
+						return result
+					}
+					result["saved"] = true
+					log.Printf("Bulk upload - %s: Filename-fallback Jetting protocol saved to database successfully", filename)
+				}
+			} else {
+				result["error"] = "Unknown PDF format - content does not match Fremco or Jetting patterns, filename fallback also failed"
+				log.Printf("Bulk upload error - %s: Format detection failed completely. First 500 chars: %q", filename, truncateString(rawText, 500))
+				return result
+			}
+		} else {
+			result["error"] = "Unknown PDF format - content does not match Fremco or Jetting patterns"
+			log.Printf("Bulk upload error - %s: Format detection failed. First 500 chars: %q", filename, truncateString(rawText, 500))
+			return result
+		}
+	}
+	
+	result["success"] = true
+	return result
 }
 
 // SubmitJettingReportHandler processes Jetting form and renders the report

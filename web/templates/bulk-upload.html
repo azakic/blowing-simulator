@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulk PDF Upload - Blowing Simulator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .back-link {
+            color: #007bff;
+            text-decoration: none;
+            font-size: 16px;
+            margin-bottom: 20px;
+            display: inline-block;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .upload-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .upload-methods {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        .upload-method {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            border: 2px solid #e9ecef;
+        }
+        .upload-method h3 {
+            margin-top: 0;
+            color: #495057;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .method-icon {
+            font-size: 24px;
+        }
+        .file-drop-area {
+            border: 2px dashed #007bff;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+        .file-drop-area:hover {
+            background: #f0f8ff;
+            border-color: #0056b3;
+        }
+        .file-drop-area.dragover {
+            background: #e3f2fd;
+            border-color: #1976d2;
+        }
+        .directory-browser {
+            margin-bottom: 20px;
+        }
+        .directory-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .browse-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        .browse-btn:hover {
+            background: #218838;
+        }
+        .selected-files {
+            margin-top: 20px;
+        }
+        .file-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: white;
+        }
+        .file-item {
+            padding: 10px 15px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .file-item:last-child {
+            border-bottom: none;
+        }
+        .file-item:nth-child(even) {
+            background: #f9f9f9;
+        }
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .file-icon {
+            color: #dc3545;
+            font-size: 16px;
+        }
+        .file-path {
+            font-family: monospace;
+            font-size: 12px;
+            color: #6c757d;
+        }
+        .file-size {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        .remove-file {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .remove-file:hover {
+            background: #c82333;
+        }
+        .upload-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 20px;
+        }
+        .file-count {
+            font-weight: 500;
+            color: #495057;
+        }
+        .upload-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        .upload-btn:hover {
+            background: #0056b3;
+        }
+        .upload-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .clear-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        .clear-btn:hover {
+            background: #545b62;
+        }
+        .progress-section {
+            margin-top: 30px;
+            display: none;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007bff, #28a745);
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            color: #495057;
+        }
+        .results-section {
+            margin-top: 30px;
+            display: none;
+        }
+        .results-summary {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .error-summary {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .result-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .result-success {
+            color: #155724;
+        }
+        .result-error {
+            color: #721c24;
+        }
+        .options-section {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .option-group {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        .option-group:last-child {
+            margin-bottom: 0;
+        }
+        .checkbox-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .checkbox-option input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Home</a>
+        
+        <h1>Bulk PDF Upload</h1>
+        
+        <div class="upload-methods">
+            <div class="upload-method">
+                <h3><span class="method-icon">📁</span>Multiple File Selection</h3>
+                <div class="file-drop-area" id="dropArea">
+                    <p><strong>Drag & Drop PDF files here</strong></p>
+                    <p>or</p>
+                    <input type="file" id="fileInput" multiple accept=".pdf" style="display: none;">
+                    <button type="button" class="browse-btn" onclick="document.getElementById('fileInput').click()">
+                        Browse Files
+                    </button>
+                    <p style="font-size: 14px; color: #6c757d; margin-top: 15px;">
+                        Select multiple PDF files at once (Ctrl+Click or Shift+Click)
+                    </p>
+                </div>
+            </div>
+            
+            <div class="upload-method">
+                <h3><span class="method-icon">🗂️</span>Directory Upload</h3>
+                <p style="color: #6c757d; font-size: 14px; margin-bottom: 15px;">
+                    Upload all PDFs from a directory and its subdirectories
+                </p>
+                <input type="file" id="directoryInput" webkitdirectory directory multiple accept=".pdf" style="display: none;">
+                <button type="button" class="browse-btn" onclick="document.getElementById('directoryInput').click()">
+                    Select Directory
+                </button>
+                <p style="font-size: 12px; color: #868e96; margin-top: 10px;">
+                    This will include all PDF files in subdirectories
+                </p>
+            </div>
+        </div>
+        
+        <div class="options-section">
+            <h4 style="margin-top: 0;">Upload Options</h4>
+            <div class="option-group">
+                <div class="checkbox-option">
+                    <input type="checkbox" id="skipExisting" checked>
+                    <label for="skipExisting">Skip files that already exist in database</label>
+                </div>
+                <div class="checkbox-option">
+                    <input type="checkbox" id="autoSave" checked>
+                    <label for="autoSave">Automatically save parsed data to database</label>
+                </div>
+            </div>
+            <div class="option-group">
+                <div class="checkbox-option">
+                    <input type="checkbox" id="continueOnError">
+                    <label for="continueOnError">Continue processing if individual files fail</label>
+                </div>
+                <div class="checkbox-option">
+                    <input type="checkbox" id="showPreview">
+                    <label for="showPreview">Show parsing preview before saving</label>
+                </div>
+            </div>
+        </div>
+        
+        <div class="selected-files">
+            <h4>Selected Files (<span id="fileCount">0</span>)</h4>
+            <div class="file-list" id="fileList">
+                <div style="padding: 20px; text-align: center; color: #6c757d;">
+                    No files selected yet
+                </div>
+            </div>
+            
+            <div class="upload-controls">
+                <div>
+                    <button type="button" class="clear-btn" onclick="clearFiles()">Clear All</button>
+                    <span class="file-count">Total size: <span id="totalSize">0 MB</span></span>
+                </div>
+                <button type="button" class="upload-btn" id="uploadBtn" onclick="startUpload()" disabled>
+                    Upload & Process Files
+                </button>
+            </div>
+        </div>
+        
+        <div class="progress-section" id="progressSection">
+            <h4>Upload Progress</h4>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-info">
+                <span id="progressText">Preparing upload...</span>
+                <span id="progressPercent">0%</span>
+            </div>
+        </div>
+        
+        <div class="results-section" id="resultsSection">
+            <h4>Upload Results</h4>
+            <div id="resultsSummary"></div>
+            <div id="resultsDetails"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFiles = [];
+        let totalSize = 0;
+        
+        // File input handlers
+        document.getElementById('fileInput').addEventListener('change', handleFileSelect);
+        document.getElementById('directoryInput').addEventListener('change', handleFileSelect);
+        
+        // Drag and drop handlers
+        const dropArea = document.getElementById('dropArea');
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => dropArea.classList.add('dragover'), false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => dropArea.classList.remove('dragover'), false);
+        });
+        
+        dropArea.addEventListener('drop', handleDrop, false);
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        }
+        
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            handleFiles(files);
+        }
+        
+        function handleFiles(files) {
+            const pdfFiles = Array.from(files).filter(file => 
+                file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+            );
+            
+            pdfFiles.forEach(file => {
+                // Check if file already exists
+                const exists = selectedFiles.some(f => 
+                    f.name === file.name && f.size === file.size
+                );
+                
+                if (!exists) {
+                    selectedFiles.push(file);
+                    totalSize += file.size;
+                }
+            });
+            
+            updateFileList();
+            updateUploadButton();
+        }
+        
+        function updateFileList() {
+            const fileList = document.getElementById('fileList');
+            const fileCount = document.getElementById('fileCount');
+            const totalSizeEl = document.getElementById('totalSize');
+            
+            fileCount.textContent = selectedFiles.length;
+            totalSizeEl.textContent = (totalSize / (1024 * 1024)).toFixed(1);
+            
+            if (selectedFiles.length === 0) {
+                fileList.innerHTML = '<div style="padding: 20px; text-align: center; color: #6c757d;">No files selected yet</div>';
+                return;
+            }
+            
+            fileList.innerHTML = selectedFiles.map((file, index) => `
+                <div class="file-item">
+                    <div class="file-info">
+                        <span class="file-icon">📄</span>
+                        <div>
+                            <div style="font-weight: 500;">${file.name}</div>
+                            <div class="file-path">${file.webkitRelativePath || 'Root'}</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span class="file-size">${(file.size / (1024 * 1024)).toFixed(1)} MB</span>
+                        <button class="remove-file" onclick="removeFile(${index})">✕</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function removeFile(index) {
+            totalSize -= selectedFiles[index].size;
+            selectedFiles.splice(index, 1);
+            updateFileList();
+            updateUploadButton();
+        }
+        
+        function clearFiles() {
+            selectedFiles = [];
+            totalSize = 0;
+            updateFileList();
+            updateUploadButton();
+        }
+        
+        function updateUploadButton() {
+            const uploadBtn = document.getElementById('uploadBtn');
+            uploadBtn.disabled = selectedFiles.length === 0;
+        }
+        
+        async function startUpload() {
+            const progressSection = document.getElementById('progressSection');
+            const resultsSection = document.getElementById('resultsSection');
+            const uploadBtn = document.getElementById('uploadBtn');
+            
+            // Show progress section
+            progressSection.style.display = 'block';
+            resultsSection.style.display = 'none';
+            uploadBtn.disabled = true;
+            
+            const options = {
+                skipExisting: document.getElementById('skipExisting').checked,
+                autoSave: document.getElementById('autoSave').checked,
+                continueOnError: document.getElementById('continueOnError').checked,
+                showPreview: document.getElementById('showPreview').checked
+            };
+            
+            updateProgress(10, 'Preparing files for upload...');
+            
+            try {
+                const result = await uploadAllFiles(options);
+                updateProgress(100, 'Upload complete!');
+                showResults(result.results, result.successCount, result.errorCount);
+            } catch (error) {
+                updateProgress(100, 'Upload failed!');
+                showResults([{ file: 'Upload Error', success: false, error: error.message }], 0, 1);
+            }
+            
+            uploadBtn.disabled = false;
+        }
+        
+        async function uploadAllFiles(options) {
+            const formData = new FormData();
+            
+            // Add all files to form data
+            selectedFiles.forEach(file => {
+                formData.append('pdfFiles', file);
+            });
+            
+            // Add options
+            formData.append('autoSave', options.autoSave);
+            formData.append('skipExisting', options.skipExisting);
+            formData.append('continueOnError', options.continueOnError);
+            
+            updateProgress(50, 'Uploading and processing files...');
+            
+            const response = await fetch('/bulk-upload', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            
+            // Count successes and errors
+            let successCount = 0;
+            let errorCount = 0;
+            
+            data.results.forEach(result => {
+                if (result.success) {
+                    successCount++;
+                } else {
+                    errorCount++;
+                }
+            });
+            
+            return {
+                results: data.results,
+                successCount,
+                errorCount
+            };
+        }
+        
+        function updateProgress(percent, text) {
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            const progressPercent = document.getElementById('progressPercent');
+            
+            progressFill.style.width = percent + '%';
+            progressText.textContent = text;
+            progressPercent.textContent = Math.round(percent) + '%';
+        }
+        
+        function showResults(results, successCount, errorCount) {
+            const resultsSection = document.getElementById('resultsSection');
+            const resultsSummary = document.getElementById('resultsSummary');
+            const resultsDetails = document.getElementById('resultsDetails');
+            
+            // Show results section
+            resultsSection.style.display = 'block';
+            
+            // Summary
+            if (errorCount === 0) {
+                resultsSummary.className = 'results-summary';
+                resultsSummary.innerHTML = `
+                    <strong>Upload Successful!</strong><br>
+                    ${successCount} files processed successfully
+                `;
+            } else {
+                resultsSummary.className = 'error-summary';
+                resultsSummary.innerHTML = `
+                    <strong>Upload Completed with Errors</strong><br>
+                    ${successCount} files successful, ${errorCount} files failed
+                `;
+            }
+            
+            // Details
+            resultsDetails.innerHTML = results.map(result => `
+                <div class="result-item">
+                    <div class="${result.success ? 'result-success' : 'result-error'}">
+                        <strong>${result.filename}</strong>
+                        <div style="font-size: 12px;">
+                            ${result.success ? 
+                                (result.skipped ? '⏭️ Skipped (already exists)' : 
+                                 `✓ ${result.format} format - ${result.measurements} measurements${result.saved ? ' (saved to DB)' : ''}`) : 
+                                '✗ ' + result.error}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+    </script>
+</body>
+</html>

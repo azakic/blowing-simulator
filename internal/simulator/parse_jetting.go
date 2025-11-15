@@ -1,6 +1,7 @@
 package simulator
 
 import (
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -317,20 +318,56 @@ func extractJettingProtocolInfo(lines []string) JettingProtocolInfo {
 		DocumentType: "Jetting Protokoll",
 	}
 	
-	for _, line := range lines {
+	// Debug: log first 20 lines to understand structure
+	log.Printf("extractJettingProtocolInfo: Parsing %d lines of text", len(lines))
+	for i := 0; i < len(lines) && i < 20; i++ {
+		log.Printf("Jetting Line %d: '%s'", i, strings.TrimSpace(lines[i]))
+	}
+	
+	for i, line := range lines {
 		line = strings.TrimSpace(line)
+		
+		// Date detection - look for date patterns
+		if dateMatch := regexp.MustCompile(`(\d{2}\.\d{2}\.\d{4})`).FindString(line); dateMatch != "" {
+			info.Date = dateMatch
+			log.Printf("extractJettingProtocolInfo: Found Date - Line %d: '%s' -> Extracted: '%s'", i, line, dateMatch)
+		}
+		
+		// Time detection - look for time patterns
+		if timeMatch := regexp.MustCompile(`(\d{2}:\d{2})`).FindString(line); timeMatch != "" && info.StartTime == "" {
+			info.StartTime = timeMatch
+			log.Printf("extractJettingProtocolInfo: Found Time - Line %d: '%s' -> Extracted: '%s'", i, line, timeMatch)
+		}
+		
+		// Project number detection
+		if strings.Contains(line, "NVT") {
+			// Extract project info from lines containing NVT
+			if nvtMatch := regexp.MustCompile(`NVT\s*(\w+)`).FindStringSubmatch(line); len(nvtMatch) > 1 {
+				projectNum := nvtMatch[1]
+				info.ProjectNumber = &projectNum
+				log.Printf("extractJettingProtocolInfo: Found Project Number - Line %d: '%s' -> Extracted: '%s'", i, line, projectNum)
+			}
+		}
+		
+		// Address detection
+		if strings.Contains(line, "Adresse:") {
+			addressMatch := regexp.MustCompile(`Adresse:\s*(.+)`).FindStringSubmatch(line)
+			if len(addressMatch) > 1 {
+				info.SectionNVT = strings.TrimSpace(addressMatch[1])
+				log.Printf("extractJettingProtocolInfo: Found Address - Line %d: '%s' -> Extracted: '%s'", i, line, info.SectionNVT)
+			}
+		}
 		
 		// Company detection
 		if strings.Contains(line, "Wolken-ASM") {
 			info.Company = "Wolken-ASM GMBH"
+			log.Printf("extractJettingProtocolInfo: Found Company - Line %d: '%s'", i, line)
 		}
 		
 		if strings.Contains(line, "M.A.X. Bauservice") {
 			info.ServiceProvider = "M.A.X. Bauservice"
+			log.Printf("extractJettingProtocolInfo: Found Service Provider - Line %d: '%s'", i, line)
 		}
-		
-		// Date detection (from filename parsing, not PDF content)
-		// This will be filled by filename parsing in main.go
 	}
 	
 	return info

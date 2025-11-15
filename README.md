@@ -69,12 +69,15 @@ open http://localhost:8080
 
 Once running, you can:
 
-1. **Upload PDFs**: Process Fremco and Jetting protocol PDFs
-2. **View Protocols**: Browse all imported protocols at `/protocols`
-3. **Search & Filter**: Find protocols by company, filename, or type
-4. **View Details**: See complete protocol information including equipment specs
-5. **Browse Measurements**: View detailed measurement data with pagination
-6. **Health Check**: Monitor application status at `/health`
+1. **Upload PDFs**: Process Fremco and Jetting protocol PDFs (single files)
+2. **Bulk Upload**: Process multiple PDFs or entire directories at `/bulk-upload`
+3. **View Protocols**: Browse all imported protocols at `/protocols`
+4. **Search & Filter**: Find protocols by company, filename, or type
+5. **Length Reports**: Analyze cable lengths over time at `/protocols/length-report`
+6. **View Details**: See complete protocol information including equipment specs
+7. **Browse Measurements**: View detailed measurement data with pagination
+8. **Export Data**: Download data as JSON/CSV for external analysis
+9. **Health Check**: Monitor application status at `/health`
 
 ### Manual Setup
 
@@ -620,6 +623,14 @@ docker compose logs -f
 | `/protocols` | GET | Searchable protocol database with filtering |
 | `/protocols/view?id=X` | GET | Detailed protocol information and metadata |
 | `/protocols/measurements?id=X` | GET | Paginated measurement data viewer |
+| `/protocols/length-report` | GET | Length analysis report with date/format filtering |
+
+### Bulk Processing Routes
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/bulk-upload` | GET | Bulk PDF upload interface with directory support |
+| `/bulk-upload` | POST | Process multiple PDF files with progress tracking |
 
 ### Report Creation Routes
 
@@ -679,6 +690,86 @@ type SimpleMeasurement struct {
 - **Real-time Processing**: Live feedback during PDF processing
 - **Export Options**: JSON, CSV download buttons
 
+### Length Report (`/protocols/length-report`)
+- **Date Range Filtering**: Select start and end dates for analysis period
+- **Format Selection**: Choose Fremco, Jetting, or both protocol types using checkboxes
+- **Summary Statistics**: 
+  - Total protocols in selected date range
+  - Total measurements across all protocols
+  - Maximum length value found in dataset
+  - Average length across all measurements
+- **Detailed Protocol Table**: Shows per-protocol statistics including:
+  - Protocol date, type (color-coded), company, service provider
+  - Min/Max/Average length measurements per protocol
+  - Measurement count per protocol
+  - Source filename and action buttons
+- **CSV Export**: One-click export of length report data for external analysis
+- **Smart Defaults**: Automatically sets to last 30 days if no date range specified
+
+### Bulk Upload (`/bulk-upload`)
+- **Multiple Upload Methods**:
+  - **Drag & Drop Interface**: Drag multiple PDF files directly into the browser
+  - **File Browser Selection**: Multi-select PDFs using Ctrl+Click or Shift+Click
+  - **Directory Upload**: Select entire directories including all subdirectories with PDF files
+- **Upload Configuration Options**:
+  - ✅ **Skip Existing Files**: Automatically bypass files already in database (prevents duplicates)
+  - ✅ **Auto-Save to Database**: Immediately save parsed protocols to database after processing
+  - ✅ **Continue on Errors**: Keep processing remaining files even if individual files fail
+  - ✅ **Show Preview**: Display parsing results before database commit
+- **Real-Time Progress Tracking**:
+  - Visual progress bar with percentage completion
+  - Current file being processed indicator
+  - File count progress (e.g., "Processing file 15 of 47")
+  - Estimated time remaining display
+- **Concurrent Processing**: Processes up to 5 files simultaneously for faster throughput
+- **Comprehensive Results Display**:
+  - Success/failure summary with counts
+  - Per-file detailed results showing:
+    - Format detected (Fremco/Jetting with color coding)
+    - Number of measurements successfully parsed
+    - Database save status confirmation
+    - Specific error messages for failed files
+  - Files skipped due to existing database records
+- **Error Handling**: Graceful handling of PDF extraction failures, parsing errors, and database issues
+- **Memory Efficient**: Streams files without loading entire collections into memory
+
+### Advanced Features
+
+#### Smart Format Detection
+The system uses content analysis to automatically identify PDF formats:
+
+```go
+// Jetting format indicators
+func isJettingFormat(text string) bool {
+    return (strings.Contains(text, "Länge") && 
+            strings.Contains(text, "m/min") && 
+            strings.Contains(text, "Uhrzeit")) ||
+           (strings.Contains(text, "Streckenlänge") && 
+            strings.Contains(text, "Drehmoment") && 
+            !strings.Contains(text, "Fremco"))
+}
+
+// Fremco format indicators  
+func isFremcoFormat(text string) bool {
+    return strings.Contains(text, "Fremco") || 
+           (strings.Contains(text, "Blowing distance") && 
+            strings.Contains(text, "Blowing time"))
+}
+```
+
+#### Database Integration Architecture
+- **Transaction-Based Operations**: Ensures data consistency during bulk operations
+- **Duplicate Prevention**: MD5 hashing and filename checking to avoid duplicates
+- **Relationship Management**: Automatic linking of protocols, equipment, summary, and measurements
+- **NULL Handling**: Proper SQL NULL types for optional fields
+- **Performance Optimization**: Batch inserts for large measurement datasets
+
+#### Export and Reporting
+- **Length Analysis**: Statistical analysis of cable installation distances over time
+- **CSV Export**: Structured data export for spreadsheet analysis
+- **JSON Format**: Machine-readable format for integration with other systems
+- **Filtered Reports**: Generate reports based on date ranges, companies, or equipment types
+
 ## 📚 Documentation
 
 - **Database Schema**: See [`database.md`](./database.md)
@@ -722,6 +813,14 @@ For questions, issues, or contributions:
 - **Health Check**: Use `/health` endpoint to verify application status
 - **Logs**: Use `docker compose logs` for debugging information
 
-**Version**: 2.0.0 with complete database integration and protocol management
+**Version**: 2.1.0 with bulk upload, length reporting, and advanced protocol management
 **Last Updated**: November 2025
 **Compatibility**: Go 1.24+, PostgreSQL 15+, Docker Compose 2.0+
+
+### Recent Updates (v2.1.0)
+- ✅ **Bulk PDF Upload**: Process directories and multiple files simultaneously
+- ✅ **Length Report Analysis**: Statistical analysis of cable lengths with date/format filtering
+- ✅ **Enhanced Protocol Management**: Improved search, filtering, and pagination
+- ✅ **CSV Export**: Export length reports and protocol data for external analysis
+- ✅ **Progress Tracking**: Real-time progress bars for bulk operations
+- ✅ **Smart Duplicate Detection**: Automatic skip of files already in database

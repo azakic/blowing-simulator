@@ -21,8 +21,34 @@
         }
         h1 {
             color: #2c3e50;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             text-align: center;
+        }
+        .nav-buttons {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .nav-btn {
+            background: #6f42c1;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            margin: 0 10px;
+            display: inline-block;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .nav-btn:hover {
+            background: #5a32a3;
+            text-decoration: none;
+            color: white;
+        }
+        .nav-btn.reports {
+            background: #fd7e14;
+        }
+        .nav-btn.reports:hover {
+            background: #e8690b;
         }
         .search-form {
             background: #f8f9fa;
@@ -135,6 +161,11 @@
         <a href="/" class="back-link">← Back to Home</a>
         
         <h1>Protocol Database</h1>
+        
+        <div class="nav-buttons">
+            <a href="/protocols" class="nav-btn">All Protocols</a>
+            <a href="/protocols/length-report" class="nav-btn reports">Length Report</a>
+        </div>
         
         <form class="search-form" method="GET">
             <input type="text" name="search" placeholder="Search by company, service provider, filename, or project number..." value="{{.Search}}">
