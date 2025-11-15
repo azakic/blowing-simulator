@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Measurements - Protocol {{.Protocol.ID}} - Blowing Simulator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #2c3e50;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .protocol-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .protocol-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .protocol-type {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 14px;
+        }
+        .protocol-type.fremco {
+            background: #d4edda;
+            color: #155724;
+        }
+        .protocol-type.jetting {
+            background: #cce7ff;
+            color: #004085;
+        }
+        .filename {
+            font-family: monospace;
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+        .back-link {
+            color: #007bff;
+            text-decoration: none;
+            font-size: 16px;
+            margin-bottom: 20px;
+            display: inline-block;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .stats {
+            margin-bottom: 20px;
+            color: #6c757d;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .measurements-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 13px;
+        }
+        .measurements-table th {
+            background: #343a40;
+            color: white;
+            padding: 12px 8px;
+            text-align: center;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+        .measurements-table td {
+            padding: 10px 8px;
+            border-bottom: 1px solid #dee2e6;
+            text-align: center;
+        }
+        .measurements-table tr:hover {
+            background-color: #f8f9fa;
+        }
+        .measurements-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .measurements-table tr:nth-child(even):hover {
+            background-color: #f0f0f0;
+        }
+        .null-value {
+            color: #adb5bd;
+            font-style: italic;
+            font-size: 11px;
+        }
+        .numeric-value {
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-weight: 500;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 30px;
+            gap: 10px;
+        }
+        .pagination a, .pagination span {
+            padding: 8px 12px;
+            text-decoration: none;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            color: #007bff;
+        }
+        .pagination a:hover {
+            background-color: #e9ecef;
+        }
+        .pagination .current {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .pagination .disabled {
+            color: #6c757d;
+            cursor: not-allowed;
+        }
+        .table-container {
+            overflow-x: auto;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+        .export-options {
+            margin-bottom: 20px;
+            text-align: right;
+        }
+        .btn {
+            display: inline-block;
+            padding: 8px 16px;
+            margin: 0 5px;
+            background: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .btn:hover {
+            background: #0056b3;
+            text-decoration: none;
+        }
+        .btn-success {
+            background: #28a745;
+        }
+        .btn-success:hover {
+            background: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/protocols/view?id={{.Protocol.ID}}" class="back-link">← Back to Protocol Details</a>
+        
+        <h1>Measurement Data</h1>
+        
+        <div class="protocol-header">
+            <div class="protocol-info">
+                <span class="protocol-type {{.Protocol.ProtocolType}}">{{.Protocol.ProtocolType}}</span>
+                <span><strong>System:</strong> {{if .Protocol.SystemName.Valid}}{{.Protocol.SystemName.String}}{{else}}Unknown{{end}}</span>
+                <span><strong>File:</strong> {{if .Protocol.SourceFilename.Valid}}<span class="filename">{{.Protocol.SourceFilename.String}}</span>{{else}}Unknown{{end}}</span>
+            </div>
+        </div>
+        
+        <div class="stats">
+            <div>
+                Showing {{len .Measurements}} of {{.TotalCount}} measurements 
+                {{if gt .TotalPages 1}}(Page {{.CurrentPage}} of {{.TotalPages}}){{end}}
+            </div>
+            <div class="export-options">
+                <a href="#" class="btn btn-success">Export CSV</a>
+            </div>
+        </div>
+        
+        {{if .Measurements}}
+        <div class="table-container">
+            <table class="measurements-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Sequence</th>
+                        <th>Length<br><small>(m)</small></th>
+                        <th>Speed<br><small>(m/min)</small></th>
+                        <th>Pressure<br><small>(bar)</small></th>
+                        <th>Torque<br><small>(%)</small></th>
+                        <th>Temperature<br><small>(°C)</small></th>
+                        <th>Force<br><small>(N)</small></th>
+                        <th>Duration</th>
+                        <th>Timestamp</th>
+                        <th>Recorded</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range $index, $measurement := .Measurements}}
+                    <tr>
+                        <td>{{$measurement.ID}}</td>
+                        <td>{{if $measurement.SequenceNumber.Valid}}<span class="numeric-value">{{$measurement.SequenceNumber.Int64}}</span>{{else}}<span class="null-value">—</span>{{end}}</td>
+                        <td>{{if $measurement.LengthM.Valid}}<span class="numeric-value">{{printf "%.1f" $measurement.LengthM.Float64}}</span>{{else}}<span class="null-value">—</span>{{end}}</td>
+                        <td>{{if $measurement.SpeedMMin.Valid}}<span class="numeric-value">{{printf "%.1f" $measurement.SpeedMMin.Float64}}</span>{{else}}<span class="null-value">—</span>{{end}}</td>
+                        <td>{{if $measurement.PressureBar.Valid}}<span class="numeric-value">{{printf "%.1f" $measurement.PressureBar.Float64}}</span>{{else}}<span class="null-value">—</span>{{end}}</td>
+                        <td>{{if $measurement.TorquePercent.Valid}}<span class="numeric-value">{{printf "%.1f" $measurement.TorquePercent.Float64}}</span>{{else}}<span class="null-value">—</span>{{end}}</td>
+                        <td>{{if $measurement.TemperatureC.Valid}}<span class="numeric-value">{{printf "%.1f" $measurement.TemperatureC.Float64}}</span>{{else}}<span class="null-value">—</span>{{end}}</td>
+                        <td>{{if $measurement.ForceN.Valid}}<span class="numeric-value">{{printf "%.0f" $measurement.ForceN.Float64}}</span>{{else}}<span class="null-value">—</span>{{end}}</td>
+                        <td>{{if $measurement.TimeDuration.Valid}}{{$measurement.TimeDuration.String}}{{else}}<span class="null-value">—</span>{{end}}</td>
+                        <td>{{if $measurement.TimestampValue.Valid}}{{$measurement.TimestampValue.Time.Format "15:04:05"}}{{else}}<span class="null-value">—</span>{{end}}</td>
+                        <td><small>{{$measurement.CreatedAt}}</small></td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+        
+        {{if gt .TotalPages 1}}
+        <div class="pagination">
+            {{if .HasPrev}}
+                <a href="?id={{.Protocol.ID}}&page={{.PrevPage}}">&laquo; Previous</a>
+            {{else}}
+                <span class="disabled">&laquo; Previous</span>
+            {{end}}
+            
+            <!-- Simple pagination: show current page info and navigation -->
+            <span>Page {{.CurrentPage}} of {{.TotalPages}}</span>
+            
+            {{if .HasNext}}
+                <a href="?id={{.Protocol.ID}}&page={{.NextPage}}">Next &raquo;</a>
+            {{else}}
+                <span class="disabled">Next &raquo;</span>
+            {{end}}
+        </div>
+        {{end}}
+        
+        {{else}}
+        <div class="no-data">
+            <h3>No measurement data found</h3>
+            <p>This protocol doesn't contain any measurement points.</p>
+        </div>
+        {{end}}
+        
+        <div style="text-align: center; margin-top: 30px;">
+            <a href="/protocols/view?id={{.Protocol.ID}}" class="btn">← Back to Protocol</a>
+            <a href="/protocols" class="btn">All Protocols</a>
+        </div>
+    </div>
+</body>
+</html>

@@ -3,6 +3,8 @@ package main
 import (
 	"blowing-simulator/internal/simulator"
 	"bytes"
+	"database/sql"
+	"database/sql/driver"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -12,12 +14,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"text/template"
+	"time"
 
 	"github.com/jung-kurt/gofpdf"
+	"github.com/jmoiron/sqlx"
 	"github.com/ledongthuc/pdf"
+	_ "github.com/lib/pq"
 )
 
 var lastCSVExport string
@@ -434,6 +440,26 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 	if format == "fremco" {
 		fremcoMeta = simulator.ExtractFremcoMetadata(normalized)
 	}
+
+	// Save protocol data to database
+	var protocolID int
+	var dbErr error
+	if fremcoProtocol != nil {
+		protocolID, dbErr = SaveFremcoProtocol(db, fremcoProtocol)
+		if dbErr != nil {
+			log.Printf("Failed to save Fremco protocol to database: %v", dbErr)
+		} else {
+			log.Printf("Successfully saved Fremco protocol with ID: %d", protocolID)
+		}
+	} else if jettingProtocol != nil {
+		protocolID, dbErr = SaveJettingProtocol(db, jettingProtocol)
+		if dbErr != nil {
+			log.Printf("Failed to save Jetting protocol to database: %v", dbErr)
+		} else {
+			log.Printf("Successfully saved Jetting protocol with ID: %d", protocolID)
+		}
+	}
+
 	tmpl.Execute(w, map[string]interface{}{
 		"Text":            rawStr,
 		"Normalized":      normalized,
@@ -514,6 +540,30 @@ func DownloadPDFHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// Initialize database connection
+	var err error
+	dbHost := getEnvOrDefault("DB_HOST", "localhost")
+	dbPort := getEnvOrDefault("DB_PORT", "5432")
+	dbUser := getEnvOrDefault("DB_USER", "blowing")
+	dbPassword := getEnvOrDefault("DB_PASSWORD", "7fG2vQp9sXw3Lk8r")
+	dbName := getEnvOrDefault("DB_NAME", "blowing_simulator")
+	
+	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		dbHost, dbPort, dbUser, dbPassword, dbName)
+	
+	db, err = sqlx.Open("postgres", connStr)
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
+	defer db.Close()
+	
+	// Test database connection
+	if err = db.Ping(); err != nil {
+		log.Fatal("Failed to ping database:", err)
+	}
+	
+	log.Println("Successfully connected to database")
+	
 	http.HandleFunc("/", IndexHandler)
 	http.HandleFunc("/download-json", DownloadJSONHandler)
 	http.HandleFunc("/pdf2text", Pdf2TextHandler)
@@ -528,8 +578,389 @@ func main() {
 	http.HandleFunc("/download-csv", DownloadCSVHandler)
 	http.HandleFunc("/download-pdf", DownloadPDFHandler)
 	http.HandleFunc("/export-csv", ExportCSVHandler)
+	http.HandleFunc("/protocols", ProtocolsHandler)
+	http.HandleFunc("/protocols/view", ViewProtocolHandler)
+	http.HandleFunc("/protocols/measurements", ProtocolMeasurementsHandler)
+	http.HandleFunc("/health", HealthCheckHandler)
 	log.Println("Server started at http://0.0.0.0:8080/")
+	log.Println("Available routes:")
+	log.Println("  GET /")
+	log.Println("  GET /protocols")
+	log.Println("  GET /protocols/view?id=X")
+	log.Println("  GET /protocols/measurements?id=X")
+	log.Println("  GET /health")
 	http.ListenAndServe(":8080", nil)
+}
+
+// Protocol represents a protocol record for display
+type Protocol struct {
+	ID              int            `db:"id"`
+	ProtocolType    string         `db:"protocol_type"`
+	SystemName      sql.NullString `db:"system_name"`
+	ProtocolDate    sql.NullString `db:"protocol_date"`
+	StartTime       sql.NullString `db:"start_time"`
+	ProjectNumber   sql.NullString `db:"project_number"`
+	Company         sql.NullString `db:"company"`
+	ServiceProvider sql.NullString `db:"service_provider"`
+	Operator        sql.NullString `db:"operator"`
+	SourceFilename  sql.NullString `db:"source_filename"`
+	CreatedAt       string         `db:"created_at"`
+}
+
+// NullTime represents a time.Time that may be null
+type NullTime struct {
+	Time  time.Time
+	Valid bool
+}
+
+// Scan implements the Scanner interface
+func (nt *NullTime) Scan(value interface{}) error {
+	if value == nil {
+		nt.Time, nt.Valid = time.Time{}, false
+		return nil
+	}
+	nt.Valid = true
+	return convertAssign(&nt.Time, value)
+}
+
+// Value implements the driver Valuer interface
+func (nt NullTime) Value() (driver.Value, error) {
+	if !nt.Valid {
+		return nil, nil
+	}
+	return nt.Time, nil
+}
+
+// convertAssign is a helper function to convert values
+func convertAssign(dest, src interface{}) error {
+	switch s := src.(type) {
+	case time.Time:
+		switch d := dest.(type) {
+		case *time.Time:
+			*d = s
+		}
+	case string:
+		switch d := dest.(type) {
+		case *time.Time:
+			var err error
+			*d, err = time.Parse(time.RFC3339, s)
+			return err
+		}
+	}
+	return nil
+}
+
+// ProtocolMeasurement represents a measurement data point for display
+type ProtocolMeasurement struct {
+	ID               int             `db:"id"`
+	SequenceNumber   sql.NullInt64   `db:"sequence_number"`
+	LengthM          sql.NullFloat64 `db:"length_m"`
+	TimestampValue   NullTime        `db:"timestamp_value"`
+	SpeedMMin        sql.NullFloat64 `db:"speed_m_min"`
+	PressureBar      sql.NullFloat64 `db:"pressure_bar"`
+	TorquePercent    sql.NullFloat64 `db:"torque_percent"`
+	TemperatureC     sql.NullFloat64 `db:"temperature_c"`
+	ForceN           sql.NullFloat64 `db:"force_n"`
+	TimeDuration     sql.NullString  `db:"time_duration"`
+	CreatedAt        string          `db:"created_at"`
+}
+
+// ProtocolsHandler displays list of imported protocols with search functionality
+func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
+	// Get search parameters
+	search := r.URL.Query().Get("search")
+	protocolType := r.URL.Query().Get("type")
+	
+	// Build query
+	query := `
+		SELECT id, protocol_type, system_name, protocol_date, start_time, 
+		       project_number, company, service_provider, operator, 
+		       source_filename, created_at::text 
+		FROM protocols 
+		WHERE 1=1`
+	
+	args := []interface{}{}
+	argCount := 0
+	
+	if search != "" {
+		argCount++
+		query += fmt.Sprintf(" AND (COALESCE(company,'') ILIKE $%d OR COALESCE(service_provider,'') ILIKE $%d OR COALESCE(source_filename,'') ILIKE $%d OR COALESCE(project_number,'') ILIKE $%d)", argCount, argCount, argCount, argCount)
+		args = append(args, "%"+search+"%")
+	}
+	
+	if protocolType != "" && protocolType != "all" {
+		argCount++
+		query += fmt.Sprintf(" AND protocol_type = $%d", argCount)
+		args = append(args, protocolType)
+	}
+	
+	query += " ORDER BY created_at DESC LIMIT 100"
+	
+	// Execute query
+	var protocols []Protocol
+	err := db.Select(&protocols, query, args...)
+	if err != nil {
+		http.Error(w, "Error fetching protocols: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM protocols WHERE 1=1"
+	if search != "" {
+		countQuery += " AND (COALESCE(company,'') ILIKE $1 OR COALESCE(service_provider,'') ILIKE $1 OR COALESCE(source_filename,'') ILIKE $1 OR COALESCE(project_number,'') ILIKE $1)"
+		args = []interface{}{"%"+search+"%"}
+		if protocolType != "" && protocolType != "all" {
+			countQuery += " AND protocol_type = $2"
+			args = append(args, protocolType)
+		}
+	} else if protocolType != "" && protocolType != "all" {
+		countQuery += " AND protocol_type = $1"
+		args = []interface{}{protocolType}
+	} else {
+		args = []interface{}{}
+	}
+	
+	var totalCount int
+	err = db.Get(&totalCount, countQuery, args...)
+	if err != nil {
+		totalCount = 0
+	}
+	
+	// Render template
+	tmpl := template.Must(template.ParseFiles("web/templates/protocols.html"))
+	data := map[string]interface{}{
+		"Protocols":    protocols,
+		"Search":       search,
+		"Type":         protocolType,
+		"TotalCount":   totalCount,
+		"ResultCount":  len(protocols),
+	}
+	
+	err = tmpl.Execute(w, data)
+	if err != nil {
+		http.Error(w, "Error rendering template: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+// ViewProtocolHandler displays detailed view of a specific protocol
+func ViewProtocolHandler(w http.ResponseWriter, r *http.Request) {
+	idStr := r.URL.Query().Get("id")
+	if idStr == "" {
+		http.Error(w, "Protocol ID required", http.StatusBadRequest)
+		return
+	}
+	
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid protocol ID", http.StatusBadRequest)
+		return
+	}
+	
+	// Get protocol info
+	var protocol Protocol
+	err = db.Get(&protocol, `
+		SELECT id, protocol_type, system_name, protocol_date, start_time, 
+		       project_number, company, service_provider, operator, 
+		       source_filename, created_at::text 
+		FROM protocols WHERE id = $1`, id)
+	
+	if err != nil {
+		http.Error(w, "Protocol not found: "+err.Error(), http.StatusNotFound)
+		return
+	}
+	
+	// Get equipment info
+	var equipment map[string]interface{}
+	equipmentRows, err := db.Query(`
+		SELECT device_model, controller_sn, compressor_model, pipe_manufacturer, 
+		       cable_manufacturer, cable_fiber_count, cable_diameter 
+		FROM protocol_equipment WHERE protocol_id = $1`, id)
+	if err == nil {
+		defer equipmentRows.Close()
+		if equipmentRows.Next() {
+			var deviceModel, controllerSN, compressorModel, pipeManuf, cableManuf sql.NullString
+			var fiberCount sql.NullInt64
+			var cableDiam sql.NullFloat64
+			
+			equipmentRows.Scan(&deviceModel, &controllerSN, &compressorModel, 
+				&pipeManuf, &cableManuf, &fiberCount, &cableDiam)
+			
+			equipment = map[string]interface{}{
+				"DeviceModel":      deviceModel.String,
+				"ControllerSN":     controllerSN.String,
+				"CompressorModel":  compressorModel.String,
+				"PipeManufacturer": pipeManuf.String,
+				"CableManufacturer": cableManuf.String,
+				"FiberCount":       fiberCount.Int64,
+				"CableDiameter":    cableDiam.Float64,
+			}
+		}
+	}
+	
+	// Get summary info
+	var summary map[string]interface{}
+	summaryRows, err := db.Query(`
+		SELECT total_distance, blowing_time, weather_temperature, 
+		       weather_humidity, gps_latitude, gps_longitude 
+		FROM protocol_summary WHERE protocol_id = $1`, id)
+	if err == nil {
+		defer summaryRows.Close()
+		if summaryRows.Next() {
+			var totalDist sql.NullInt64
+			var blowingTime sql.NullString
+			var weatherTemp, weatherHum, gpsLat, gpsLon sql.NullFloat64
+			
+			summaryRows.Scan(&totalDist, &blowingTime, &weatherTemp, 
+				&weatherHum, &gpsLat, &gpsLon)
+			
+			summary = map[string]interface{}{
+				"TotalDistance":      totalDist.Int64,
+				"BlowingTime":        blowingTime.String,
+				"WeatherTemperature": weatherTemp.Float64,
+				"WeatherHumidity":    weatherHum.Float64,
+				"GPSLatitude":        gpsLat.Float64,
+				"GPSLongitude":       gpsLon.Float64,
+			}
+		}
+	}
+	
+	// Get measurements count
+	var measurementCount int
+	db.Get(&measurementCount, "SELECT COUNT(*) FROM protocol_measurements WHERE protocol_id = $1", id)
+	
+	// Render template
+	tmpl := template.Must(template.ParseFiles("web/templates/protocol-detail.html"))
+	data := map[string]interface{}{
+		"Protocol":         protocol,
+		"Equipment":        equipment,
+		"Summary":          summary,
+		"MeasurementCount": measurementCount,
+	}
+	
+	err = tmpl.Execute(w, data)
+	if err != nil {
+		http.Error(w, "Error rendering template: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+// ProtocolMeasurementsHandler displays detailed measurement data for a protocol
+func ProtocolMeasurementsHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("ProtocolMeasurementsHandler called with URL: %s, Query: %s", r.URL.Path, r.URL.RawQuery)
+	
+	idStr := r.URL.Query().Get("id")
+	if idStr == "" {
+		log.Printf("Protocol ID missing from request: %v", r.URL.Query())
+		http.Error(w, "Protocol ID required", http.StatusBadRequest)
+		return
+	}
+	
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid protocol ID", http.StatusBadRequest)
+		return
+	}
+	
+	// Get protocol info
+	var protocol Protocol
+	err = db.Get(&protocol, `
+		SELECT id, protocol_type, system_name, protocol_date, start_time, 
+		       project_number, company, service_provider, operator, 
+		       source_filename, created_at::text 
+		FROM protocols WHERE id = $1`, id)
+	
+	if err != nil {
+		http.Error(w, "Protocol not found: "+err.Error(), http.StatusNotFound)
+		return
+	}
+	
+	// Get pagination parameters
+	page := 1
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+	
+	limit := 50 // measurements per page
+	offset := (page - 1) * limit
+	
+	// Get measurements with pagination
+	var measurements []ProtocolMeasurement
+	err = db.Select(&measurements, `
+		SELECT id, sequence_number, length_m, timestamp_value, speed_m_min, 
+		       pressure_bar, torque_percent, temperature_c, force_n, 
+		       time_duration, created_at::text 
+		FROM protocol_measurements 
+		WHERE protocol_id = $1 
+		ORDER BY COALESCE(sequence_number, id) ASC 
+		LIMIT $2 OFFSET $3`, id, limit, offset)
+	
+	if err != nil {
+		http.Error(w, "Error fetching measurements: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	
+	// Get total measurement count
+	var totalCount int
+	err = db.Get(&totalCount, "SELECT COUNT(*) FROM protocol_measurements WHERE protocol_id = $1", id)
+	if err != nil {
+		totalCount = 0
+	}
+	
+	// Calculate pagination info
+	totalPages := (totalCount + limit - 1) / limit
+	hasNext := page < totalPages
+	hasPrev := page > 1
+	
+	// Create template with custom functions
+	funcMap := template.FuncMap{
+		"add": func(a, b int) int { return a + b },
+		"sub": func(a, b int) int { return a - b },
+	}
+	tmpl := template.Must(template.New("protocol-measurements.html").Funcs(funcMap).ParseFiles("web/templates/protocol-measurements.html"))
+	data := map[string]interface{}{
+		"Protocol":     protocol,
+		"Measurements": measurements,
+		"CurrentPage":  page,
+		"TotalPages":   totalPages,
+		"TotalCount":   totalCount,
+		"HasNext":      hasNext,
+		"HasPrev":      hasPrev,
+		"NextPage":     page + 1,
+		"PrevPage":     page - 1,
+		"Limit":        limit,
+	}
+	
+	err = tmpl.Execute(w, data)
+	if err != nil {
+		http.Error(w, "Error rendering template: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+// HealthCheckHandler provides a simple health check endpoint
+func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Health check requested from: %s", r.RemoteAddr)
+	
+	// Test database connection
+	if err := db.Ping(); err != nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprintf(w, "Database connection failed: %v", err)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, `{"status": "healthy", "timestamp": "%s", "routes": ["/", "/protocols", "/protocols/view", "/protocols/measurements"]}`, time.Now().Format(time.RFC3339))
+}
+
+// Helper function to get environment variable with default
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 // SubmitJettingReportHandler processes Jetting form and renders the report

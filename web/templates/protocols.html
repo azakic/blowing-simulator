@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protocols - Blowing Simulator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .search-form {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .search-form input, .search-form select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .search-form input[type="text"] {
+            flex: 1;
+            min-width: 200px;
+        }
+        .search-form button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .search-form button:hover {
+            background: #0056b3;
+        }
+        .stats {
+            margin-bottom: 20px;
+            color: #6c757d;
+            font-size: 14px;
+        }
+        .protocols-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .protocols-table th {
+            background: #343a40;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        .protocols-table td {
+            padding: 12px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .protocols-table tr:hover {
+            background-color: #f8f9fa;
+        }
+        .protocol-type {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .protocol-type.fremco {
+            background: #d4edda;
+            color: #155724;
+        }
+        .protocol-type.jetting {
+            background: #cce7ff;
+            color: #004085;
+        }
+        .view-btn {
+            background: #28a745;
+            color: white;
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .view-btn:hover {
+            background: #218838;
+            text-decoration: none;
+        }
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #007bff;
+            text-decoration: none;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .filename {
+            font-family: monospace;
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Home</a>
+        
+        <h1>Protocol Database</h1>
+        
+        <form class="search-form" method="GET">
+            <input type="text" name="search" placeholder="Search by company, service provider, filename, or project number..." value="{{.Search}}">
+            <select name="type">
+                <option value="all" {{if eq .Type "all"}}selected{{end}}>All Types</option>
+                <option value="fremco" {{if eq .Type "fremco"}}selected{{end}}>Fremco</option>
+                <option value="jetting" {{if eq .Type "jetting"}}selected{{end}}>Jetting</option>
+            </select>
+            <button type="submit">Search</button>
+            {{if or .Search (ne .Type "")}}
+                <a href="/protocols" style="color: #6c757d; text-decoration: none; font-size: 14px;">Clear</a>
+            {{end}}
+        </form>
+        
+        <div class="stats">
+            Showing {{.ResultCount}} of {{.TotalCount}} protocols
+            {{if .Search}}(filtered by "{{.Search}}"){{end}}
+            {{if and (ne .Type "") (ne .Type "all")}}({{.Type}} only){{end}}
+        </div>
+        
+        {{if .Protocols}}
+        <table class="protocols-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Type</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>System</th>
+                    <th>Company</th>
+                    <th>Service Provider</th>
+                    <th>Project #</th>
+                    <th>Filename</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Protocols}}
+                <tr>
+                    <td>{{.ID}}</td>
+                    <td><span class="protocol-type {{.ProtocolType}}">{{.ProtocolType}}</span></td>
+                    <td>{{if .ProtocolDate.Valid}}{{.ProtocolDate.String}}{{else}}<em>N/A</em>{{end}}</td>
+                    <td>{{if .StartTime.Valid}}{{.StartTime.String}}{{else}}<em>N/A</em>{{end}}</td>
+                    <td>{{if .SystemName.Valid}}{{.SystemName.String}}{{else}}<em>N/A</em>{{end}}</td>
+                    <td>{{if .Company.Valid}}{{.Company.String}}{{else}}<em>N/A</em>{{end}}</td>
+                    <td>{{if .ServiceProvider.Valid}}{{.ServiceProvider.String}}{{else}}<em>N/A</em>{{end}}</td>
+                    <td>{{if .ProjectNumber.Valid}}{{.ProjectNumber.String}}{{else}}<em>N/A</em>{{end}}</td>
+                    <td>{{if .SourceFilename.Valid}}<span class="filename">{{.SourceFilename.String}}</span>{{else}}<em>N/A</em>{{end}}</td>
+                    <td>{{.CreatedAt}}</td>
+                    <td>
+                        <a href="/protocols/view?id={{.ID}}" class="view-btn">View Details</a>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <div class="no-results">
+            <h3>No protocols found</h3>
+            <p>{{if or .Search (ne .Type "all")}}Try adjusting your search criteria{{else}}No protocols have been imported yet{{end}}</p>
+            <p><a href="/pdf2text">Upload a PDF</a> to get started</p>
+        </div>
+        {{end}}
+    </div>
+</body>
+</html>
