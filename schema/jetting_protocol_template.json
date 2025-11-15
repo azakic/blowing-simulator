@@ -1,0 +1,87 @@
+{
+  "protocol_info": {
+    "system": "Jetting System",
+    "document_type": "Jetting Protokoll",
+    "date": "2025-10-28",
+    "start_time": "13:41",
+    "project_number": null,
+    "section_nvt": "Dammstr 8 / NVT 1V2300",
+    "company": "Wolken-ASM GMBH",
+    "service_provider": "M.A.X. Bauservice",
+    "operator": null,
+    "remarks": ""
+  },
+  "equipment": {
+    "blowing_device": {
+      "model": null,
+      "controller_sn": null,
+      "lubricator": null,
+      "crash_test_performed": null,
+      "crash_test_speed": null,
+      "crash_test_moment": null
+    },
+    "pipe": {
+      "manufacturer": null,
+      "pipe_bundle": null,
+      "pipe_type": null,
+      "color_coding": [],
+      "inner_wall": null,
+      "temperature": null
+    },
+    "cable": {
+      "manufacturer": null,
+      "designation": null,
+      "fiber_count": null,
+      "diameter": null,
+      "temperature": null,
+      "lubricant": null,
+      "blowing_cap": null
+    },
+    "compressor": {
+      "model": null,
+      "oil_separator": null,
+      "after_cooler": null
+    }
+  },
+  "measurements": {
+    "meter_readings": {
+      "start": null,
+      "end": null
+    },
+    "summary": {
+      "distance": null,
+      "blowing_time": null,
+      "weather": {
+        "temperature": null,
+        "humidity": null
+      },
+      "gps_location": {
+        "latitude": null,
+        "longitude": null
+      }
+    },
+    "data_points": [
+      {
+        "length_m": 0.0,
+        "temperature_c": 14.9,
+        "force_n": 2.5,
+        "pressure_bar": 0.0,
+        "speed_m_min": 0.0,
+        "time_duration": "00:00:00"
+      },
+      {
+        "length_m": 1.0,
+        "temperature_c": 14.9,
+        "force_n": 6.7,
+        "pressure_bar": 0.0,
+        "speed_m_min": 23.3,
+        "time_duration": "00:00:04"
+      }
+    ]
+  },
+  "export_metadata": {
+    "parsed_at": "2025-11-15T15:00:00Z",
+    "parser_version": "1.0.0",
+    "source_filename": "28.10.2025, 13 41, Dammstr 8 NVT 1V2300.pdf"
+  }
+}

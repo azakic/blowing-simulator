@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ExtractJettingMetadata scans normalized Jetting TXT for metadata fields.
@@ -280,6 +281,91 @@ func parseVerticalBlocks(normalized string) []JettingMeasurement {
 			Pressure:    pressure,  
 			Speed:       speed,     
 			Time:        time,
+		})
+	}
+	
+	return measurements
+}
+
+// ParseJettingProtocol extracts comprehensive protocol data from Jetting PDF text
+func ParseJettingProtocol(normalized string) *JettingProtocol {
+	protocol := &JettingProtocol{
+		ExportMetadata: JettingExportMetadata{
+			ParsedAt:      time.Now(),
+			ParserVersion: "1.0.0",
+		},
+	}
+	
+	lines := strings.Split(normalized, "\n")
+	
+	// Extract protocol info
+	protocol.ProtocolInfo = extractJettingProtocolInfo(lines)
+	
+	// Extract equipment specifications (minimal for Jetting)
+	protocol.Equipment = extractJettingEquipment(lines)
+	
+	// Extract measurements
+	protocol.Measurements = extractJettingMeasurements(lines)
+	
+	return protocol
+}
+
+// extractJettingProtocolInfo parses header information from Jetting PDFs
+func extractJettingProtocolInfo(lines []string) JettingProtocolInfo {
+	info := JettingProtocolInfo{
+		System:       "Jetting System",
+		DocumentType: "Jetting Protokoll",
+	}
+	
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		
+		// Company detection
+		if strings.Contains(line, "Wolken-ASM") {
+			info.Company = "Wolken-ASM GMBH"
+		}
+		
+		if strings.Contains(line, "M.A.X. Bauservice") {
+			info.ServiceProvider = "M.A.X. Bauservice"
+		}
+		
+		// Date detection (from filename parsing, not PDF content)
+		// This will be filled by filename parsing in main.go
+	}
+	
+	return info
+}
+
+// extractJettingEquipment parses equipment info (minimal for Jetting)
+func extractJettingEquipment(lines []string) JettingEquipment {
+	// Jetting PDFs typically don't contain detailed equipment specifications
+	// Return empty/null structure
+	return JettingEquipment{
+		BlowingDevice: JettingBlowingDevice{},
+		Pipe:          JettingPipe{ColorCoding: []string{}},
+		Cable:         JettingCable{},
+		Compressor:    JettingCompressor{},
+	}
+}
+
+// extractJettingMeasurements parses measurement data from Jetting PDFs
+func extractJettingMeasurements(lines []string) JettingMeasurements {
+	measurements := JettingMeasurements{
+		MeterReadings: JettingMeterReadings{},
+		Summary:       JettingSummary{},
+		DataPoints:    []JettingDataPoint{},
+	}
+	
+	// Parse measurement data points using existing function
+	jettingMeasurements := ParseJettingTxt(strings.Join(lines, "\n"))
+	for _, jm := range jettingMeasurements {
+		measurements.DataPoints = append(measurements.DataPoints, JettingDataPoint{
+			LengthM:      jm.Length,
+			TemperatureC: jm.Temperature,
+			ForceN:       jm.Force,
+			PressureBar:  jm.Pressure,
+			SpeedMMin:    jm.Speed,
+			TimeDuration: jm.Time,
 		})
 	}
 	

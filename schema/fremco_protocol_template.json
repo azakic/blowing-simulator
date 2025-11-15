@@ -1,0 +1,99 @@
+{
+  "protocol_info": {
+    "system": "SpeedNet-System",
+    "document_type": "Einblas - Protokoll",
+    "date": "2025-10-22",
+    "start_time": "13:52",
+    "project_number": "SM209214964",
+    "section_nvt": "Haflinger Weg 5 / NVT1V3400",
+    "company": "Wolken-ASM GmbH",
+    "service_provider": "M.A.X. Bauservice",
+    "operator": "Marko",
+    "remarks": ""
+  },
+  "equipment": {
+    "blowing_device": {
+      "model": "Fremco MicroFlow LOG",
+      "controller_sn": "9328.5155",
+      "lubricator": true,
+      "crash_test_performed": false,
+      "crash_test_speed": null,
+      "crash_test_moment": null
+    },
+    "pipe": {
+      "manufacturer": "Gabocom",
+      "pipe_bundle": "SNRVe 22x7x1,5",
+      "pipe_type": "SNR 7x1,5",
+      "color_coding": ["Braun", "Schwarz"],
+      "inner_wall": "Gerieft",
+      "temperature": null
+    },
+    "cable": {
+      "manufacturer": "Prysmian",
+      "designation": "A-D 2Y 1x6",
+      "fiber_count": 6,
+      "diameter": 2.5,
+      "temperature": 14,
+      "lubricant": "Prelube 5000",
+      "blowing_cap": false
+    },
+    "compressor": {
+      "model": "Kaiser m17a",
+      "oil_separator": false,
+      "after_cooler": true
+    }
+  },
+  "measurements": {
+    "meter_readings": {
+      "start": 3365,
+      "end": 3209
+    },
+    "summary": {
+      "distance": 150,
+      "blowing_time": "00:05:48",
+      "weather": {
+        "temperature": 19.3,
+        "humidity": 61.6
+      },
+      "gps_location": {
+        "latitude": 52.48654,
+        "longitude": 9.85468
+      }
+    },
+    "data_points": [
+      {
+        "length_m": 0,
+        "speed_m_min": 0,
+        "pressure_bar": 26.6,
+        "torque_percent": 0,
+        "timestamp": "2025-10-22 13:52:32"
+      },
+      {
+        "length_m": 1,
+        "speed_m_min": 9,
+        "pressure_bar": 26.6,
+        "torque_percent": 2,
+        "timestamp": "2025-10-22 13:52:43"
+      },
+      {
+        "length_m": 2,
+        "speed_m_min": 9,
+        "pressure_bar": 26.6,
+        "torque_percent": 3,
+        "timestamp": "2025-10-22 13:52:48"
+      },
+      {
+        "length_m": 3,
+        "speed_m_min": 9,
+        "pressure_bar": 26.6,
+        "torque_percent": 2,
+        "timestamp": "2025-10-22 13:52:55"
+      }
+    ]
+  },
+  "export_metadata": {
+    "parsed_at": "2025-11-15T15:00:00Z",
+    "parser_version": "1.0.0",
+    "source_filename": "SM209214964_2025-10-22 13_52_Haflinger Weg 5_NVT1V3400.pdf"
+  }
+}

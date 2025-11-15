@@ -303,6 +303,8 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 	var measurements []simulator.SimpleMeasurement
 	var jettingMeasurements []simulator.JettingMeasurement
 	var pdfMeta map[string]string
+	var fremcoProtocol *simulator.FremcoProtocol
+	var jettingProtocol *simulator.JettingProtocol
 	
 	// Check for Fremco first (most specific indicators)
 	if (strings.Contains(rawStr, "Streckenabschnitt") && strings.Contains(rawStr, "Einblasgerät")) || 
@@ -317,8 +319,21 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 		normalized = simulator.NormalizeFremcoTxt(text)
 		log.Println("Normalized text (Fremco/pdftotext):")
 		log.Println(normalized)
+		
+		// Parse comprehensive protocol data
+		fremcoProtocol = simulator.ParseFremcoProtocol(normalized)
+		// Fill in filename-based metadata
+		if fremcoProtocol != nil {
+			fremcoProtocol.ProtocolInfo.ProjectNumber = project
+			fremcoProtocol.ProtocolInfo.Date = date
+			fremcoProtocol.ProtocolInfo.StartTime = time
+			fremcoProtocol.ProtocolInfo.SectionNVT = address + " / " + nvt
+			fremcoProtocol.ExportMetadata.SourceFilename = header.Filename
+		}
+		
 		measurements = simulator.ParseFremcoSimple(normalized)
 		log.Printf("Parsed measurements (Fremco): %+v\n", measurements)
+		log.Printf("Comprehensive protocol (Fremco): %+v\n", fremcoProtocol)
 		jsonOutput, _ = json.MarshalIndent(measurements, "", "  ")
 		if string(jsonOutput) == "null" {
 			jsonOutput = []byte("[]")
@@ -330,8 +345,20 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 		normalized = simulator.NormalizeJettingTxt(rawStr)
 		log.Println("Normalized text (Old Jetting):")
 		log.Println(normalized)
+		
+		// Parse comprehensive protocol data
+		jettingProtocol = simulator.ParseJettingProtocol(normalized)
+		// Fill in filename-based metadata
+		if jettingProtocol != nil {
+			jettingProtocol.ProtocolInfo.Date = date
+			jettingProtocol.ProtocolInfo.StartTime = time
+			jettingProtocol.ProtocolInfo.SectionNVT = address + " / " + nvt
+			jettingProtocol.ExportMetadata.SourceFilename = header.Filename
+		}
+		
 		jettingMeasurements = simulator.ParseJettingTxt(normalized)
 		log.Printf("Parsed measurements (Old Jetting): %+v\n", jettingMeasurements)
+		log.Printf("Comprehensive protocol (Jetting): %+v\n", jettingProtocol)
 		jsonOutput, _ = json.MarshalIndent(jettingMeasurements, "", "  ")
 		if string(jsonOutput) == "null" {
 			jsonOutput = []byte("[]")

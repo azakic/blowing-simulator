@@ -1,8 +1,10 @@
 package simulator
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // SimpleMeasurement represents a single measurement in the uniform format (for Fremco).
@@ -23,8 +25,6 @@ type JettingMeasurement struct {
 	Speed       float64 `json:"geschwindigkeit_m_min"`
 	Time        string  `json:"zeit_dauer_hh_mm_ss"`
 }
-
-// ExtractFremcoMetadata parses normalized Fremco text and returns a map of metadata fields.
 
 // ExtractFremcoMetadata parses normalized Fremco text and returns a map of metadata fields.
 func ExtractFremcoMetadata(normalized string) map[string]string {
@@ -184,4 +184,291 @@ func isNumeric(s string) bool {
 func isDateTime(s string) bool {
 	// Accepts formats like "2024-07-26 14:41:07"
 	return len(s) >= 16 && s[4] == '-' && s[7] == '-' && (s[10] == ' ' || s[10] == 'T')
+}
+
+// ParseFremcoProtocol extracts comprehensive protocol data from Fremco PDF text
+func ParseFremcoProtocol(normalized string) *FremcoProtocol {
+	protocol := &FremcoProtocol{
+		ExportMetadata: FremcoExportMetadata{
+			ParsedAt:      time.Now(),
+			ParserVersion: "1.0.0",
+		},
+	}
+	
+	lines := strings.Split(normalized, "\n")
+	
+	// Extract protocol info
+	protocol.ProtocolInfo = extractFremcoProtocolInfo(lines)
+	
+	// Extract equipment specifications
+	protocol.Equipment = extractFremcoEquipment(lines)
+	
+	// Extract measurements and summary
+	protocol.Measurements = extractFremcoMeasurements(lines)
+	
+	return protocol
+}
+
+// extractFremcoProtocolInfo parses header information
+func extractFremcoProtocolInfo(lines []string) FremcoProtocolInfo {
+	info := FremcoProtocolInfo{
+		System:       "SpeedNet-System",
+		DocumentType: "Einblas - Protokoll",
+	}
+	
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		
+		// Project number
+		if strings.Contains(line, "Bauvorhaben Nr.") && i+1 < len(lines) {
+			info.ProjectNumber = strings.TrimSpace(lines[i+1])
+		}
+		
+		// Date and time
+		if strings.Contains(line, "Datum, Startzeit:") && i+1 < len(lines) {
+			dateTime := strings.TrimSpace(lines[i+1])
+			parts := strings.Fields(dateTime)
+			if len(parts) >= 2 {
+				info.Date = parts[0]
+				info.StartTime = parts[1]
+			}
+		}
+		
+		// Section/NVT
+		if strings.Contains(line, "Streckenabschnitt") && strings.Contains(line, "NVt") && i+1 < len(lines) {
+			info.SectionNVT = strings.TrimSpace(lines[i+1])
+		}
+		
+		// Company
+		if strings.Contains(line, "Firma") && i+1 < len(lines) {
+			info.Company = strings.TrimSpace(lines[i+1])
+		}
+		
+		// Service provider
+		if strings.Contains(line, "M.A.X. Bauservice") {
+			info.ServiceProvider = "M.A.X. Bauservice"
+		}
+		
+		// Operator
+		if strings.Contains(line, "Einbläser:") {
+			operatorMatch := regexp.MustCompile(`Einbläser:\s*(\w+)`).FindStringSubmatch(line)
+			if len(operatorMatch) > 1 {
+				info.Operator = operatorMatch[1]
+			}
+		}
+		
+		// Remarks
+		if strings.Contains(line, "Bemerkungen") && i+1 < len(lines) {
+			info.Remarks = strings.TrimSpace(lines[i+1])
+		}
+	}
+	
+	return info
+}
+
+// extractFremcoEquipment parses equipment specifications
+func extractFremcoEquipment(lines []string) FremcoEquipment {
+	equipment := FremcoEquipment{}
+	
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		
+		// Blowing Device
+		if strings.Contains(line, "Einblasgerät:") {
+			deviceMatch := regexp.MustCompile(`Einblasgerät:\s*(.+)`).FindStringSubmatch(line)
+			if len(deviceMatch) > 1 {
+				equipment.BlowingDevice.Model = strings.TrimSpace(deviceMatch[1])
+			}
+		}
+		
+		if strings.Contains(line, "Controller S/N:") {
+			snMatch := regexp.MustCompile(`Controller S/N:\s*(.+)`).FindStringSubmatch(line)
+			if len(snMatch) > 1 {
+				equipment.BlowingDevice.ControllerSN = strings.TrimSpace(snMatch[1])
+			}
+		}
+		
+		if strings.Contains(line, "+ Lubricator") {
+			equipment.BlowingDevice.Lubricator = strings.Contains(line, "ja")
+		}
+		
+		if strings.Contains(line, "+ Crashtest Durchgeführt") {
+			equipment.BlowingDevice.CrashTestPerformed = strings.Contains(line, "ja")
+		}
+		
+		// Pipe specifications
+		if strings.Contains(line, "Hersteller:") && strings.Contains(line, "Gabocom") {
+			equipment.Pipe.Manufacturer = "Gabocom"
+		}
+		
+		if strings.Contains(line, "Rohrverband:") {
+			bundleMatch := regexp.MustCompile(`Rohrverband:\s*(.+?)(?:\s|$)`).FindStringSubmatch(line)
+			if len(bundleMatch) > 1 {
+				equipment.Pipe.PipeBundle = strings.TrimSpace(bundleMatch[1])
+			}
+		}
+		
+		if strings.Contains(line, "Rohr:") {
+			pipeMatch := regexp.MustCompile(`Rohr:\s*(.+?)(?:\s|$)`).FindStringSubmatch(line)
+			if len(pipeMatch) > 1 {
+				equipment.Pipe.PipeType = strings.TrimSpace(pipeMatch[1])
+			}
+		}
+		
+		if strings.Contains(line, "Farbe-Kennung:") {
+			colorMatch := regexp.MustCompile(`Farbe-Kennung:\s*(.+)`).FindStringSubmatch(line)
+			if len(colorMatch) > 1 {
+				colors := strings.Fields(colorMatch[1])
+				equipment.Pipe.ColorCoding = colors
+			}
+		}
+		
+		if strings.Contains(line, "Rohrinnenwand:") {
+			wallMatch := regexp.MustCompile(`Rohrinnenwand:\s*(.+)`).FindStringSubmatch(line)
+			if len(wallMatch) > 1 {
+				equipment.Pipe.InnerWall = strings.TrimSpace(wallMatch[1])
+			}
+		}
+		
+		// Cable specifications
+		if strings.Contains(line, "Hersteller:") && strings.Contains(line, "Prysmian") {
+			equipment.Cable.Manufacturer = "Prysmian"
+		}
+		
+		if strings.Contains(line, "Bezeichnung:") {
+			designMatch := regexp.MustCompile(`Bezeichnung:\s*(.+)`).FindStringSubmatch(line)
+			if len(designMatch) > 1 {
+				equipment.Cable.Designation = strings.TrimSpace(designMatch[1])
+			}
+		}
+		
+		if strings.Contains(line, "Faserzahl:") {
+			fiberMatch := regexp.MustCompile(`Faserzahl:\s*(\d+)`).FindStringSubmatch(line)
+			if len(fiberMatch) > 1 {
+				if count, err := strconv.Atoi(fiberMatch[1]); err == nil {
+					equipment.Cable.FiberCount = count
+				}
+			}
+		}
+		
+		if strings.Contains(line, "Kabel-Durchmesser:") && i+1 < len(lines) {
+			diameterStr := strings.TrimSpace(lines[i+1])
+			if diameter, err := strconv.ParseFloat(diameterStr, 64); err == nil {
+				equipment.Cable.Diameter = diameter
+			}
+		}
+		
+		if strings.Contains(line, "Gleitmittel:") {
+			lubricantMatch := regexp.MustCompile(`Gleitmittel:\s*(.+)`).FindStringSubmatch(line)
+			if len(lubricantMatch) > 1 {
+				equipment.Cable.Lubricant = strings.TrimSpace(lubricantMatch[1])
+			}
+		}
+		
+		if strings.Contains(line, "Kabel-Temperatur:") {
+			tempMatch := regexp.MustCompile(`Kabel-Temperatur:\s*(\d+(?:\.\d+)?)°C`).FindStringSubmatch(line)
+			if len(tempMatch) > 1 {
+				if temp, err := strconv.ParseFloat(tempMatch[1], 64); err == nil {
+					equipment.Cable.Temperature = &temp
+				}
+			}
+		}
+		
+		if strings.Contains(line, "Kabel-Einblaskappe:") {
+			equipment.Cable.BlowingCap = strings.Contains(line, "ja")
+		}
+		
+		// Compressor specifications
+		if strings.Contains(line, "Kompressor:") {
+			compressorMatch := regexp.MustCompile(`Kompressor:\s*(.+)`).FindStringSubmatch(line)
+			if len(compressorMatch) > 1 {
+				equipment.Compressor.Model = strings.TrimSpace(compressorMatch[1])
+			}
+		}
+		
+		if strings.Contains(line, "+ Ölabscheider") {
+			equipment.Compressor.OilSeparator = strings.Contains(line, "ja")
+		}
+		
+		if strings.Contains(line, "+ Nachkühler") {
+			equipment.Compressor.AfterCooler = strings.Contains(line, "ja")
+		}
+	}
+	
+	return equipment
+}
+
+// extractFremcoMeasurements parses measurements and summary data
+func extractFremcoMeasurements(lines []string) FremcoMeasurements {
+	measurements := FremcoMeasurements{
+		DataPoints: []FremcoDataPoint{},
+	}
+	
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		
+		// Meter readings
+		if strings.Contains(line, "Start:") && strings.Contains(line, "Ende:") {
+			meterMatch := regexp.MustCompile(`Start:\s*(\d+)\s*\|\s*Ende:\s*(\d+)`).FindStringSubmatch(line)
+			if len(meterMatch) > 2 {
+				if start, err := strconv.Atoi(meterMatch[1]); err == nil {
+					measurements.MeterReadings.Start = start
+				}
+				if end, err := strconv.Atoi(meterMatch[2]); err == nil {
+					measurements.MeterReadings.End = end
+				}
+			}
+		}
+		
+		// Summary data
+		if strings.Contains(line, "Strecke:") && strings.Contains(line, "Einblaszeit:") {
+			summaryMatch := regexp.MustCompile(`Strecke:\s*(\d+)\s+Einblaszeit:\s*([\d:]+)`).FindStringSubmatch(line)
+			if len(summaryMatch) > 2 {
+				if distance, err := strconv.Atoi(summaryMatch[1]); err == nil {
+					measurements.Summary.Distance = distance
+				}
+				measurements.Summary.BlowingTime = summaryMatch[2]
+			}
+		}
+		
+		// Weather data
+		if strings.Contains(line, "Wetter:") {
+			weatherMatch := regexp.MustCompile(`Wetter:\s*([\d.]+)°C,\s*([\d.]+)%RH`).FindStringSubmatch(line)
+			if len(weatherMatch) > 2 {
+				if temp, err := strconv.ParseFloat(weatherMatch[1], 64); err == nil {
+					measurements.Summary.Weather.Temperature = temp
+				}
+				if humidity, err := strconv.ParseFloat(weatherMatch[2], 64); err == nil {
+					measurements.Summary.Weather.Humidity = humidity
+				}
+			}
+		}
+		
+		// GPS data
+		if strings.Contains(line, "Ort (GPS):") {
+			gpsMatch := regexp.MustCompile(`Ort \(GPS\):\s*([\d.]+),\s*([\d.]+)`).FindStringSubmatch(line)
+			if len(gpsMatch) > 2 {
+				if lat, err := strconv.ParseFloat(gpsMatch[1], 64); err == nil {
+					measurements.Summary.GPSLocation.Latitude = lat
+				}
+				if lon, err := strconv.ParseFloat(gpsMatch[2], 64); err == nil {
+					measurements.Summary.GPSLocation.Longitude = lon
+				}
+			}
+		}
+	}
+	
+	// Parse measurement data points using existing function
+	simpleMeasurements := ParseFremcoSimple(strings.Join(lines, "\n"))
+	for _, sm := range simpleMeasurements {
+		measurements.DataPoints = append(measurements.DataPoints, FremcoDataPoint{
+			LengthM:       sm.Length,
+			SpeedMMin:     sm.Speed,
+			PressureBar:   sm.Pressure,
+			TorquePercent: sm.Torque,
+			Timestamp:     sm.Time,
+		})
+	}
+	
+	return measurements
 }
