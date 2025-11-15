@@ -310,8 +310,9 @@
                     <th onclick="sortTable(2)" style="cursor: pointer;">Company ▲▼</th>
                     <th onclick="sortTable(3)" style="cursor: pointer;">Service Provider ▲▼</th>
                     <th onclick="sortTable(4)" style="cursor: pointer;">Max Length (m) ▲▼</th>
-                    <th onclick="sortTable(5)" style="cursor: pointer;">NVT Number ▲▼</th>
-                    <th onclick="sortTable(6)" style="cursor: pointer;">Filename ▲▼</th>
+                    <th onclick="sortTable(5)" style="cursor: pointer;">Address ▲▼</th>
+                    <th onclick="sortTable(6)" style="cursor: pointer;">NVT Number ▲▼</th>
+                    <th onclick="sortTable(7)" style="cursor: pointer;">Filename ▲▼</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -323,6 +324,7 @@
                     <td>{{if .Company.Valid}}{{.Company.String}}{{else}}<span class="null-value">N/A</span>{{end}}</td>
                     <td>{{if .ServiceProvider.Valid}}{{.ServiceProvider.String}}{{else}}<span class="null-value">N/A</span>{{end}}</td>
                     <td class="numeric-value">{{if .MaxLength.Valid}}{{printf "%.1f" .MaxLength.Float64}}{{else}}<span class="null-value">—</span>{{end}}</td>
+                    <td>{{if .Address.Valid}}{{.Address.String}}{{else}}<span class="null-value">N/A</span>{{end}}</td>
                     <td>{{extractNVT .SourceFilename.String}}</td>
                     <td>{{if .SourceFilename.Valid}}<span class="filename">{{.SourceFilename.String}}</span>{{else}}<span class="null-value">N/A</span>{{end}}</td>
                     <td>
@@ -360,25 +362,31 @@
             rows.sort((a, b) => {
                 const cellA = a.cells[columnIndex];
                 const cellB = b.cells[columnIndex];
-                
                 let valueA = cellA.textContent.trim();
                 let valueB = cellB.textContent.trim();
-                
+
                 // Handle numeric columns (Min/Max/Avg Length, Measurements)
                 if (columnIndex >= 4 && columnIndex <= 7) {
-                    // Extract numeric values
                     const numA = parseFloat(valueA.replace(/[^0-9.-]/g, '')) || 0;
                     const numB = parseFloat(valueB.replace(/[^0-9.-]/g, '')) || 0;
                     return isAscending ? numA - numB : numB - numA;
                 }
-                
-                // Handle date column
+
+                // Handle date column (DD.MM.YYYY)
                 if (columnIndex === 0) {
-                    const dateA = valueA === 'N/A' ? new Date(0) : new Date(valueA.replace(/T.*$/, ''));
-                    const dateB = valueB === 'N/A' ? new Date(0) : new Date(valueB.replace(/T.*$/, ''));
+                    function parseDMY(str) {
+                        const m = str.match(/(\d{2})[.\/-](\d{2})[.\/-](\d{4})/);
+                        if (m) {
+                            // JS Date: YYYY, MM-1, DD
+                            return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+                        }
+                        return new Date(0);
+                    }
+                    const dateA = valueA === 'N/A' ? new Date(0) : parseDMY(valueA);
+                    const dateB = valueB === 'N/A' ? new Date(0) : parseDMY(valueB);
                     return isAscending ? dateA - dateB : dateB - dateA;
                 }
-                
+
                 // Handle text columns
                 const comparison = valueA.localeCompare(valueB);
                 return isAscending ? comparison : -comparison;
@@ -408,102 +416,54 @@
             // Get date range from form inputs
             const startDate = document.getElementById('start_date').value || 'All dates';
             const endDate = document.getElementById('end_date').value || 'All dates';
-            
+
             // Create CSV header with only table columns
-            let csvContent = 'Date\tAddress\tNVT Number\tMax Length (m)\n';
-            
-            // Get table data rows (skip header)
+            let csvContent = 'Date\tAddress\tNVT\tMax Length (m)\n';
+
+            // Get table data rows in current visible order (after sorting)
             const table = document.getElementById('reportTable');
             const dataRows = Array.from(table.querySelectorAll('tbody tr'));
-            
-            // Create array of data for sorting by date
-            const reportData = dataRows.map(row => {
+
+            // Export rows in current order
+            let totalMaxLength = 0;
+            dataRows.forEach(row => {
                 const cols = row.querySelectorAll('td');
                 const date = cols[0].textContent.trim();
-                const filename = cols[8].textContent.trim();
-                const maxLength = cols[5].textContent.trim();
-                
-                // Extract address from filename
-                let address = 'N/A';
-                if (filename && filename !== 'N/A') {
-                    // For Jetting format: "29.10.2025, 11 09, Eiemarkt 14 NVT 1V2200.pdf"
-                    if (filename.includes(',')) {
-                        const parts = filename.split(',');
-                        if (parts.length >= 3) {
-                            const addressPart = parts[2].trim();
-                            // Remove NVT part from address
-                            address = addressPart.replace(/\\s+NVT\\s+\\w+.*$/i, '').trim();
-                        }
-                    }
-                    // For Fremco format: extract from filename if needed
-                    else if (filename.includes('_')) {
-                        const parts = filename.split('_');
-                        // Look for address parts (skip project, date, time parts)
-                        if (parts.length > 4) {
-                            const addressParts = [];
-                            for (let i = 3; i < parts.length; i++) {
-                                if (parts[i].startsWith('NVT')) break;
-                                addressParts.push(parts[i]);
-                            }
-                            address = addressParts.join(' ').replace(/\\.pdf$/i, '');
+                const address = cols[5].textContent.trim();
+                const nvt = cols[6].textContent.trim();
+                const maxLength = cols[4].textContent.trim();
+                // Format date as DD.MM.YYYY
+                let formattedDate = date;
+                if (date !== 'N/A') {
+                    const dateMatch = date.match(/(\d{2})[./-](\d{2})[./-](\d{4})/);
+                    if (dateMatch) {
+                        formattedDate = dateMatch[1] + '.' + dateMatch[2] + '.' + dateMatch[3];
+                    } else {
+                        // Try to parse and format
+                        const d = new Date(date.replace(/T.*$/, ''));
+                        if (!isNaN(d)) {
+                            const day = String(d.getDate()).padStart(2, '0');
+                            const month = String(d.getMonth() + 1).padStart(2, '0');
+                            const year = d.getFullYear();
+                            formattedDate = day + '.' + month + '.' + year;
                         }
                     }
                 }
-                
-                return {
-                    date: date,
-                    address: address,
-                    maxLength: maxLength,
-                    sortDate: new Date(date.replace(/T.*$/, '')) // For sorting
-                };
-            });
-            
-            // Sort by date ascending, then by address alphabetically within each date
-            reportData.sort((a, b) => {
-                // First sort by date
-                const dateComparison = a.sortDate - b.sortDate;
-                if (dateComparison !== 0) {
-                    return dateComparison;
-                }
-                // If dates are the same, sort by address alphabetically
-                return a.address.localeCompare(b.address);
-            });
-            
-            // Add sorted data to CSV
-            let totalMaxLength = 0;
-            reportData.forEach(row => {
-                let formattedDate = row.date;
-                if (row.date !== 'N/A' && row.sortDate && !isNaN(row.sortDate)) {
-                    // Format date as DD.MM.YYYY
-                    const day = String(row.sortDate.getDate()).padStart(2, '0');
-                    const month = String(row.sortDate.getMonth() + 1).padStart(2, '0');
-                    const year = row.sortDate.getFullYear();
-                    formattedDate = day + '.' + month + '.' + year;
-                }
-                // Extract NVT number from filename
-                let nvt = '';
-                if (filename && filename !== 'N/A') {
-                    const nvtMatch = filename.match(/(NVT\s*\w+)/i);
-                    if (nvtMatch) {
-                        nvt = nvtMatch[1];
-                    }
-                }
-                csvContent += formattedDate + '\t' + row.address.replace(/"/g, '""') + '\t' + nvt + '\t' + row.maxLength + '\n';
-                
+                csvContent += formattedDate + '\t' + address.replace(/"/g, '""') + '\t' + nvt + '\t' + maxLength + '\n';
                 // Sum up max lengths (parse numeric value, ignore non-numeric)
-                const numericLength = parseFloat(row.maxLength.replace(/[^0-9.]/g, ''));
+                const numericLength = parseFloat(maxLength.replace(/[^0-9.]/g, ''));
                 if (!isNaN(numericLength)) {
                     totalMaxLength += numericLength;
                 }
             });
-            
-            // Add summary row
-            csvContent += 'Total\tSum\t\t' + totalMaxLength.toFixed(1) + '\n';
-            csvContent += 'Total\tSum of Max Lengths\t\t' + totalMaxLength.toFixed(1) + '\n';
-            
+
+            // Add summary row for sum and protocol count
+            csvContent += '\nSum of Max Lengths:\t\t\t' + totalMaxLength.toFixed(1) + '\n';
+            csvContent += 'Number of Protocols:\t' + dataRows.length + '\t\t\n';
+
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
-            
+
             if (link.download !== undefined) {
                 const url = URL.createObjectURL(blob);
                 link.setAttribute('href', url);

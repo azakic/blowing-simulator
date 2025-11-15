@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -24,8 +25,8 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol) (int, e
 		INSERT INTO protocols (
 			protocol_type, system_name, document_type, protocol_date, start_time,
 			project_number, section_nvt, company, service_provider, operator,
-			remarks, source_filename, parser_version
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			remarks, source_filename, parser_version, address
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		RETURNING id`,
 		"fremco",
 		protocol.ProtocolInfo.System,
@@ -40,6 +41,7 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol) (int, e
 		protocol.ProtocolInfo.Remarks,
 		protocol.ExportMetadata.SourceFilename,
 		protocol.ExportMetadata.ParserVersion,
+		extractAddressFromSectionNVT(protocol.ProtocolInfo.SectionNVT),
 	).Scan(&protocolID)
 
 	if err != nil {
@@ -162,8 +164,8 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol) (int,
 		INSERT INTO protocols (
 			protocol_type, system_name, document_type, protocol_date, start_time,
 			project_number, section_nvt, company, service_provider, operator,
-			remarks, source_filename, parser_version
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			remarks, source_filename, parser_version, address
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		RETURNING id`,
 		"jetting",
 		protocol.ProtocolInfo.System,
@@ -178,6 +180,7 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol) (int,
 		protocol.ProtocolInfo.Remarks,
 		protocol.ExportMetadata.SourceFilename,
 		protocol.ExportMetadata.ParserVersion,
+		extractAddressFromSectionNVT(protocol.ProtocolInfo.SectionNVT),
 	).Scan(&protocolID)
 
 	if err != nil {
@@ -367,4 +370,14 @@ func parseTimestamp(timestampStr string) *time.Time {
 	
 	log.Printf("parseTimestamp: All formats failed for '%s'", timestampStr)
 	return nil
+}
+
+// Helper to extract address from SectionNVT string
+func extractAddressFromSectionNVT(sectionNVT string) string {
+    // If SectionNVT is in format "address / NVT", extract address part
+    parts := strings.Split(sectionNVT, "/")
+    if len(parts) > 0 {
+        return strings.TrimSpace(parts[0])
+    }
+    return sectionNVT
 }

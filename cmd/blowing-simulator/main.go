@@ -230,27 +230,30 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 	if strings.Contains(baseName, ",") {
 		// Jetting format: "29.10.2025, 11 20, Eiermarkt 15 B NVT 1V2200"
 		parts := strings.Split(baseName, ",")
-		if len(parts) >= 3 {
-			date = strings.TrimSpace(parts[0])
-			timeRaw := strings.TrimSpace(parts[1])
-			// Convert space-separated time to colon-separated (e.g., "11 09" -> "11:09")
-			if strings.Contains(timeRaw, " ") {
-				timeParts := strings.Fields(timeRaw)
-				if len(timeParts) == 2 {
-					time = timeParts[0] + ":" + timeParts[1]
-				}
-			} else {
-				time = timeRaw
-			}
-			rest := strings.TrimSpace(parts[2])
-			nvtIdx := strings.Index(rest, "NVT ")
-			if nvtIdx != -1 {
-				address = strings.TrimSpace(rest[:nvtIdx])
-				nvt = strings.TrimSpace(rest[nvtIdx+4:])
-			} else {
-				address = rest
-			}
-		}
+		   if len(parts) >= 3 {
+			   // Try to extract date from filename, fallback to content if missing
+			   dateFromFilename := strings.TrimSpace(parts[0])
+			   if dateFromFilename != "" {
+				   date = dateFromFilename
+			   }
+			   timeRaw := strings.TrimSpace(parts[1])
+			   if strings.Contains(timeRaw, " ") {
+				   timeParts := strings.Fields(timeRaw)
+				   if len(timeParts) == 2 {
+					   time = timeParts[0] + ":" + timeParts[1]
+				   }
+			   } else {
+				   time = timeRaw
+			   }
+			   rest := strings.TrimSpace(parts[2])
+			   nvtIdx := strings.Index(rest, "NVT ")
+			   if nvtIdx != -1 {
+				   address = strings.TrimSpace(rest[:nvtIdx])
+				   nvt = strings.TrimSpace(rest[nvtIdx+4:])
+			   } else {
+				   address = rest
+			   }
+		   }
 		log.Printf("[Jetting] Parsed filename: %s | Date: %s | Time: %s | Address: %s | NVT: %s", baseName, date, time, address, nvt)
 	} else {
 		// Fremco format: "SM209214964_2025-10-22 10_51_Oldenburger Koppel_10_NVT1V3400"
@@ -340,13 +343,16 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 		// Parse comprehensive protocol data
 		fremcoProtocol = simulator.ParseFremcoProtocol(normalized)
 		// Fill in filename-based metadata
-		if fremcoProtocol != nil {
-			fremcoProtocol.ProtocolInfo.ProjectNumber = project
-			fremcoProtocol.ProtocolInfo.Date = date
-			fremcoProtocol.ProtocolInfo.StartTime = time
-			fremcoProtocol.ProtocolInfo.SectionNVT = address + " / " + nvt
-			fremcoProtocol.ExportMetadata.SourceFilename = header.Filename
-		}
+		   if fremcoProtocol != nil {
+			   fremcoProtocol.ProtocolInfo.ProjectNumber = project
+			   // Prefer date from filename, fallback to parsed content if missing
+			   if date != "" {
+				   fremcoProtocol.ProtocolInfo.Date = date
+			   }
+			   fremcoProtocol.ProtocolInfo.StartTime = time
+			   fremcoProtocol.ProtocolInfo.SectionNVT = address + " / " + nvt
+			   fremcoProtocol.ExportMetadata.SourceFilename = header.Filename
+		   }
 		
 		measurements = simulator.ParseFremcoSimple(normalized)
 		log.Printf("Parsed measurements (Fremco): %+v\n", measurements)
@@ -366,12 +372,15 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 		// Parse comprehensive protocol data
 		jettingProtocol = simulator.ParseJettingProtocol(normalized)
 		// Fill in filename-based metadata
-		if jettingProtocol != nil {
-			jettingProtocol.ProtocolInfo.Date = date
-			jettingProtocol.ProtocolInfo.StartTime = time
-			jettingProtocol.ProtocolInfo.SectionNVT = address + " / " + nvt
-			jettingProtocol.ExportMetadata.SourceFilename = header.Filename
-		}
+		   if jettingProtocol != nil {
+			   // Prefer date from filename, fallback to parsed content if missing
+			   if date != "" {
+				   jettingProtocol.ProtocolInfo.Date = date
+			   }
+			   jettingProtocol.ProtocolInfo.StartTime = time
+			   jettingProtocol.ProtocolInfo.SectionNVT = address + " / " + nvt
+			   jettingProtocol.ExportMetadata.SourceFilename = header.Filename
+		   }
 		
 		jettingMeasurements = simulator.ParseJettingTxt(normalized)
 		log.Printf("Parsed measurements (Old Jetting): %+v\n", jettingMeasurements)
@@ -687,6 +696,7 @@ type LengthReportData struct {
 	Company          sql.NullString  `db:"company"`
 	ServiceProvider  sql.NullString  `db:"service_provider"`
 	SourceFilename   sql.NullString  `db:"source_filename"`
+	Address          sql.NullString  `db:"address"`
 	MaxLength        sql.NullFloat64 `db:"max_length"`
 	MinLength        sql.NullFloat64 `db:"min_length"`
 	AvgLength        sql.NullFloat64 `db:"avg_length"`
@@ -1010,6 +1020,7 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 			p.company,
 			p.service_provider,
 			p.source_filename,
+			p.address,
 			COALESCE(MAX(m.length_m), 0) as max_length,
 			COALESCE(MIN(m.length_m), 0) as min_length,
 			COALESCE(AVG(m.length_m), 0) as avg_length,
@@ -1088,20 +1099,51 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 	
 	// Render template
 	funcMap := template.FuncMap{
-		"dateFormat": func(dateStr string) string {
-			// Accepts date in YYYY-MM-DD or RFC3339, returns DD.MM.YYYY
+		   "dateFormat": func(dateStr string) string {
+			   // Remove time part if present
+			   if strings.Contains(dateStr, "T") {
+				   dateStr = strings.Split(dateStr, "T")[0]
+			   }
+			   // Handle YYYY-MM-DD
+			   if matched, _ := regexp.MatchString(`^\d{4}-\d{2}-\d{2}$`, dateStr); matched {
+				   parts := strings.Split(dateStr, "-")
+				   return parts[2] + "." + parts[1] + "." + parts[0]
+			   }
+			   // Handle DD.MM.YYYY
+			   if matched, _ := regexp.MatchString(`^\d{2}\.\d{2}\.\d{4}$`, dateStr); matched {
+				   return dateStr
+			   }
+			   // Handle DD-MM-YYYY
+			   if matched, _ := regexp.MatchString(`^\d{2}-\d{2}-\d{4}$`, dateStr); matched {
+				   parts := strings.Split(dateStr, "-")
+				   return parts[0] + "." + parts[1] + "." + parts[2]
+			   }
+			   // Handle MM/DD/YYYY
+			   if matched, _ := regexp.MatchString(`^\d{2}/\d{2}/\d{4}$`, dateStr); matched {
+				   parts := strings.Split(dateStr, "/")
+				   return parts[1] + "." + parts[0] + "." + parts[2]
+			   }
+			   // If only DD, MM, or YYYY, return as is
+			   if matched, _ := regexp.MatchString(`^\d{2}$`, dateStr); matched {
+				   return dateStr
+			   }
+			   // Fallback: try to extract DD.MM.YYYY from any string
+			   re := regexp.MustCompile(`(\d{2})[.\-/](\d{2})[.\-/](\d{4})`)
+			   match := re.FindStringSubmatch(dateStr)
+			   if len(match) == 4 {
+				   return match[1] + "." + match[2] + "." + match[3]
+			   }
+			   return dateStr
+		   },
+		"dateOnly": func(dateStr string) string {
+			// Accepts date in YYYY-MM-DD or RFC3339, returns DD.MM.YYYY (no time)
 			if len(dateStr) >= 10 {
+				if strings.Contains(dateStr, "T") {
+					dateStr = strings.Split(dateStr, "T")[0]
+				}
 				parts := strings.Split(dateStr, "-")
 				if len(parts) == 3 {
 					return parts[2] + "." + parts[1] + "." + parts[0]
-				}
-				// Try RFC3339
-				if strings.Contains(dateStr, "T") {
-					dateOnly := strings.Split(dateStr, "T")[0]
-					parts = strings.Split(dateOnly, "-")
-					if len(parts) == 3 {
-						return parts[2] + "." + parts[1] + "." + parts[0]
-					}
 				}
 			}
 			return dateStr
