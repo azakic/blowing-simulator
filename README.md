@@ -37,11 +37,14 @@ Cable blowing is a method for installing fiber optic cables into underground duc
 
 - **Automatic Format Detection**: Intelligently identifies whether a PDF is from Fremco or Jetting equipment
 - **Dual Parsing Engines**: Uses appropriate extraction method for each format (pdftotext for Fremco, Go native for Jetting)
-- **Database Storage**: Stores complete protocol data in PostgreSQL with full metadata preservation
-- **Web Interface**: User-friendly upload and visualization interface
+- **Database Integration**: Complete PostgreSQL database with comprehensive protocol storage
+- **Protocol Management**: Searchable database of imported protocols with filtering and pagination
+- **Measurement Viewer**: Detailed view of all measurement data points with pagination
+- **Comprehensive Metadata**: Stores equipment specs, weather data, GPS coordinates, and complete protocol information
+- **Web Interface**: Full-featured web application with modern UI
 - **Data Export**: JSON and CSV export capabilities for further analysis
 - **Report Generation**: PDF report creation from parsed data
-- **Comprehensive Logging**: Tracks parsing operations and equipment performance
+- **Health Monitoring**: Built-in health checks and debugging endpoints
 
 ## 🚀 Quick Start
 
@@ -52,18 +55,37 @@ Cable blowing is a method for installing fiber optic cables into underground duc
 git clone <repository-url>
 cd blowing-simulator
 
-# Start the application with Docker Compose
+# Start the application with Docker Compose (includes PostgreSQL database)
 docker compose up -d
+
+# Wait for database initialization (first run)
+sleep 10
 
 # Access the web interface
 open http://localhost:8080
 ```
 
+### Features Available
+
+Once running, you can:
+
+1. **Upload PDFs**: Process Fremco and Jetting protocol PDFs
+2. **View Protocols**: Browse all imported protocols at `/protocols`
+3. **Search & Filter**: Find protocols by company, filename, or type
+4. **View Details**: See complete protocol information including equipment specs
+5. **Browse Measurements**: View detailed measurement data with pagination
+6. **Health Check**: Monitor application status at `/health`
+
 ### Manual Setup
 
 ```bash
 # Install dependencies (Ubuntu/Debian)
-sudo apt-get install poppler-utils
+sudo apt-get install poppler-utils postgresql
+
+# Set up database
+createdb blowing_simulator
+psql -d blowing_simulator -f migrations/001_create_universal_schema.sql
+psql -d blowing_simulator -f migrations/002_add_protocol_support.sql
 
 # Build and run
 go build -o blowing-simulator ./cmd/blowing-simulator
@@ -75,25 +97,38 @@ go build -o blowing-simulator ./cmd/blowing-simulator
 ```
 blowing-simulator/
 ├── cmd/blowing-simulator/          # Main application
-│   ├── main.go                     # Web server & PDF processing
-│   ├── db.go                       # Database operations
+│   ├── main.go                     # Web server, PDF processing, protocol management
+│   ├── db.go                       # Legacy database operations
+│   ├── protocol_db.go              # Protocol database operations
 │   └── download_json_handler.go    # Export functionality
 ├── internal/                       # Core business logic
-│   ├── simulator/                  # PDF parsing engines
-│   │   ├── parse_fremco.go        # Fremco PDF parser (pdftotext)
-│   │   ├── parse_jetting.go       # Jetting PDF parser (Go native)
-│   │   └── normalize.go           # Text normalization
+│   ├── simulator/                  # PDF parsing engines & protocol structures
+│   │   ├── parse_fremco.go        # Enhanced Fremco parser with metadata extraction
+│   │   ├── parse_jetting.go       # Enhanced Jetting parser with German fields
+│   │   ├── fremco_protocol.go     # Complete Fremco protocol structures
+│   │   ├── jetting_protocol.go    # Complete Jetting protocol structures
+│   │   └── normalize.go           # Text normalization utilities
 │   ├── config/                    # Configuration management
 │   ├── fremco/                    # Fremco-specific logic
 │   └── jetting/                   # Jetting-specific logic
-├── web/templates/                 # Frontend templates
-│   ├── pdf2text.html             # Main PDF processing interface
-│   ├── index.html                 # Landing page
-│   └── report/                    # Report templates
-├── migrations/                    # Database schema
-├── docker-compose.yml             # Multi-container setup
+├── web/                           # Frontend components
+│   ├── templates/                 # HTML templates
+│   │   ├── index.html             # Landing page with navigation
+│   │   ├── pdf2text.html          # PDF processing interface
+│   │   ├── protocols.html         # Protocol list with search/filter
+│   │   ├── protocol-detail.html   # Individual protocol details
+│   │   ├── protocol-measurements.html # Measurement data viewer
+│   │   ├── create-fremco.html     # Fremco report creation
+│   │   ├── create-jetting.html    # Jetting report creation
+│   │   └── report/                # Report templates
+│   └── static/                    # CSS, JS, fonts
+├── migrations/                    # Database schema migrations
+│   ├── 001_create_universal_schema.sql    # Initial schema
+│   └── 002_add_protocol_support.sql       # Protocol tables
+├── schema/                        # JSON schema templates
+├── docker-compose.yml             # Multi-container setup (app + PostgreSQL)
 ├── Dockerfile                     # Container configuration
-└── README.md                      # This file
+└── README.md                      # This comprehensive guide
 ```
 
 ## 🔍 Supported PDF Formats
@@ -110,14 +145,87 @@ blowing-simulator/
 - **Fields**: English field names (Length, Speed, Pressure, etc.)
 - **Example Filename**: `SM209214964_2025-10-22 10_51_Oldenburger Koppel_10_NVT1V3400.pdf`
 
+## 🗄️ Database Integration
+
+### PostgreSQL Schema
+
+The application uses a comprehensive PostgreSQL database with four main tables:
+
+- **`protocols`**: Main protocol information (system, date, company, operator, etc.)
+- **`protocol_equipment`**: Equipment specifications (devices, pipes, cables, compressors)
+- **`protocol_summary`**: Summary data (distances, times, weather, GPS coordinates)
+- **`protocol_measurements`**: Individual measurement points (length, speed, pressure, etc.)
+
+### Protocol Storage
+
+Each uploaded PDF is parsed and stored as a complete protocol record:
+
+```sql
+-- Example protocol record
+INSERT INTO protocols (protocol_type, system_name, company, source_filename, ...)
+VALUES ('fremco', 'SpeedNet-System', 'Wolken-ASM GmbH', 'protocol.pdf', ...);
+
+-- Associated equipment data
+INSERT INTO protocol_equipment (protocol_id, device_model, compressor_model, ...)
+VALUES (1, 'Fremco MicroFlow LOG', 'Atlas Copco GA500', ...);
+
+-- Individual measurements (can be hundreds of data points)
+INSERT INTO protocol_measurements (protocol_id, length_m, speed_m_min, pressure_bar, ...)
+VALUES (1, 25.5, 30.2, 8.5, ...);
+```
+
+### Automatic Data Extraction
+
+When a PDF is uploaded, the system automatically:
+
+1. **Detects Format**: Fremco vs Jetting based on content analysis
+2. **Extracts Metadata**: Company info, project details, equipment specs
+3. **Parses Measurements**: All data points with proper type conversion
+4. **Stores Weather/GPS**: Environmental data when available
+5. **Creates Relations**: Links equipment, summary, and measurements to protocol
+
+## 🌐 Web Interface Features
+
+### Main Dashboard (`/`)
+- Upload PDF files for processing
+- Quick access to protocol database
+- Navigation to report creation tools
+
+### Protocol Management (`/protocols`)
+- **Searchable Database**: Find protocols by company, filename, project number
+- **Filter by Type**: View only Fremco or Jetting protocols
+- **Pagination**: Handle large numbers of protocols efficiently
+- **Quick Actions**: Direct links to view details or measurements
+
+### Protocol Details (`/protocols/view?id=X`)
+- **Complete Overview**: All protocol information in organized sections
+- **Equipment Specifications**: Device models, serial numbers, configurations
+- **Summary Data**: Total distances, durations, weather conditions, GPS coordinates
+- **Measurement Count**: Number of data points with link to detailed view
+
+### Measurement Viewer (`/protocols/measurements?id=X`)
+- **Paginated Data**: Browse through hundreds/thousands of measurement points
+- **Complete Fields**: Length, speed, pressure, torque, temperature, force, timestamps
+- **Formatted Display**: Proper decimal formatting and null value handling
+- **Navigation**: Easy browsing with previous/next page controls
+
+### PDF Processing (`/pdf2text`)
+- **Dual Format Support**: Handles both Fremco and Jetting PDFs
+- **Live Feedback**: Real-time processing status
+- **Format Detection**: Automatic identification with visual indicators
+- **Data Preview**: View extracted measurements before saving
+- **Export Options**: Download as JSON or CSV
+
 ## 📊 Data Processing Pipeline
 
-1. **Format Detection**: Automatically identifies Jetting vs Fremco format
-2. **PDF Extraction**: Uses appropriate extraction method per format
-3. **Text Normalization**: Cleans and standardizes extracted text
-4. **Data Parsing**: Converts to structured measurement data
-5. **Visualization**: Generates tables and charts
-6. **Export**: Provides JSON/CSV download options
+1. **PDF Upload**: User selects PDF file through web interface
+2. **Format Detection**: System analyzes content to identify Fremco/Jetting format
+3. **Text Extraction**: Uses appropriate method (pdftotext for Fremco, Go native for Jetting)
+4. **Metadata Extraction**: Parses header information, equipment specs, project details
+5. **Measurement Parsing**: Converts tabular data to structured format
+6. **Database Storage**: Saves complete protocol with all relationships
+7. **Web Display**: Shows parsed data in user-friendly interface
+8. **Export Options**: Provides JSON/CSV downloads for external analysis
 
 ## 🎯 Key Features
 
@@ -150,28 +258,154 @@ if strings.Contains(rawStr, "Länge") &&
 ## 🔧 Configuration
 
 ### Environment Variables
-- `PORT`: Web server port (default: 8080)
-- `DATABASE_URL`: PostgreSQL connection string (optional)
+
+The application supports the following environment variables:
+
+```bash
+# Database Configuration
+DB_HOST=localhost          # Database host (default: localhost)
+DB_PORT=5432              # Database port (default: 5432)  
+DB_USER=blowing           # Database username (default: blowing)
+DB_PASSWORD=password      # Database password (default: 7fG2vQp9sXw3Lk8r)
+DB_NAME=blowing_simulator # Database name (default: blowing_simulator)
+
+# Application Configuration  
+PORT=8080                 # Web server port (default: 8080)
+```
 
 ### Docker Compose Services
-- **app**: Go application server
-- **db**: PostgreSQL database (persistent volume)
 
-## 📈 Usage Examples
+The application runs as a multi-container setup:
 
-### Processing a Jetting PDF
-1. Upload PDF through web interface
-2. System detects Jetting format automatically
-3. Extracts data using Go library
-4. Displays 6-column table with German headers
-5. Shows measurement chart with multiple datasets
+```yaml
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=blowing
+      - DB_PASSWORD=7fG2vQp9sXw3Lk8r
+      - DB_NAME=blowing_simulator
+    depends_on:
+      - db
 
-### Processing a Fremco PDF
-1. Upload PDF through web interface  
-2. System detects Fremco format automatically
-3. Extracts data using pdftotext
-4. Displays 5-column table with English headers
-5. Shows measurement chart with torque/pressure data
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=blowing
+      - POSTGRES_PASSWORD=7fG2vQp9sXw3Lk8r  
+      - POSTGRES_DB=blowing_simulator
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+```
+
+### Database Schema
+
+The database uses two migration files:
+
+1. **`001_create_universal_schema.sql`**: Legacy measurement tables
+2. **`002_add_protocol_support.sql`**: Complete protocol support with:
+   - Protocol metadata table
+   - Equipment specifications table  
+   - Summary data with weather/GPS
+   - Comprehensive measurements table with all field types
+
+### First Run Setup
+
+On first run, the database will be automatically initialized. You can also run migrations manually:
+
+```bash
+# Execute migrations in order
+docker exec -i blowing-simulator-db-1 psql -U blowing -d blowing_simulator < migrations/001_create_universal_schema.sql
+docker exec -i blowing-simulator-db-1 psql -U blowing -d blowing_simulator < migrations/002_add_protocol_support.sql
+```
+
+## 📈 Usage Guide
+
+### Complete Workflow Example
+
+#### 1. Upload and Process PDF
+```bash
+# Navigate to the application
+open http://localhost:8080
+
+# Upload a PDF file
+# - Select Fremco or Jetting PDF
+# - Click "Export Report" 
+# - System automatically detects format and processes
+```
+
+#### 2. View Processed Data
+- **Immediate Preview**: See extracted measurements in web interface
+- **Format Detection**: Visual indicator shows detected format (Fremco/Jetting)
+- **Data Validation**: Review parsed data before saving
+- **Export Options**: Download JSON or CSV immediately
+
+#### 3. Database Storage
+The system automatically saves:
+- **Protocol Information**: Date, time, project number, company details
+- **Equipment Data**: Device models, serial numbers, specifications
+- **Environmental Data**: Weather conditions, GPS coordinates (when available)
+- **Measurement Points**: All data points with proper field mapping
+
+#### 4. Browse Protocol Database
+```bash
+# View all protocols
+http://localhost:8080/protocols
+
+# Search by company
+http://localhost:8080/protocols?search=Wolken-ASM
+
+# Filter by type
+http://localhost:8080/protocols?type=fremco
+```
+
+#### 5. Analyze Detailed Data
+```bash
+# View protocol details
+http://localhost:8080/protocols/view?id=1
+
+# Browse measurement data
+http://localhost:8080/protocols/measurements?id=1
+```
+
+### Processing Different PDF Types
+
+#### Jetting PDFs
+- **Detection**: Contains keywords like "Länge", "Schubkraft", "Lufttemperatur"
+- **Extraction**: Go native library for reliable text extraction
+- **Fields**: German language (Streckenlänge, Geschwindigkeit, etc.)
+- **Data Points**: Typically high-frequency measurements (hundreds of points)
+
+#### Fremco PDFs
+- **Detection**: Contains "Fremco", "Streckenabschnitt", "SpeedNet-System"
+- **Extraction**: pdftotext CLI for precise table extraction
+- **Fields**: English language (Length, Speed, Pressure, etc.)
+- **Metadata**: Rich equipment specifications and environmental data
+
+### Database Queries
+
+You can also query the database directly:
+
+```sql
+-- View all protocols
+SELECT id, protocol_type, company, source_filename, created_at 
+FROM protocols ORDER BY created_at DESC;
+
+-- Get measurement count by protocol
+SELECT p.id, p.source_filename, COUNT(m.id) as measurement_count
+FROM protocols p
+LEFT JOIN protocol_measurements m ON p.id = m.protocol_id
+GROUP BY p.id, p.source_filename;
+
+-- Find protocols by company
+SELECT * FROM protocols WHERE company ILIKE '%wolken%';
+```
 
 ## 🛠 Development
 
@@ -186,39 +420,231 @@ See `migrations/001_create_universal_schema.sql` for complete schema.
 
 ## 🐛 Troubleshooting
 
-### "pdftotext: executable file not found"
-- **Docker**: Ensure `poppler-utils` is in Dockerfile
-- **Manual**: Install with `apt-get install poppler-utils`
+### Application Issues
 
-### "No measurement data found"
-- Check PDF format matches expected structure
-- Verify text extraction in "Extracted Text (Raw)" section
-- Check debug logs: `docker logs blowing-simulator-app-1`
+#### "pdftotext: executable file not found"
+```bash
+# Docker (should be automatic)
+docker compose up -d --build
 
-### ARM64 Compatibility
-Application builds natively for ARM64 (Apple Silicon, Raspberry Pi).
+# Manual installation
+sudo apt-get update
+sudo apt-get install poppler-utils
+```
+
+#### "Database connection failed"
+```bash
+# Check if database container is running
+docker compose ps
+
+# Check database logs
+docker compose logs db
+
+# Restart database
+docker compose restart db
+```
+
+#### "No measurement data found"
+1. **Check PDF Format**: Ensure PDF contains expected text structure
+2. **View Raw Text**: Check "Extracted Text (Raw)" section in web interface
+3. **Format Detection**: Verify correct format is detected (Fremco/Jetting)
+4. **Check Logs**: `docker compose logs app`
+
+### Web Interface Issues
+
+#### "Protocol not found" errors
+```bash
+# Check database content
+docker exec -i blowing-simulator-db-1 psql -U blowing -d blowing_simulator -c "SELECT id, source_filename FROM protocols;"
+
+# Verify protocol ID exists
+curl http://localhost:8080/protocols
+```
+
+#### "Template rendering errors"
+- Check application logs for specific template errors
+- Ensure all template files exist in `web/templates/`
+- Restart application: `docker compose restart app`
+
+#### Reverse Proxy Issues (for production deployments)
+If using reverse proxy (nginx, frp, etc.):
+
+```bash
+# Test direct access first
+curl http://localhost:8080/health
+
+# Check proxy configuration
+# Ensure all routes are forwarded: /, /protocols, /protocols/view, /protocols/measurements
+
+# Test specific endpoints
+curl https://your-domain.com/health
+curl https://your-domain.com/protocols
+```
+
+### Database Issues
+
+#### Migration failures
+```bash
+# Check migration status
+docker exec -i blowing-simulator-db-1 psql -U blowing -d blowing_simulator -c "\dt"
+
+# Re-run migrations manually
+docker exec -i blowing-simulator-db-1 psql -U blowing -d blowing_simulator < migrations/001_create_universal_schema.sql
+docker exec -i blowing-simulator-db-1 psql -U blowing -d blowing_simulator < migrations/002_add_protocol_support.sql
+```
+
+#### Data integrity issues
+```bash
+# Check for orphaned records
+docker exec -i blowing-simulator-db-1 psql -U blowing -d blowing_simulator -c "
+SELECT p.id, COUNT(m.id) as measurements 
+FROM protocols p 
+LEFT JOIN protocol_measurements m ON p.id = m.protocol_id 
+GROUP BY p.id;"
+```
+
+### Performance Issues
+
+#### Slow measurement loading
+- **Pagination**: Measurement viewer uses 50 items per page
+- **Indexing**: Database has proper indexes on protocol_id fields
+- **Memory**: Ensure sufficient container memory for large datasets
+
+#### Large PDF processing
+- **Timeout**: Increase processing timeout for very large PDFs
+- **Memory**: Monitor container memory usage during processing
+- **Disk Space**: Ensure sufficient space for temporary files
+
+### Development Issues
+
+#### ARM64 Compatibility
+- Application builds natively for ARM64 (Apple Silicon, Raspberry Pi)
+- All dependencies support ARM64 architecture
+- Docker images are multi-architecture
+
+#### Go Module Issues
+```bash
+# Clean and rebuild
+go mod tidy
+go mod download
+docker compose up -d --build
+```
+
+### Health Check Endpoint
+
+Monitor application status:
+```bash
+# Application health
+curl http://localhost:8080/health
+
+# Expected response:
+# {"status": "healthy", "timestamp": "2025-11-15T17:37:43Z", "routes": [...]}
+```
+
+### Log Analysis
+
+View detailed logs for debugging:
+```bash
+# Application logs
+docker compose logs -f app
+
+# Database logs  
+docker compose logs -f db
+
+# All logs
+docker compose logs -f
+```
+
+## 🎯 Complete Feature Set
+
+### PDF Processing
+- ✅ **Dual Format Support**: Fremco and Jetting PDFs
+- ✅ **Automatic Detection**: Intelligent format identification
+- ✅ **Robust Extraction**: pdftotext for Fremco, Go native for Jetting
+- ✅ **Metadata Parsing**: Equipment specs, weather data, GPS coordinates
+- ✅ **Error Handling**: Graceful handling of malformed PDFs
+
+### Database Integration  
+- ✅ **PostgreSQL Storage**: Complete protocol persistence
+- ✅ **Relational Schema**: Equipment, summary, measurements tables
+- ✅ **Transaction Safety**: ACID compliance for data integrity
+- ✅ **Migration Support**: Versioned database schema updates
+- ✅ **Data Validation**: Type checking and constraint enforcement
+
+### Web Interface
+- ✅ **Modern UI**: Responsive design with intuitive navigation
+- ✅ **Protocol Management**: Searchable database with filtering
+- ✅ **Detailed Views**: Complete protocol information display
+- ✅ **Measurement Viewer**: Paginated data browser with 50 items/page
+- ✅ **Real-time Processing**: Live feedback during PDF processing
+- ✅ **Export Options**: JSON and CSV download capabilities
+
+### System Architecture
+- ✅ **Containerized**: Docker Compose with PostgreSQL
+- ✅ **Health Monitoring**: Built-in health checks and debugging
+- ✅ **Multi-Architecture**: Native ARM64 and x86_64 support
+- ✅ **Production Ready**: Reverse proxy compatible
+- ✅ **Scalable Design**: Efficient database queries with pagination
+
+### Data Management
+- ✅ **Comprehensive Storage**: All protocol data preserved
+- ✅ **Search & Filter**: Find protocols by multiple criteria
+- ✅ **Measurement Analytics**: Access to individual data points
+- ✅ **Format Preservation**: Original structure maintained
+- ✅ **Export Flexibility**: Multiple output formats
 
 ## 📝 Technologies Used
 
-- **Backend**: Go 1.24, Gorilla Mux
-- **Database**: PostgreSQL, SQLite
-- **PDF Processing**: pdftotext, ledongthuc/pdf
-- **Frontend**: HTML5, Chart.js, Bootstrap
-- **Containerization**: Docker, Docker Compose
-- **Architecture**: ARM64, x86_64
+- **Backend**: Go 1.24.4, net/http standard library
+- **Database**: PostgreSQL 15 with sqlx for enhanced SQL operations
+- **PDF Processing**: pdftotext (Poppler), ledongthuc/pdf Go library
+- **Frontend**: HTML5, CSS3, JavaScript (vanilla), responsive design
+- **Containerization**: Docker & Docker Compose multi-container setup
+- **Architecture**: Multi-architecture support (ARM64, x86_64)
+- **Development**: Native Go modules, structured project layout
 
 ## 🗺️ API Routes
 
+### Main Application Routes
+
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/` | GET | Main landing page |
-| `/pdf2text` | GET/POST | PDF processing interface |
-| `/create-fremco` | GET/POST | Fremco report creation |
-| `/create-jetting` | GET/POST | Jetting report creation |
-| `/download-json` | POST | Export as JSON |
-| `/download-csv` | POST | Export as CSV |
-| `/download-pdf` | POST | Export as PDF |
-| `/jetting-report` | GET | View Jetting reports |
+| `/` | GET | Main landing page with navigation |
+| `/pdf2text` | GET/POST | PDF processing interface with database storage |
+| `/health` | GET | Application health check (JSON response) |
+
+### Protocol Management Routes
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/protocols` | GET | Searchable protocol database with filtering |
+| `/protocols/view?id=X` | GET | Detailed protocol information and metadata |
+| `/protocols/measurements?id=X` | GET | Paginated measurement data viewer |
+
+### Report Creation Routes
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/create-fremco` | GET/POST | Fremco report creation interface |
+| `/create-jetting` | GET/POST | Jetting report creation interface |
+| `/edit-report` | GET/POST | Edit existing report data |
+| `/jetting-report` | GET | View generated Jetting reports |
+
+### Export and Download Routes
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/download-json` | POST | Export processed data as JSON |
+| `/download-csv` | POST | Export processed data as CSV |
+| `/download-pdf` | POST | Export as PDF report |
+| `/export-pdf` | POST | Generate PDF from protocol data |
+| `/export-csv` | POST | Generate CSV export |
+
+### Static Assets
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/static/*` | GET | CSS, JavaScript, fonts, and images |
 
 ## 📋 Measurement Data Structures
 
@@ -261,128 +687,41 @@ type SimpleMeasurement struct {
 
 ## 🤝 Contributing
 
+### Development Setup
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+2. Clone your fork: `git clone https://github.com/your-username/blowing-simulator.git`
+3. Create a feature branch: `git checkout -b feature-name`
+4. Make your changes with proper testing
+5. Submit a pull request with detailed description
+
+### Areas for Contribution
+- **Parser Enhancement**: Support for additional PDF formats
+- **Database Optimization**: Query performance improvements
+- **UI/UX**: Frontend enhancements and accessibility
+- **Testing**: Unit tests and integration tests
+- **Documentation**: Code comments and user guides
+- **Performance**: Optimization for large datasets
+
+### Code Style
+- Follow Go best practices and gofmt formatting
+- Add comprehensive comments for new functions
+- Include error handling for all operations
+- Write tests for new parsing logic
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-```
-BlowingSimulator/
-├── api/                # (empty) Reserved for future API endpoints
-├── cmd/
-│   ├── blowing-simulator/   # Main web server entrypoint
-│   └── parse2json.go        # CLI tool for TXT→JSON parsing
-├── docs/               # (empty) Reserved for documentation
-├── internal/
-│   ├── config/         # (empty) Reserved for configuration logic
-│   ├── fremco/         # (empty) Reserved for Fremco-specific logic
-│   ├── jetting/        # (empty) Reserved for Jetting-specific logic
-│   └── simulator/
-│       ├── normalize.go      # Normalization functions for Jetting/Fremco TXT
-│       ├── parse_fremco.go   # Fremco TXT parser
-│       └── parse_jetting.go  # Jetting TXT parser
-├── pkg/                # (empty) Reserved for reusable packages
-├── scripts/            # (empty) Reserved for utility scripts
-├── test/               # (empty) Reserved for unit tests and sample files
-├── web/
-│   ├── static/         # Static assets (CSS, JS, images)
-│   └── templates/
-│       └── pdf2text.html     # Main web UI template
-├── go.mod              # Go module definition
-├── go.sum              # Go dependencies checksum
-```
-
 ---
 
-## Project Overview
+## 📞 Support
 
-### Purpose
+For questions, issues, or contributions:
+- **Issues**: Create GitHub issues for bugs or feature requests
+- **Documentation**: Check this README for comprehensive guidance
+- **Health Check**: Use `/health` endpoint to verify application status
+- **Logs**: Use `docker compose logs` for debugging information
 
-Blowing Simulator extracts measurement data from PDF reports generated by Jetting and Fremco machines. It normalizes and parses the data into a unified JSON schema for further analysis or export.
-
-### Supported Formats
-
-- **Jetting TXT**: Multiple layouts supported (block, vertical-block, flat-table, row-oriented, and fallback scanning).
-- **Fremco MicroFlow LOG**: Table format, parsed using `pdftotext` for reliable extraction.
-
-### Key Features
-
-- **PDF to Text Extraction**:
-  - Jetting: Uses Go-native extraction (`ledongthuc/pdf`) for best results with Jetting layouts.
-  - Fremco: Uses external `pdftotext` CLI for robust table extraction, ensuring Fremco tables are parsed correctly.
-- **Automatic Format Detection**: Detects Jetting or Fremco format based on keywords in the extracted text.
-- **Normalization & Parsing**: Cleans up extracted text and parses into rows aligned by distance (`Länge`/`Streckenlänge`), supporting multiple Jetting layouts and Fremco tables.
-- **Uniform JSON Output**: Outputs a JSON array of `SimpleMeasurement` objects for both formats:
-  - `length` (float64)
-  - `speed` (float64)
-  - `pressure` (float64)
-  - `torque` (int, rounded)
-  - `datetime` (optional, if available in source)
-- **Web UI**:
-  - Upload PDF, view extracted text, view and download JSON.
-  - See parsed measurements in a dynamic HTML table.
-  - Visualize measurements with a Chart.js multi-axis graph (speed, pressure, torque vs. length).
-- **HTML Report**: Professional report with table and graph, matching the look of original machine reports.
-- **CLI Tool**: Parse normalized TXT files to JSON outside the web UI for batch or automated processing.
-
-### How It Works
-
-1. **Upload PDF** via the web UI.
-2. **Extract text**:
-   - Jetting: Go-native extractor.
-   - Fremco: `pdftotext` CLI.
-3. **Automatic format detection** chooses the correct parser.
-4. **Normalize text** to remove artifacts and prepare for parsing.
-5. **Parse measurements** into unified JSON rows.
-6. **View HTML report**:
-   - See extracted text for debugging.
-   - See parsed measurements in a table.
-   - View a multi-axis graph (speed, pressure, torque vs. length).
-7. **Download JSON** or use CLI for batch processing.
-
----
-
-## Development Notes
-
-- **Extensible**: Directory structure allows for future expansion (API, tests, docs, etc.).
-- **Robust Parsing**: Handles noisy extraction, multiple Jetting layouts (block, vertical-block, flat-table, row-oriented, fallback) and Fremco tables, skips incomplete rows.
-- **Error Handling**: Fails gracefully if extraction or parsing fails, with clear UI feedback.
-- **HTML Report**: Table and graph are generated dynamically from parsed JSON, matching the style of original machine reports.
-- **Unit Tests**: (To be added) Place sample TXT files and test cases in `/test`.
-
----
-
-## Getting Started
-
-1. **Install Go** (>=1.18).
-2. **Install pdftotext** (Poppler) for Fremco parsing.
-3. **Build and run** the web server:
-   ```
-   cd BlowingSimulator/cmd/blowing-simulator
-   go run main.go
-   ```
-4. **Upload a PDF** via the web UI.
-5. **View the HTML report** with table and graph.
-6. **Download the parsed JSON** for further analysis.
-
----
-
-## Contributing
-
-- Add sample TXT files and unit tests to `/test`.
-- Extend normalization and parsing logic in `/internal/simulator/`.
-- Improve UI and HTML report in `/web/templates/pdf2text.html`.
-- Add new features (CSV export, batch processing, metadata tables, etc.).
-
----
-
-## License
-
-MIT License (add LICENSE file as needed).
-
----
+**Version**: 2.0.0 with complete database integration and protocol management
+**Last Updated**: November 2025
+**Compatibility**: Go 1.24+, PostgreSQL 15+, Docker Compose 2.0+
