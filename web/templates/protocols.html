@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Protocols - Blowing Simulator</title>
+    <title>Protocols - Wolken-ASM Reports</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -264,7 +264,7 @@
 <body>
     <nav class="navbar">
         <div class="navbar-brand">
-            <a href="/" class="navbar-logo">Blowing Simulator</a>
+            <a href="/" class="navbar-logo">Wolken-ASM Reports</a>
         </div>
         <div class="navbar-links">
             <a href="/" class="navbar-link">Dashboard</a>
@@ -304,6 +304,14 @@
                 <option value="fremco" {{if eq .Type "fremco"}}selected{{end}}>Fremco</option>
                 <option value="jetting" {{if eq .Type "jetting"}}selected{{end}}>Jetting</option>
             </select>
+            {{if .IsAdmin}}
+            <select name="partner_id">
+                <option value="">All Partners</option>
+                {{range .Partners}}
+                    <option value="{{.ID}}" {{if eq $.SelectedPartnerID .ID}}selected{{end}}>{{.Email}}</option>
+                {{end}}
+            </select>
+            {{end}}
             <input type="text" name="company" placeholder="Company..." value="{{.Company}}">
             <input type="date" name="date_from" value="{{.DateFrom}}">
             <span style="margin: 0 5px;">to</span>

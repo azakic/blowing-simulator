@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Length Report - Blowing Simulator</title>
+    <title>Length Report - Wolken-ASM Reports</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -282,7 +282,7 @@
 <body>
     <nav class="navbar">
         <div class="navbar-brand">
-            <a href="/" class="navbar-logo">Blowing Simulator</a>
+            <a href="/" class="navbar-logo">Wolken-ASM Reports</a>
         </div>
         <div class="navbar-links">
             <a href="/" class="navbar-link">Dashboard</a>
@@ -319,6 +319,17 @@
                     <label for="end_date">End Date:</label>
                     <input type="date" name="end_date" id="end_date" value="{{.EndDate}}">
                 </div>
+                {{if .IsAdmin}}
+                <div class="filter-group">
+                    <label for="partner_id">Partner:</label>
+                    <select name="partner_id" id="partner_id">
+                        <option value="">All Partners</option>
+                        {{range .Partners}}
+                            <option value="{{.ID}}" {{if eq $.SelectedPartnerID .ID}}selected{{end}}>{{.Email}}</option>
+                        {{end}}
+                    </select>
+                </div>
+                {{end}}
                 <div class="filter-group">
                     <label>Protocol Types:</label>
                     <div class="checkbox-group">

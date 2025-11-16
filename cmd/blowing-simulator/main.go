@@ -780,6 +780,7 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 	protocolType := r.URL.Query().Get("type")
 	dateFrom := r.URL.Query().Get("date_from")
 	dateTo := r.URL.Query().Get("date_to")
+	partnerIDStr := r.URL.Query().Get("partner_id")
 
 	// Base query
 	query := `
@@ -800,7 +801,19 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 	// Filter by user_id: partners ALWAYS see only their own data (no scope override)
 	// Admins can use scope=all to see everything
 	showAll := isAdmin && scope == "all"
-	if (!showAll && claims != nil) || isPartner {
+	var selectedPartnerID int64
+	var haveSelectedPartner bool
+	if isAdmin && partnerIDStr != "" {
+		if v, err := strconv.ParseInt(partnerIDStr, 10, 64); err == nil && v > 0 {
+			selectedPartnerID = v
+			haveSelectedPartner = true
+		}
+	}
+	if haveSelectedPartner {
+		arg++
+		query += fmt.Sprintf(" AND user_id = $%d", arg)
+		args = append(args, selectedPartnerID)
+	} else if (!showAll && claims != nil) || isPartner {
 		arg++
 		query += fmt.Sprintf(" AND user_id = $%d", arg)
 		args = append(args, claims.UserID)
@@ -831,7 +844,11 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 	countQuery := "SELECT COUNT(*) FROM protocols WHERE 1=1"
 	countArgs := []interface{}{}
 	cArg := 0
-	if !showAll && claims != nil {
+	if haveSelectedPartner {
+		cArg++
+		countQuery += fmt.Sprintf(" AND user_id = $%d", cArg)
+		countArgs = append(countArgs, selectedPartnerID)
+	} else if !showAll && claims != nil {
 		cArg++
 		countQuery += fmt.Sprintf(" AND user_id = $%d", cArg)
 		countArgs = append(countArgs, claims.UserID)
@@ -893,6 +910,7 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 	if search != "" { queryString += "&search=" + url.QueryEscape(search) }
 	if protocolType != "" && protocolType != "all" { queryString += "&type=" + url.QueryEscape(protocolType) }
 	if company := r.URL.Query().Get("company"); company != "" { queryString += "&company=" + url.QueryEscape(company) }
+	if isAdmin && partnerIDStr != "" { queryString += "&partner_id=" + url.QueryEscape(partnerIDStr) }
 	if dateFrom != "" { queryString += "&date_from=" + url.QueryEscape(dateFrom) }
 	if dateTo != "" { queryString += "&date_to=" + url.QueryEscape(dateTo) }
 
@@ -906,6 +924,13 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Load partners list for admin filter
+	type simpleUser struct { ID int64 `db:"id"`; Email string `db:"email"` }
+	var partners []simpleUser
+	if isAdmin {
+		_ = db.Select(&partners, "SELECT id, email FROM users WHERE role='partner' ORDER BY email ASC")
+	}
+
 	data := map[string]interface{}{
 		"Protocols":   protocols,
 		"Search":      search,
@@ -918,6 +943,8 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		"PageNumbers": pageNumbers,
 		"UserRole":    func() string { c:=GetAuthClaims(r); if c!=nil {return c.Role}; return "" }(),
 		"IsAdmin":     isAdmin,
+		"Partners":    partners,
+		"SelectedPartnerID": func() int64 { if haveSelectedPartner { return selectedPartnerID }; return 0 }(),
 	}
 	if err := tmpl.Execute(w, data); err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
@@ -1342,6 +1369,7 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 	endDate := r.URL.Query().Get("end_date")
 	includeFremco := r.URL.Query().Get("fremco") == "on" || r.URL.Query().Get("fremco") == "true"
 	includeJetting := r.URL.Query().Get("jetting") == "on" || r.URL.Query().Get("jetting") == "true"
+	partnerIDStr := r.URL.Query().Get("partner_id")
 	
 	// Default to both if none selected
 	if !includeFremco && !includeJetting {
@@ -1405,7 +1433,19 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	// Ownership filter: partners ALWAYS see only their own data (no scope override)
-	if (!showAll && claims != nil) || isPartner {
+	var selectedPartnerID int64
+	var haveSelectedPartner bool
+	if isAdmin && partnerIDStr != "" {
+		if v, err := strconv.ParseInt(partnerIDStr, 10, 64); err == nil && v > 0 {
+			selectedPartnerID = v
+			haveSelectedPartner = true
+		}
+	}
+	if haveSelectedPartner {
+		argCount++
+		query += fmt.Sprintf(" AND p.user_id = $%d", argCount)
+		args = append(args, selectedPartnerID)
+	} else if (!showAll && claims != nil) || isPartner {
 		argCount++
 		query += fmt.Sprintf(" AND p.user_id = $%d", argCount)
 		args = append(args, claims.UserID)
@@ -1510,6 +1550,13 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	tmpl := template.Must(template.New("length-report.html").Funcs(funcMap).ParseFiles("web/templates/length-report.html"))
+	// Load partners list for admin filter
+	type simpleUser struct { ID int64 `db:"id"`; Email string `db:"email"` }
+	var partners []simpleUser
+	if isAdmin {
+		_ = db.Select(&partners, "SELECT id, email FROM users WHERE role='partner' ORDER BY email ASC")
+	}
+
 	data := map[string]interface{}{
 		"Reports":           reports,
 		"StartDate":         startDate,
@@ -1522,6 +1569,8 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 		"OverallAverage":    overallAverage,
 		"UserRole":          func() string { c:=GetAuthClaims(r); if c!=nil {return c.Role}; return "" }(),
 		"IsAdmin":           isAdmin,
+		"Partners":          partners,
+		"SelectedPartnerID": func() int64 { if haveSelectedPartner { return selectedPartnerID }; return 0 }(),
 	}
 
 	err = tmpl.Execute(w, data)
