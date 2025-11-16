@@ -154,9 +154,86 @@
             border-radius: 3px;
             font-size: 11px;
         }
+        .dashboard-stats {
+            display: flex;
+            justify-content: center;
+            gap: 2em;
+            margin-bottom: 2em;
+        }
+        .stat-tile {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 1em 2em;
+            text-align: center;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+        }
+        .stat-title {
+            color: #888;
+            font-size: 1em;
+            margin-bottom: 0.5em;
+        }
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #1976d2;
+        }
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #1976d2;
+            padding: 0.7em 2em;
+            border-radius: 0 0 10px 10px;
+            margin-bottom: 2em;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        }
+        .navbar-brand {
+            font-size: 1.3em;
+            font-weight: bold;
+        }
+        .navbar-logo {
+            color: #fff;
+            text-decoration: none;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        .navbar-links {
+            display: flex;
+            gap: 2em;
+        }
+        .navbar-link {
+            color: #fff;
+            text-decoration: none;
+            font-size: 1em;
+            font-weight: 500;
+            padding-bottom: 2px;
+            border-bottom: 2px solid transparent;
+            transition: border-color 0.2s;
+        }
+        .navbar-link:hover, .navbar-link.active {
+            border-bottom: 2px solid #fff;
+        }
+        @media (max-width: 700px) {
+            .dashboard-stats { flex-direction: column; gap: 1em; }
+            .protocols-table th, .protocols-table td { font-size: 12px; padding: 6px; }
+            .nav-buttons { flex-direction: column; gap: 0.5em; }
+            .navbar { flex-direction: column; gap: 1em; padding: 1em; }
+            .navbar-links { gap: 1em; }
+        }
     </style>
 </head>
 <body>
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <a href="/" class="navbar-logo">Blowing Simulator</a>
+        </div>
+        <div class="navbar-links">
+            <a href="/" class="navbar-link">Dashboard</a>
+            <a href="/protocols" class="navbar-link active">Protocols</a>
+            <a href="/protocols/length-report" class="navbar-link">Length Report</a>
+            <a href="/bulk-upload" class="navbar-link">Bulk Upload</a>
+        </div>
+    </nav>
     <div class="container">
         <a href="/" class="back-link">← Back to Home</a>
         
@@ -179,6 +256,21 @@
                 <a href="/protocols" style="color: #6c757d; text-decoration: none; font-size: 14px;">Clear</a>
             {{end}}
         </form>
+        
+        <div class="dashboard-stats">
+            <div class="stat-tile">
+                <div class="stat-title">Total Protocols</div>
+                <div class="stat-value">{{.TotalCount}}</div>
+            </div>
+            <div class="stat-tile">
+                <div class="stat-title">Filtered</div>
+                <div class="stat-value">{{.ResultCount}}</div>
+            </div>
+            <div class="stat-tile">
+                <div class="stat-title">Last Import</div>
+                <div class="stat-value">{{.LastImport}}</div>
+            </div>
+        </div>
         
         <div class="stats">
             Showing {{.ResultCount}} of {{.TotalCount}} protocols

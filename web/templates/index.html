@@ -77,93 +77,128 @@
         </style>
     </head>
     <body>
-        <h1>Blowing Simulator - Batch Calculate Reports</h1>
-        <div style="margin-bottom: 2em">
-            <a
-                href="/create-fremco"
-                style="
-                    display: inline-block;
-                    margin-right: 1em;
-                    padding: 0.7em 2em;
-                    background: #1976d2;
-                    color: #fff;
-                    border-radius: 4px;
-                    font-size: 1em;
-                    text-decoration: none;
-                "
-                >Fremco</a
-            >
-            <a
-                href="/create-jetting"
-                style="
-                    display: inline-block;
-                    margin-right: 1em;
-                    padding: 0.7em 2em;
-                    background: #1976d2;
-                    color: #fff;
-                    border-radius: 4px;
-                    font-size: 1em;
-                    text-decoration: none;
-                "
-                >Jetting</a
-            >
-            <a
-                href="/protocols"
-                style="
-                    display: inline-block;
-                    margin-right: 1em;
-                    padding: 0.7em 2em;
-                    background: #28a745;
-                    color: #fff;
-                    border-radius: 4px;
-                    font-size: 1em;
-                    text-decoration: none;
-                "
-                >View Protocols</a
-            >
-            <a
-                href="/protocols/length-report"
-                style="
-                    display: inline-block;
-                    margin-right: 1em;
-                    padding: 0.7em 2em;
-                    background: #28a745;
-                    color: #fff;
-                    border-radius: 4px;
-                    font-size: 1em;
-                    text-decoration: none;
-                "
-                >Length Report</a
-            >
-            <a
-                href="/bulk-upload"
-                style="
-                    display: inline-block;
-                    padding: 0.7em 2em;
-                    background: #6f42c1;
-                    color: #fff;
-                    border-radius: 4px;
-                    font-size: 1em;
-                    text-decoration: none;
-                "
-                >Bulk Upload</a
-            >
+        <div class="dashboard-container">
+            <h1>Blowing Simulator Dashboard</h1>
+            <div class="dashboard-stats">
+                <div class="stat-tile">
+                    <div class="stat-title">Protocols</div>
+                    <div class="stat-value" id="protocolCount">—</div>
+                </div>
+                <div class="stat-tile">
+                    <div class="stat-title">Reports</div>
+                    <div class="stat-value" id="reportCount">—</div>
+                </div>
+                <div class="stat-tile">
+                    <div class="stat-title">Last Upload</div>
+                    <div class="stat-value" id="lastUpload">—</div>
+                </div>
+            </div>
+            <div class="dashboard-tiles">
+                <a href="/create-fremco" class="dashboard-tile fremco">
+                    <span class="tile-icon">🛠️</span>
+                    <span>New Fremco Protocol</span>
+                </a>
+                <a href="/create-jetting" class="dashboard-tile jetting">
+                    <span class="tile-icon">🚀</span>
+                    <span>New Jetting Protocol</span>
+                </a>
+                <a href="/protocols" class="dashboard-tile protocols">
+                    <span class="tile-icon">📄</span>
+                    <span>View Protocols</span>
+                </a>
+                <a href="/protocols/length-report" class="dashboard-tile length-report">
+                    <span class="tile-icon">📏</span>
+                    <span>Length Report</span>
+                </a>
+                <a href="/bulk-upload" class="dashboard-tile bulk-upload">
+                    <span class="tile-icon">📤</span>
+                    <span>Bulk Upload</span>
+                </a>
+            </div>
         </div>
-        <form
-            action="/pdf2text"
-            method="post"
-            enctype="multipart/form-data"
-            style="margin-bottom: 2em"
-        >
-            <label for="pdfFile">Export Report (upload PDF):</label>
-            <input
-                type="file"
-                name="pdfFile"
-                id="pdfFile"
-                accept="application/pdf"
-                required
-            />
-            <button type="submit">Export Report</button>
-        </form>
+        <script>
+            // TODO: Fetch stats via API and update dashboard
+            // Example:
+            // fetch('/api/dashboard-stats').then(r => r.json()).then(stats => {
+            //   document.getElementById('protocolCount').textContent = stats.protocols;
+            //   document.getElementById('reportCount').textContent = stats.reports;
+            //   document.getElementById('lastUpload').textContent = stats.lastUpload;
+            // });
+        </script>
+        <style>
+            .dashboard-container {
+                max-width: 900px;
+                margin: 0 auto;
+                background: #fff;
+                padding: 2em;
+                border-radius: 12px;
+                box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+            }
+            .dashboard-container h1 {
+                text-align: center;
+                color: #2c3e50;
+                margin-bottom: 2em;
+            }
+            .dashboard-stats {
+                display: flex;
+                justify-content: center;
+                gap: 2em;
+                margin-bottom: 2em;
+            }
+            .stat-tile {
+                background: #f8f9fa;
+                border-radius: 8px;
+                padding: 1em 2em;
+                text-align: center;
+                box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+            }
+            .stat-title {
+                color: #888;
+                font-size: 1em;
+                margin-bottom: 0.5em;
+            }
+            .stat-value {
+                font-size: 2em;
+                font-weight: bold;
+                color: #1976d2;
+            }
+            .dashboard-tiles {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                gap: 2em;
+            }
+            .dashboard-tile {
+                background: linear-gradient(135deg, #e3eafc 0%, #f8f9fa 100%);
+                border-radius: 10px;
+                padding: 2em 1em;
+                text-align: center;
+                text-decoration: none;
+                color: #2c3e50;
+                font-size: 1.1em;
+                box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+                transition: box-shadow 0.2s, transform 0.2s;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 1em;
+            }
+            .dashboard-tile:hover {
+                box-shadow: 0 4px 16px rgba(33,150,243,0.12);
+                transform: translateY(-4px) scale(1.04);
+            }
+            .tile-icon {
+                font-size: 2.5em;
+                margin-bottom: 0.5em;
+            }
+            .dashboard-tile.fremco { border-left: 6px solid #1976d2; }
+            .dashboard-tile.jetting { border-left: 6px solid #1976d2; }
+            .dashboard-tile.protocols { border-left: 6px solid #28a745; }
+            .dashboard-tile.length-report { border-left: 6px solid #28a745; }
+            .dashboard-tile.bulk-upload { border-left: 6px solid #6f42c1; }
+            @media (max-width: 600px) {
+                .dashboard-stats { flex-direction: column; gap: 1em; }
+                .dashboard-tiles { grid-template-columns: 1fr; gap: 1em; }
+            }
+        </style>
     </body>
 </html>

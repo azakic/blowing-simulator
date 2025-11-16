@@ -136,9 +136,60 @@
             color: #adb5bd;
             font-style: italic;
         }
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #1976d2;
+            padding: 0.7em 2em;
+            border-radius: 0 0 10px 10px;
+            margin-bottom: 2em;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        }
+        .navbar-brand {
+            font-size: 1.3em;
+            font-weight: bold;
+        }
+        .navbar-logo {
+            color: #fff;
+            text-decoration: none;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        .navbar-links {
+            display: flex;
+            gap: 2em;
+        }
+        .navbar-link {
+            color: #fff;
+            text-decoration: none;
+            font-size: 1em;
+            font-weight: 500;
+            padding-bottom: 2px;
+            border-bottom: 2px solid transparent;
+            transition: border-color 0.2s;
+        }
+        .navbar-link:hover, .navbar-link.active {
+            border-bottom: 2px solid #fff;
+        }
+        @media (max-width: 700px) {
+            .navbar { flex-direction: column; gap: 1em; padding: 1em; }
+            .navbar-links { gap: 1em; }
+        }
     </style>
 </head>
 <body>
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <a href="/" class="navbar-logo">Blowing Simulator</a>
+        </div>
+        <div class="navbar-links">
+            <a href="/" class="navbar-link">Dashboard</a>
+            <a href="/protocols" class="navbar-link">Protocols</a>
+            <a href="/protocols/length-report" class="navbar-link">Length Report</a>
+            <a href="/bulk-upload" class="navbar-link">Bulk Upload</a>
+        </div>
+    </nav>
     <div class="container">
         <a href="/protocols" class="back-link">← Back to Protocols</a>
         
