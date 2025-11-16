@@ -30,13 +30,21 @@ func ensureUsersTable(db *sqlx.DB) error {
 		id SERIAL PRIMARY KEY,
 		email TEXT NOT NULL UNIQUE,
 		password_hash TEXT NOT NULL,
-		role TEXT NOT NULL CHECK (role IN ('admin','editor','viewer')),
+		role TEXT NOT NULL CHECK (role IN ('admin','editor','partner','viewer')),
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		updated_at TIMESTAMPTZ
 	);
 	`
 	_, err := db.Exec(schema)
-	return err
+	if err != nil {
+		return err
+	}
+	
+	// Migrate existing constraint to include 'partner' role
+	_, _ = db.Exec("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check")
+	_, _ = db.Exec("ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin','editor','partner','viewer'))")
+	
+	return nil
 }
 
 func seedDefaultAdmin(db *sqlx.DB) error {

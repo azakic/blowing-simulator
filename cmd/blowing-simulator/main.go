@@ -656,17 +656,18 @@ func main() {
 	http.HandleFunc("/export-pdf", ExportPDFHandler)
 	http.HandleFunc("/download-csv", DownloadCSVHandler)
 	http.HandleFunc("/download-pdf", DownloadPDFHandler)
-	http.HandleFunc("/export-csv", requireAuth(ExportCSVHandler, "editor", "admin"))
-	http.HandleFunc("/protocols", requireAuth(ProtocolsHandler, "viewer", "editor", "admin"))
-	http.HandleFunc("/protocols/view", requireAuth(ViewProtocolHandler, "viewer", "editor", "admin"))
-	http.HandleFunc("/protocols/measurements", requireAuth(ProtocolMeasurementsHandler, "viewer", "editor", "admin"))
-	http.HandleFunc("/protocols/length-report", requireAuth(LengthReportHandler, "viewer", "editor", "admin"))
-	http.HandleFunc("/protocols/api/get", requireAuth(ProtocolGetAPIHandler, "viewer", "editor", "admin"))
+	http.HandleFunc("/export-csv", requireAuth(ExportCSVHandler, "editor", "partner", "admin"))
+	http.HandleFunc("/protocols", requireAuth(ProtocolsHandler, "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/protocols/view", requireAuth(ViewProtocolHandler, "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/protocols/delete", requireAuth(DeleteProtocolHandler, "editor", "partner", "admin"))
+	http.HandleFunc("/protocols/measurements", requireAuth(ProtocolMeasurementsHandler, "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/protocols/length-report", requireAuth(LengthReportHandler, "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/protocols/api/get", requireAuth(ProtocolGetAPIHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/admin/users", requireAuth(AdminUsersHandler, "admin"))
 	// Admin utility: backfill ownership for existing protocols (NULL user_id)
 	http.HandleFunc("/admin/backfill-ownership", requireAuth(AdminBackfillOwnershipHandler, "admin"))
 	// Bulk upload requires editor+ role
-	http.HandleFunc("/bulk-upload", requireAuth(BulkUploadHandler, "editor", "admin"))
+	http.HandleFunc("/bulk-upload", requireAuth(BulkUploadHandler, "editor", "partner", "admin"))
 	http.HandleFunc("/debug-pdf", DebugPDFHandler)
 	http.HandleFunc("/health", HealthCheckHandler)
 	// Dashboard stats API (viewer+)
@@ -1040,6 +1041,64 @@ func ViewProtocolHandler(w http.ResponseWriter, r *http.Request) {
 		// Don't try to write error response - headers already sent
 		return
 	}
+}
+
+// DeleteProtocolHandler deletes a protocol and its associated data
+func DeleteProtocolHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	idStr := r.FormValue("id")
+	if idStr == "" {
+		http.Error(w, "Protocol ID required", http.StatusBadRequest)
+		return
+	}
+	
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid protocol ID", http.StatusBadRequest)
+		return
+	}
+	
+	// Check ownership
+	claims := GetAuthClaims(r)
+	if claims == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	
+	// Get the protocol to check ownership
+	var protocol Protocol
+	err = db.Get(&protocol, "SELECT id, user_id FROM protocols WHERE id = $1", id)
+	if err != nil {
+		http.Error(w, "Protocol not found", http.StatusNotFound)
+		return
+	}
+	
+	// Only allow deletion if user owns the protocol or is admin
+	if protocol.UserID.Valid && protocol.UserID.Int64 != claims.UserID && claims.Role != "admin" {
+		http.Error(w, "You can only delete your own protocols", http.StatusForbidden)
+		return
+	}
+	
+	// Delete associated measurements first (foreign key constraint)
+	_, err = db.Exec("DELETE FROM protocol_measurements WHERE protocol_id = $1", id)
+	if err != nil {
+		http.Error(w, "Failed to delete measurements", http.StatusInternalServerError)
+		return
+	}
+	
+	// Delete the protocol
+	_, err = db.Exec("DELETE FROM protocols WHERE id = $1", id)
+	if err != nil {
+		http.Error(w, "Failed to delete protocol", http.StatusInternalServerError)
+		return
+	}
+	
+	// Redirect back to protocols page
+	http.Redirect(w, r, "/protocols", http.StatusSeeOther)
 }
 
 // ProtocolMeasurementsHandler displays detailed measurement data for a protocol
