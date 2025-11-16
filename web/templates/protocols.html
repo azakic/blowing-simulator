@@ -98,6 +98,7 @@
             padding: 12px;
             text-align: left;
             font-weight: 600;
+            cursor: pointer;
         }
         .protocols-table td {
             padding: 12px;
@@ -213,6 +214,31 @@
         .navbar-link:hover, .navbar-link.active {
             border-bottom: 2px solid #fff;
         }
+        .pagination-bar {
+            display: flex;
+            justify-content: center;
+            gap: 0.5em;
+            margin-bottom: 1em;
+        }
+        .page-btn {
+            background: #f8f9fa;
+            border: 1px solid #1976d2;
+            color: #1976d2;
+            padding: 6px 14px;
+            border-radius: 4px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+        }
+        .page-btn.active, .page-btn:hover {
+            background: #1976d2;
+            color: #fff;
+        }
+        .page-btn:disabled {
+            background: #eee;
+            color: #aaa;
+            cursor: not-allowed;
+        }
         @media (max-width: 700px) {
             .dashboard-stats { flex-direction: column; gap: 1em; }
             .protocols-table th, .protocols-table td { font-size: 12px; padding: 6px; }
@@ -251,6 +277,10 @@
                 <option value="fremco" {{if eq .Type "fremco"}}selected{{end}}>Fremco</option>
                 <option value="jetting" {{if eq .Type "jetting"}}selected{{end}}>Jetting</option>
             </select>
+            <input type="text" name="company" placeholder="Company..." value="{{.Company}}">
+            <input type="date" name="date_from" value="{{.DateFrom}}">
+            <span style="margin: 0 5px;">to</span>
+            <input type="date" name="date_to" value="{{.DateTo}}">
             <button type="submit">Search</button>
             {{if or .Search (ne .Type "")}}
                 <a href="/protocols" style="color: #6c757d; text-decoration: none; font-size: 14px;">Clear</a>
@@ -282,16 +312,16 @@
         <table class="protocols-table">
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>Type</th>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>System</th>
-                    <th>Company</th>
-                    <th>Service Provider</th>
-                    <th>Project #</th>
-                    <th>Filename</th>
-                    <th>Created</th>
+                    <th onclick="sortTable('ID')">ID</th>
+                    <th onclick="sortTable('ProtocolType')">Type</th>
+                    <th onclick="sortTable('ProtocolDate')">Date</th>
+                    <th onclick="sortTable('StartTime')">Time</th>
+                    <th onclick="sortTable('SystemName')">System</th>
+                    <th onclick="sortTable('Company')">Company</th>
+                    <th onclick="sortTable('ServiceProvider')">Service Provider</th>
+                    <th onclick="sortTable('ProjectNumber')">Project #</th>
+                    <th onclick="sortTable('SourceFilename')">Filename</th>
+                    <th onclick="sortTable('CreatedAt')">Created</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -315,6 +345,17 @@
                 {{end}}
             </tbody>
         </table>
+        
+        <!-- Pagination Controls -->
+        <div class="pagination-bar">
+            {{if gt .TotalPages 1}}
+                <button class="page-btn" {{if eq .Page 1}}disabled{{end}} onclick="window.location='?page={{sub .Page 1}}{{.QueryString}}'">&laquo; Prev</button>
+                {{range $i := .PageNumbers}}
+                    <button class="page-btn {{if eq $.Page $i}}active{{end}}" onclick="window.location='?page={{$i}}{{$.QueryString}}'">{{$i}}</button>
+                {{end}}
+                <button class="page-btn" {{if eq .Page .TotalPages}}disabled{{end}} onclick="window.location='?page={{add .Page 1}}{{.QueryString}}'">Next &raquo;</button>
+            {{end}}
+        </div>
         {{else}}
         <div class="no-results">
             <h3>No protocols found</h3>
@@ -323,5 +364,14 @@
         </div>
         {{end}}
     </div>
+    <script>
+        // Simple client-side sorting (for demo; backend sorting recommended for large datasets)
+        function sortTable(column) {
+            const params = new URLSearchParams(window.location.search);
+            params.set('sort', column);
+            params.set('order', params.get('order') === 'asc' ? 'desc' : 'asc');
+            window.location.search = params.toString();
+        }
+    </script>
 </body>
 </html>

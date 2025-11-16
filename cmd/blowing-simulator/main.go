@@ -12,6 +12,7 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -734,6 +735,21 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		args = append(args, protocolType)
 	}
 	
+	// Date range filtering
+	dateFrom := r.URL.Query().Get("date_from")
+	dateTo := r.URL.Query().Get("date_to")
+
+	if dateFrom != "" {
+		argCount++
+		query += fmt.Sprintf(" AND protocol_date >= $%d", argCount)
+		args = append(args, dateFrom)
+	}
+	if dateTo != "" {
+		argCount++
+		query += fmt.Sprintf(" AND protocol_date <= $%d", argCount)
+		args = append(args, dateTo)
+	}
+	
 	query += " ORDER BY created_at DESC LIMIT 100"
 	
 	// Execute query
@@ -766,19 +782,62 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		totalCount = 0
 	}
 	
+	// Pagination logic
+	page := 1
+	pageSize := 20 // or any default page size
+	if p := r.URL.Query().Get("page"); p != "" {
+		if pi, err := strconv.Atoi(p); err == nil && pi > 0 {
+			page = pi
+		}
+	}
+	totalPages := (totalCount + pageSize - 1) / pageSize
+	pageNumbers := []int{}
+	for i := 1; i <= totalPages; i++ {
+		pageNumbers = append(pageNumbers, i)
+	}
+
+	// Build query string for pagination/filter links
+	queryString := ""
+	if search != "" {
+		queryString += "&search=" + url.QueryEscape(search)
+	}
+	if protocolType != "" && protocolType != "all" {
+		queryString += "&type=" + url.QueryEscape(protocolType)
+	}
+	if company := r.URL.Query().Get("company"); company != "" {
+		queryString += "&company=" + url.QueryEscape(company)
+	}
+	if dateFrom := r.URL.Query().Get("date_from"); dateFrom != "" {
+		queryString += "&date_from=" + url.QueryEscape(dateFrom)
+	}
+	if dateTo := r.URL.Query().Get("date_to"); dateTo != "" {
+		queryString += "&date_to=" + url.QueryEscape(dateTo)
+	}
+
 	// Render template
-	tmpl := template.Must(template.ParseFiles("web/templates/protocols.html"))
+	tmpl := template.New("protocols.html").Funcs(template.FuncMap{
+		"add": func(a, b int) int { return a + b },
+		"sub": func(a, b int) int { return a - b },
+	})
+	tmpl, err = tmpl.ParseFiles("web/templates/protocols.html")
+	if err != nil {
+		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	data := map[string]interface{}{
 		"Protocols":    protocols,
 		"Search":       search,
 		"Type":         protocolType,
 		"TotalCount":   totalCount,
 		"ResultCount":  len(protocols),
+		"QueryString":  queryString,
+		"TotalPages":   totalPages,
+		"Page":         page,
+		"PageNumbers":  pageNumbers,
 	}
-	
 	err = tmpl.Execute(w, data)
 	if err != nil {
-		http.Error(w, "Error rendering template: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
