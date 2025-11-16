@@ -15,6 +15,9 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Ensure module dependencies and go.sum are in sync with current source
+RUN go mod tidy
+
 # Build the application for the native architecture
 RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o blowing-simulator ./cmd/blowing-simulator
 

@@ -129,7 +129,16 @@ func CreateFremcoHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	tmpl.Execute(w, nil)
+	claims := GetAuthClaims(r)
+	role := ""
+	if claims != nil {
+		role = claims.Role
+	}
+	data := map[string]interface{}{
+		"UserRole": role,
+		"IsAdmin":  strings.EqualFold(role, "admin"),
+	}
+	tmpl.Execute(w, data)
 }
 
 // Create Jetting Report page handler
@@ -139,7 +148,16 @@ func CreateJettingHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	tmpl.Execute(w, nil)
+	claims := GetAuthClaims(r)
+	role := ""
+	if claims != nil {
+		role = claims.Role
+	}
+	data := map[string]interface{}{
+		"UserRole": role,
+		"IsAdmin":  strings.EqualFold(role, "admin"),
+	}
+	tmpl.Execute(w, data)
 }
 
 func extractTextWithGoLib(pdfPath string) (string, error) {
@@ -195,7 +213,16 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodGet {
-		tmpl.Execute(w, nil)
+		claims := GetAuthClaims(r)
+		role := ""
+		if claims != nil {
+			role = claims.Role
+		}
+		data := map[string]interface{}{
+			"UserRole": role,
+			"IsAdmin":  strings.EqualFold(role, "admin"),
+		}
+		tmpl.Execute(w, data)
 		return
 	}
 	// Handle POST (single file)
@@ -465,15 +492,19 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 	// Save protocol data to database
 	var protocolID int
 	var dbErr error
+	var ownerID int64
+	if c := GetAuthClaims(r); c != nil {
+		ownerID = c.UserID
+	}
 	if fremcoProtocol != nil {
-		protocolID, dbErr = SaveFremcoProtocol(db, fremcoProtocol)
+		protocolID, dbErr = SaveFremcoProtocol(db, fremcoProtocol, ownerID)
 		if dbErr != nil {
 			log.Printf("Failed to save Fremco protocol to database: %v", dbErr)
 		} else {
 			log.Printf("Successfully saved Fremco protocol with ID: %d", protocolID)
 		}
 	} else if jettingProtocol != nil {
-		protocolID, dbErr = SaveJettingProtocol(db, jettingProtocol)
+		protocolID, dbErr = SaveJettingProtocol(db, jettingProtocol, ownerID)
 		if dbErr != nil {
 			log.Printf("Failed to save Jetting protocol to database: %v", dbErr)
 		} else {
@@ -504,7 +535,21 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func IndexHandler(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "web/templates/index.html")
+	tmpl, err := template.ParseFiles("web/templates/index.html")
+	if err != nil {
+		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	claims := GetAuthClaims(r)
+	role := ""
+	if claims != nil {
+		role = claims.Role
+	}
+	data := map[string]interface{}{
+		"UserRole": role,
+		"IsAdmin": strings.EqualFold(role, "admin"),
+	}
+	_ = tmpl.Execute(w, data)
 }
 
 func DownloadCSVHandler(w http.ResponseWriter, r *http.Request) {
@@ -584,10 +629,23 @@ func main() {
 	}
 	
 	log.Println("Successfully connected to database")
+
+	// Initialize auth (users table + default admin)
+	if err := initAuth(db); err != nil {
+		log.Fatal("Auth initialization failed:", err)
+	}
+
+	// Ensure ownership column exists for per-user protocol scoping
+	if err := ensureOwnershipColumn(db); err != nil {
+		log.Fatal("Failed to ensure ownership column:", err)
+	}
 	
 	http.HandleFunc("/", IndexHandler)
+	http.HandleFunc("/login", LoginHandler)
+	http.HandleFunc("/logout", LogoutHandler)
 	http.HandleFunc("/download-json", DownloadJSONHandler)
-	http.HandleFunc("/pdf2text", Pdf2TextHandler)
+	// Upload/conversion requires editor+ role
+	http.HandleFunc("/pdf2text", requireAuth(Pdf2TextHandler, "editor", "admin"))
 	http.HandleFunc("/create-report", CreateReportHandler)
 	http.HandleFunc("/edit-report", EditReportHandler)
 	http.HandleFunc("/create-fremco", CreateFremcoHandler)
@@ -598,14 +656,21 @@ func main() {
 	http.HandleFunc("/export-pdf", ExportPDFHandler)
 	http.HandleFunc("/download-csv", DownloadCSVHandler)
 	http.HandleFunc("/download-pdf", DownloadPDFHandler)
-	http.HandleFunc("/export-csv", ExportCSVHandler)
-	http.HandleFunc("/protocols", ProtocolsHandler)
-	http.HandleFunc("/protocols/view", ViewProtocolHandler)
-	http.HandleFunc("/protocols/measurements", ProtocolMeasurementsHandler)
-	http.HandleFunc("/protocols/length-report", LengthReportHandler)
-	http.HandleFunc("/bulk-upload", BulkUploadHandler)
+	http.HandleFunc("/export-csv", requireAuth(ExportCSVHandler, "editor", "admin"))
+	http.HandleFunc("/protocols", requireAuth(ProtocolsHandler, "viewer", "editor", "admin"))
+	http.HandleFunc("/protocols/view", requireAuth(ViewProtocolHandler, "viewer", "editor", "admin"))
+	http.HandleFunc("/protocols/measurements", requireAuth(ProtocolMeasurementsHandler, "viewer", "editor", "admin"))
+	http.HandleFunc("/protocols/length-report", requireAuth(LengthReportHandler, "viewer", "editor", "admin"))
+	http.HandleFunc("/protocols/api/get", requireAuth(ProtocolGetAPIHandler, "viewer", "editor", "admin"))
+	http.HandleFunc("/admin/users", requireAuth(AdminUsersHandler, "admin"))
+	// Admin utility: backfill ownership for existing protocols (NULL user_id)
+	http.HandleFunc("/admin/backfill-ownership", requireAuth(AdminBackfillOwnershipHandler, "admin"))
+	// Bulk upload requires editor+ role
+	http.HandleFunc("/bulk-upload", requireAuth(BulkUploadHandler, "editor", "admin"))
 	http.HandleFunc("/debug-pdf", DebugPDFHandler)
 	http.HandleFunc("/health", HealthCheckHandler)
+	// Dashboard stats API (viewer+)
+	http.HandleFunc("/api/dashboard-stats", requireAuth(DashboardStatsHandler, "viewer", "editor", "partner", "admin"))
 	log.Println("Server started at http://0.0.0.0:8080/")
 	log.Println("Available routes:")
 	log.Println("  GET /")
@@ -629,6 +694,7 @@ type Protocol struct {
 	Operator        sql.NullString `db:"operator"`
 	SourceFilename  sql.NullString `db:"source_filename"`
 	CreatedAt       string         `db:"created_at"`
+	UserID          sql.NullInt64  `db:"user_id"`
 }
 
 // NullTime represents a time.Time that may be null
@@ -711,132 +777,148 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 	// Get search parameters
 	search := r.URL.Query().Get("search")
 	protocolType := r.URL.Query().Get("type")
-	
-	// Build query
-	query := `
-		SELECT id, protocol_type, system_name, protocol_date, start_time, 
-		       project_number, company, service_provider, operator, 
-		       source_filename, created_at::text 
-		FROM protocols 
-		WHERE 1=1`
-	
-	args := []interface{}{}
-	argCount := 0
-	
-	if search != "" {
-		argCount++
-		query += fmt.Sprintf(" AND (COALESCE(company,'') ILIKE $%d OR COALESCE(service_provider,'') ILIKE $%d OR COALESCE(source_filename,'') ILIKE $%d OR COALESCE(project_number,'') ILIKE $%d)", argCount, argCount, argCount, argCount)
-		args = append(args, "%"+search+"%")
-	}
-	
-	if protocolType != "" && protocolType != "all" {
-		argCount++
-		query += fmt.Sprintf(" AND protocol_type = $%d", argCount)
-		args = append(args, protocolType)
-	}
-	
-	// Date range filtering
 	dateFrom := r.URL.Query().Get("date_from")
 	dateTo := r.URL.Query().Get("date_to")
 
+	// Base query
+	query := `
+		SELECT id, protocol_type, system_name, protocol_date, start_time,
+			   project_number, company, service_provider, operator,
+			   source_filename, created_at::text
+		FROM protocols
+		WHERE 1=1`
+	args := []interface{}{}
+	arg := 0
+
+	// Ownership filter: partners and non-admins always see only their data; admins see their own unless scope=all
+	claims := GetAuthClaims(r)
+	isAdmin := claims != nil && strings.EqualFold(claims.Role, "admin")
+	isPartner := claims != nil && strings.EqualFold(claims.Role, "partner")
+	scope := r.URL.Query().Get("scope")
+	
+	// Filter by user_id: partners ALWAYS see only their own data (no scope override)
+	// Admins can use scope=all to see everything
+	showAll := isAdmin && scope == "all"
+	if (!showAll && claims != nil) || isPartner {
+		arg++
+		query += fmt.Sprintf(" AND user_id = $%d", arg)
+		args = append(args, claims.UserID)
+	}
+
+	if search != "" {
+		arg++
+		query += fmt.Sprintf(" AND (COALESCE(company,'') ILIKE $%d OR COALESCE(service_provider,'') ILIKE $%d OR COALESCE(source_filename,'') ILIKE $%d OR COALESCE(project_number,'') ILIKE $%d)", arg, arg, arg, arg)
+		args = append(args, "%"+search+"%")
+	}
+	if protocolType != "" && protocolType != "all" {
+		arg++
+		query += fmt.Sprintf(" AND protocol_type = $%d", arg)
+		args = append(args, protocolType)
+	}
 	if dateFrom != "" {
-		argCount++
-		query += fmt.Sprintf(" AND protocol_date >= $%d", argCount)
+		arg++
+		query += fmt.Sprintf(" AND protocol_date >= $%d", arg)
 		args = append(args, dateFrom)
 	}
 	if dateTo != "" {
-		argCount++
-		query += fmt.Sprintf(" AND protocol_date <= $%d", argCount)
+		arg++
+		query += fmt.Sprintf(" AND protocol_date <= $%d", arg)
 		args = append(args, dateTo)
 	}
-	
-	query += " ORDER BY created_at DESC LIMIT 100"
-	
-	// Execute query
-	var protocols []Protocol
-	err := db.Select(&protocols, query, args...)
-	if err != nil {
-		http.Error(w, "Error fetching protocols: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	
-	// Get total count
+
+	// Count query mirrors filters (run before pagination)
 	countQuery := "SELECT COUNT(*) FROM protocols WHERE 1=1"
-	if search != "" {
-		countQuery += " AND (COALESCE(company,'') ILIKE $1 OR COALESCE(service_provider,'') ILIKE $1 OR COALESCE(source_filename,'') ILIKE $1 OR COALESCE(project_number,'') ILIKE $1)"
-		args = []interface{}{"%"+search+"%"}
-		if protocolType != "" && protocolType != "all" {
-			countQuery += " AND protocol_type = $2"
-			args = append(args, protocolType)
-		}
-	} else if protocolType != "" && protocolType != "all" {
-		countQuery += " AND protocol_type = $1"
-		args = []interface{}{protocolType}
-	} else {
-		args = []interface{}{}
+	countArgs := []interface{}{}
+	cArg := 0
+	if !showAll && claims != nil {
+		cArg++
+		countQuery += fmt.Sprintf(" AND user_id = $%d", cArg)
+		countArgs = append(countArgs, claims.UserID)
 	}
-	
+	if search != "" {
+		cArg++
+		countQuery += fmt.Sprintf(" AND (COALESCE(company,'') ILIKE $%d OR COALESCE(service_provider,'') ILIKE $%d OR COALESCE(source_filename,'') ILIKE $%d OR COALESCE(project_number,'') ILIKE $%d)", cArg, cArg, cArg, cArg)
+		countArgs = append(countArgs, "%"+search+"%")
+	}
+	if protocolType != "" && protocolType != "all" {
+		cArg++
+		countQuery += fmt.Sprintf(" AND protocol_type = $%d", cArg)
+		countArgs = append(countArgs, protocolType)
+	}
+	if dateFrom != "" {
+		cArg++
+		countQuery += fmt.Sprintf(" AND protocol_date >= $%d", cArg)
+		countArgs = append(countArgs, dateFrom)
+	}
+	if dateTo != "" {
+		cArg++
+		countQuery += fmt.Sprintf(" AND protocol_date <= $%d", cArg)
+		countArgs = append(countArgs, dateTo)
+	}
 	var totalCount int
-	err = db.Get(&totalCount, countQuery, args...)
-	if err != nil {
+	if err := db.Get(&totalCount, countQuery, countArgs...); err != nil {
 		totalCount = 0
 	}
-	
-	// Pagination logic
+
+	// Pagination calculation
 	page := 1
-	pageSize := 20 // or any default page size
+	pageSize := 20
 	if p := r.URL.Query().Get("page"); p != "" {
 		if pi, err := strconv.Atoi(p); err == nil && pi > 0 {
 			page = pi
 		}
 	}
+	
+	// Apply pagination to query
+	offset := (page - 1) * pageSize
+	arg++
+	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", arg)
+	args = append(args, pageSize)
+	arg++
+	query += fmt.Sprintf(" OFFSET $%d", arg)
+	args = append(args, offset)
+
+	var protocols []Protocol
+	if err := db.Select(&protocols, query, args...); err != nil {
+		http.Error(w, "Error fetching protocols: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	totalPages := (totalCount + pageSize - 1) / pageSize
 	pageNumbers := []int{}
-	for i := 1; i <= totalPages; i++ {
-		pageNumbers = append(pageNumbers, i)
-	}
+	for i := 1; i <= totalPages; i++ { pageNumbers = append(pageNumbers, i) }
 
-	// Build query string for pagination/filter links
+	// Build query string for link preservation
 	queryString := ""
-	if search != "" {
-		queryString += "&search=" + url.QueryEscape(search)
-	}
-	if protocolType != "" && protocolType != "all" {
-		queryString += "&type=" + url.QueryEscape(protocolType)
-	}
-	if company := r.URL.Query().Get("company"); company != "" {
-		queryString += "&company=" + url.QueryEscape(company)
-	}
-	if dateFrom := r.URL.Query().Get("date_from"); dateFrom != "" {
-		queryString += "&date_from=" + url.QueryEscape(dateFrom)
-	}
-	if dateTo := r.URL.Query().Get("date_to"); dateTo != "" {
-		queryString += "&date_to=" + url.QueryEscape(dateTo)
-	}
+	if search != "" { queryString += "&search=" + url.QueryEscape(search) }
+	if protocolType != "" && protocolType != "all" { queryString += "&type=" + url.QueryEscape(protocolType) }
+	if company := r.URL.Query().Get("company"); company != "" { queryString += "&company=" + url.QueryEscape(company) }
+	if dateFrom != "" { queryString += "&date_from=" + url.QueryEscape(dateFrom) }
+	if dateTo != "" { queryString += "&date_to=" + url.QueryEscape(dateTo) }
 
 	// Render template
 	tmpl := template.New("protocols.html").Funcs(template.FuncMap{
 		"add": func(a, b int) int { return a + b },
 		"sub": func(a, b int) int { return a - b },
 	})
-	tmpl, err = tmpl.ParseFiles("web/templates/protocols.html")
+	tmpl, err := tmpl.ParseFiles("web/templates/protocols.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	data := map[string]interface{}{
-		"Protocols":    protocols,
-		"Search":       search,
-		"Type":         protocolType,
-		"TotalCount":   totalCount,
-		"ResultCount":  len(protocols),
-		"QueryString":  queryString,
-		"TotalPages":   totalPages,
-		"Page":         page,
-		"PageNumbers":  pageNumbers,
+		"Protocols":   protocols,
+		"Search":      search,
+		"Type":        protocolType,
+		"TotalCount":  totalCount,
+		"ResultCount": len(protocols),
+		"QueryString": queryString,
+		"TotalPages":  totalPages,
+		"Page":        page,
+		"PageNumbers": pageNumbers,
+		"UserRole":    func() string { c:=GetAuthClaims(r); if c!=nil {return c.Role}; return "" }(),
+		"IsAdmin":     isAdmin,
 	}
-	err = tmpl.Execute(w, data)
-	if err != nil {
+	if err := tmpl.Execute(w, data); err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -856,17 +938,27 @@ func ViewProtocolHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	// Get protocol info
+	// Get protocol info first
 	var protocol Protocol
 	err = db.Get(&protocol, `
 		SELECT id, protocol_type, system_name, protocol_date, start_time, 
 		       project_number, company, service_provider, operator, 
-		       source_filename, created_at::text 
+		       source_filename, created_at::text, user_id
 		FROM protocols WHERE id = $1`, id)
 	
 	if err != nil {
-		http.Error(w, "Protocol not found: "+err.Error(), http.StatusNotFound)
+		http.Error(w, "Protocol not found", http.StatusNotFound)
 		return
+	}
+	
+	// Ownership check
+	claims := GetAuthClaims(r)
+	isAdmin := claims != nil && strings.EqualFold(claims.Role, "admin")
+	if !isAdmin && claims != nil {
+		if protocol.UserID.Valid && protocol.UserID.Int64 != claims.UserID {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
 	}
 	
 	// Get equipment info
@@ -927,19 +1019,25 @@ func ViewProtocolHandler(w http.ResponseWriter, r *http.Request) {
 	// Get measurements count
 	var measurementCount int
 	db.Get(&measurementCount, "SELECT COUNT(*) FROM protocol_measurements WHERE protocol_id = $1", id)
-	
-	// Render template
-	tmpl := template.Must(template.ParseFiles("web/templates/protocol-detail.html"))
+
+	tmpl, err := template.New("protocol-detail.html").Funcs(template.FuncMap{
+		"sub": func(a, b int) int { return a - b },
+	}).ParseFiles("web/templates/protocol-detail.html")
+	if err != nil {
+		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	data := map[string]interface{}{
 		"Protocol":         protocol,
 		"Equipment":        equipment,
 		"Summary":          summary,
 		"MeasurementCount": measurementCount,
+		"UserRole":         func() string { c:=GetAuthClaims(r); if c!=nil {return c.Role}; return "" }(),
+		"IsAdmin":          isAdmin,
 	}
-	
-	err = tmpl.Execute(w, data)
-	if err != nil {
-		http.Error(w, "Error rendering template: "+err.Error(), http.StatusInternalServerError)
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("Error rendering protocol-detail template: %v", err)
+		// Don't try to write error response - headers already sent
 		return
 	}
 }
@@ -961,6 +1059,21 @@ func ProtocolMeasurementsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
+	// Ownership check
+	claims := GetAuthClaims(r)
+	isAdmin := claims != nil && strings.EqualFold(claims.Role, "admin")
+	if !isAdmin {
+		var owner sql.NullInt64
+		if err := db.QueryRow("SELECT user_id FROM protocols WHERE id = $1", id).Scan(&owner); err != nil {
+			http.Error(w, "Protocol not found", http.StatusNotFound)
+			return
+		}
+		if !owner.Valid || owner.Int64 != claims.UserID {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+	}
+
 	// Get protocol info
 	var protocol Protocol
 	err = db.Get(&protocol, `
@@ -1019,6 +1132,12 @@ func ProtocolMeasurementsHandler(w http.ResponseWriter, r *http.Request) {
 		"sub": func(a, b int) int { return a - b },
 	}
 	tmpl := template.Must(template.New("protocol-measurements.html").Funcs(funcMap).ParseFiles("web/templates/protocol-measurements.html"))
+	
+	role := ""
+	if claims != nil {
+		role = claims.Role
+	}
+	
 	data := map[string]interface{}{
 		"Protocol":     protocol,
 		"Measurements": measurements,
@@ -1030,6 +1149,8 @@ func ProtocolMeasurementsHandler(w http.ResponseWriter, r *http.Request) {
 		"NextPage":     page + 1,
 		"PrevPage":     page - 1,
 		"Limit":        limit,
+		"UserRole":     role,
+		"IsAdmin":      strings.EqualFold(role, "admin"),
 	}
 	
 	err = tmpl.Execute(w, data)
@@ -1037,6 +1158,44 @@ func ProtocolMeasurementsHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error rendering template: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+// ProtocolGetAPIHandler returns a full protocol as JSON (Fremco or Jetting)
+func ProtocolGetAPIHandler(w http.ResponseWriter, r *http.Request) {
+	idStr := r.URL.Query().Get("id")
+	if idStr == "" {
+		http.Error(w, "Protocol ID required", http.StatusBadRequest)
+		return
+	}
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid protocol ID", http.StatusBadRequest)
+		return
+	}
+	// Ownership check
+	claims := GetAuthClaims(r)
+	isAdmin := claims != nil && strings.EqualFold(claims.Role, "admin")
+	if !isAdmin {
+		var owner sql.NullInt64
+		if err := db.QueryRow("SELECT user_id FROM protocols WHERE id = $1", id).Scan(&owner); err != nil {
+			http.Error(w, "Protocol not found", http.StatusNotFound)
+			return
+		}
+		if !owner.Valid || owner.Int64 != claims.UserID {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+	}
+
+	proto, err := LoadProtocol(db, id)
+	if err != nil {
+		http.Error(w, "Failed to load protocol: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(proto)
 }
 
 // HealthCheckHandler provides a simple health check endpoint
@@ -1052,6 +1211,67 @@ func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprintf(w, `{"status": "healthy", "timestamp": "%s", "routes": ["/", "/protocols", "/protocols/view", "/protocols/measurements", "/protocols/length-report"]}`, time.Now().Format(time.RFC3339))
+}
+
+// ensureOwnershipColumn adds user ownership support to protocols table
+func ensureOwnershipColumn(db *sqlx.DB) error {
+	if _, err := db.Exec("ALTER TABLE protocols ADD COLUMN IF NOT EXISTS user_id INTEGER"); err != nil {
+		return err
+	}
+	if _, err := db.Exec("CREATE INDEX IF NOT EXISTS idx_protocols_user ON protocols(user_id)"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// DashboardStatsHandler returns per-user (or global for admin) dashboard stats
+func DashboardStatsHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetAuthClaims(r)
+	isAdmin := claims != nil && strings.EqualFold(claims.Role, "admin")
+	var totalProtocols int
+	var lastUpload sql.NullString
+	if isAdmin {
+		_ = db.Get(&totalProtocols, "SELECT COUNT(*) FROM protocols")
+		_ = db.Get(&lastUpload, "SELECT MAX(created_at)::text FROM protocols")
+	} else {
+		_ = db.Get(&totalProtocols, "SELECT COUNT(*) FROM protocols WHERE user_id = $1", claims.UserID)
+		_ = db.Get(&lastUpload, "SELECT MAX(created_at)::text FROM protocols WHERE user_id = $1", claims.UserID)
+	}
+	resp := map[string]any{
+		"protocols": totalProtocols,
+		// Placeholder: treat protocols as reports for now
+		"reports": totalProtocols,
+		"lastUpload": lastUpload.String,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// AdminBackfillOwnershipHandler assigns ownership (user_id) for protocols where it's NULL
+func AdminBackfillOwnershipHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetAuthClaims(r)
+	if claims == nil || !strings.EqualFold(claims.Role, "admin") {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	// Parse optional user_id from query/form; default to current admin
+	var targetUserID int64 = claims.UserID
+	if u := r.URL.Query().Get("user_id"); u != "" {
+		if v, err := strconv.ParseInt(u, 10, 64); err == nil && v > 0 {
+			targetUserID = v
+		}
+	}
+	res, err := db.Exec("UPDATE protocols SET user_id = $1 WHERE user_id IS NULL", targetUserID)
+	if err != nil {
+		http.Error(w, "Backfill failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	n, _ := res.RowsAffected()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"updated": n,
+		"user_id": targetUserID,
+	})
 }
 
 // LengthReportHandler displays length reports with date filtering and format selection
@@ -1070,7 +1290,7 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 		includeJetting = true
 	}
 	
-	// Build query
+    // Build query
 	query := `
 		SELECT 
 			p.id as protocol_id,
@@ -1092,6 +1312,12 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 	
 	args := []interface{}{}
 	argCount := 0
+
+	claims := GetAuthClaims(r)
+	isAdmin := claims != nil && strings.EqualFold(claims.Role, "admin")
+	isPartner := claims != nil && strings.EqualFold(claims.Role, "partner")
+	scope := r.URL.Query().Get("scope")
+	showAll := isAdmin && scope == "all"
 	
 	// Add date filters
 	if startDate != "" {
@@ -1119,6 +1345,13 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 		query += " AND (" + strings.Join(formatConditions, " OR ") + ")"
 	}
 	
+	// Ownership filter: partners ALWAYS see only their own data (no scope override)
+	if (!showAll && claims != nil) || isPartner {
+		argCount++
+		query += fmt.Sprintf(" AND p.user_id = $%d", argCount)
+		args = append(args, claims.UserID)
+	}
+
 	query += `
 		GROUP BY p.id, p.protocol_type, p.protocol_date, p.company, 
 		         p.service_provider, p.source_filename, p.created_at
@@ -1228,6 +1461,8 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 		"TotalMeasurements": totalMaxLengthSum,     // Now shows sum of max lengths
 		"MaxLengthOverall":  maxLengthOverall,
 		"OverallAverage":    overallAverage,
+		"UserRole":          func() string { c:=GetAuthClaims(r); if c!=nil {return c.Role}; return "" }(),
+		"IsAdmin":           isAdmin,
 	}
 
 	err = tmpl.Execute(w, data)
@@ -1557,7 +1792,17 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		
-		err = tmpl.Execute(w, nil)
+		claims := GetAuthClaims(r)
+		role := ""
+		if claims != nil {
+			role = claims.Role
+		}
+		data := map[string]interface{}{
+			"UserRole": role,
+			"IsAdmin":  strings.EqualFold(role, "admin"),
+		}
+		
+		err = tmpl.Execute(w, data)
 		if err != nil {
 			http.Error(w, "Error rendering template: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -1584,6 +1829,11 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 		skipExisting := r.FormValue("skipExisting") == "true"
 		
 		results := make([]map[string]interface{}, 0)
+		// Determine owner from auth claims
+		var ownerID int64
+		if c := GetAuthClaims(r); c != nil {
+			ownerID = c.UserID
+		}
 		var mutex sync.Mutex
 		var wg sync.WaitGroup
 		
@@ -1641,7 +1891,7 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				
 				// Process the PDF
-				result := processBulkPDF(fh.Filename, content, autoSave)
+				result := processBulkPDF(fh.Filename, content, autoSave, ownerID)
 				
 				mutex.Lock()
 				results = append(results, result)
@@ -1665,7 +1915,7 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // processBulkPDF processes a single PDF file for bulk upload
-func processBulkPDF(filename string, content []byte, autoSave bool) map[string]interface{} {
+func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int64) map[string]interface{} {
 	result := map[string]interface{}{
 		"filename": filename,
 		"success":  false,
@@ -1810,7 +2060,7 @@ func processBulkPDF(filename string, content []byte, autoSave bool) map[string]i
 		log.Printf("Bulk upload - %s: Jetting protocol parsed successfully - %d measurements", filename, measurementCount)
 		
 		if autoSave && db != nil {
-			_, err := SaveJettingProtocol(db, protocol)
+			_, err := SaveJettingProtocol(db, protocol, ownerID)
 			if err != nil {
 				result["error"] = "Database save failed: " + err.Error()
 				log.Printf("Bulk upload error - %s: Jetting database save failed - %v", filename, err)
@@ -1896,7 +2146,7 @@ func processBulkPDF(filename string, content []byte, autoSave bool) map[string]i
 		log.Printf("Bulk upload - %s: Fremco protocol parsed successfully - %d measurements", filename, measurementCount)
 		
 		if autoSave && db != nil {
-			_, err := SaveFremcoProtocol(db, protocol)
+			_, err := SaveFremcoProtocol(db, protocol, ownerID)
 			if err != nil {
 				result["error"] = "Database save failed: " + err.Error()
 				log.Printf("Bulk upload error - %s: Fremco database save failed - %v", filename, err)
@@ -1925,7 +2175,7 @@ func processBulkPDF(filename string, content []byte, autoSave bool) map[string]i
 				log.Printf("Bulk upload - %s: Filename-based Jetting fallback successful - %d measurements", filename, measurementCount)
 				
 				if autoSave && db != nil {
-					_, err := SaveJettingProtocol(db, protocol)
+					_, err := SaveJettingProtocol(db, protocol, ownerID)
 					if err != nil {
 						result["error"] = "Database save failed: " + err.Error()
 						log.Printf("Bulk upload error - %s: Jetting database save failed - %v", filename, err)

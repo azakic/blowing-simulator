@@ -95,7 +95,7 @@ func main() {
 	}
 
 	fmt.Println("Testing SaveFremcoProtocol with test data...")
-	protocolID, err := SaveFremcoProtocol(db, testProtocol)
+	protocolID, err := SaveFremcoProtocol(db, testProtocol, 0)
 	if err != nil {
 		log.Fatalf("SaveFremcoProtocol failed: %v", err)
 	}

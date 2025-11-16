@@ -289,12 +289,25 @@
             <a href="/protocols" class="navbar-link">Protocols</a>
             <a href="/protocols/length-report" class="navbar-link active">Length Report</a>
             <a href="/bulk-upload" class="navbar-link">Bulk Upload</a>
+            {{if .IsAdmin}}
+            <a href="/admin/users" class="navbar-link">Users</a>
+            {{end}}
         </div>
     </nav>
     <div class="container">
         <a href="/protocols" class="back-link">← Back to Protocols</a>
         
         <h1>Length Report by Date</h1>
+        {{/* Admin scope toggles */}}
+        {{if .UserRole}}
+        <div style="margin:10px 0 20px 0;">
+            {{if eq .UserRole "admin"}}
+            <span style="margin-right:10px;color:#555;">Scope:</span>
+            <a href="/protocols/length-report?scope=my" class="btn btn-secondary">My</a>
+            <a href="/protocols/length-report?scope=all" class="btn btn-secondary">All</a>
+            {{end}}
+        </div>
+        {{end}}
         
         <form class="filter-form" method="GET">
             <div class="filter-row">

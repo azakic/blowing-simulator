@@ -152,6 +152,7 @@
         }
         .navbar-logo {
             color: #fff;
+
             text-decoration: none;
             font-weight: bold;
             letter-spacing: 1px;
@@ -188,6 +189,15 @@
             <a href="/protocols" class="navbar-link">Protocols</a>
             <a href="/protocols/length-report" class="navbar-link">Length Report</a>
             <a href="/bulk-upload" class="navbar-link">Bulk Upload</a>
+            {{if .IsAdmin}}
+            <a href="/admin/users" class="navbar-link">Users</a>
+            {{end}}
+            {{if .UserRole}}
+            <span style="color:#fff;font-size:0.85em;opacity:0.85;padding-top:2px;">Role: {{.UserRole}}</span>
+            <a href="/logout" class="navbar-link" style="border-bottom:none;">Logout</a>
+            {{else}}
+            <a href="/login" class="navbar-link" style="border-bottom:none;">Login</a>
+            {{end}}
         </div>
     </nav>
     <div class="container">
@@ -337,6 +347,11 @@
                     {{end}}
                 </div>
             </div>
+                <div class="actions">
+                    <a href="/protocols" class="btn">← Back to List</a>
+                    {{if .Protocol.Company.Valid}}<a href="/protocols?search={{.Protocol.Company.String}}" class="btn btn-success">View Company Protocols</a>{{end}}
+                    <a href="/protocols/api/get?id={{.Protocol.ID}}" class="btn btn-success">Download JSON</a>
+                </div>
         </div>
         
         <div class="actions">

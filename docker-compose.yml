@@ -21,6 +21,9 @@ services:
       DB_PASSWORD: 7fG2vQp9sXw3Lk8r
       DB_NAME: blowing_simulator
       PORT: 8080
+      AUTH_SECRET: supersecretjwtkey_change_me
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: admin123!
     ports:
       - "8080:8080"
 volumes:

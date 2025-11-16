@@ -10,4 +10,6 @@ require (
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.32
+	github.com/golang-jwt/jwt/v5 v5.2.1
+	golang.org/x/crypto v0.27.0
 )

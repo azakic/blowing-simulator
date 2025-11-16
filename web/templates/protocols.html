@@ -258,6 +258,15 @@
             <a href="/protocols" class="navbar-link active">Protocols</a>
             <a href="/protocols/length-report" class="navbar-link">Length Report</a>
             <a href="/bulk-upload" class="navbar-link">Bulk Upload</a>
+            {{if .IsAdmin}}
+            <a href="/admin/users" class="navbar-link">Users</a>
+            {{end}}
+            {{if .UserRole}}
+            <span style="color:#fff;font-size:0.85em;opacity:0.85;padding-top:2px;">Role: {{.UserRole}}</span>
+            <a href="/logout" class="navbar-link" style="border-bottom:none;">Logout</a>
+            {{else}}
+            <a href="/login" class="navbar-link" style="border-bottom:none;">Login</a>
+            {{end}}
         </div>
     </nav>
     <div class="container">
@@ -268,6 +277,11 @@
         <div class="nav-buttons">
             <a href="/protocols" class="nav-btn">All Protocols</a>
             <a href="/protocols/length-report" class="nav-btn reports">Length Report</a>
+            {{if eq .UserRole "admin"}}
+            <span style="margin-left:10px;color:#555;">Scope:</span>
+            <a href="/protocols?scope=my" class="nav-btn" style="background:#17a2b8;">My</a>
+            <a href="/protocols?scope=all" class="nav-btn" style="background:#6c757d;">All</a>
+            {{end}}
         </div>
         
         <form class="search-form" method="GET">

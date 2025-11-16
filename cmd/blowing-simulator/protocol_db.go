@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"strings"
@@ -12,7 +13,7 @@ import (
 )
 
 // SaveFremcoProtocol saves a complete Fremco protocol to the database
-func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol) (int, error) {
+func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID int64) (int, error) {
 	tx, err := db.Begin()
 	if err != nil {
 		return 0, fmt.Errorf("failed to begin transaction: %v", err)
@@ -21,12 +22,12 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol) (int, e
 
 	// Insert main protocol record
 	var protocolID int
-	err = tx.QueryRow(`
+    err = tx.QueryRow(`
 		INSERT INTO protocols (
 			protocol_type, system_name, document_type, protocol_date, start_time,
 			project_number, section_nvt, company, service_provider, operator,
-			remarks, source_filename, parser_version, address
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			remarks, source_filename, parser_version, address, user_id
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id`,
 		"fremco",
 		protocol.ProtocolInfo.System,
@@ -42,6 +43,7 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol) (int, e
 		protocol.ExportMetadata.SourceFilename,
 		protocol.ExportMetadata.ParserVersion,
 		extractAddressFromSectionNVT(protocol.ProtocolInfo.SectionNVT),
+		sql.NullInt64{Int64: ownerID, Valid: ownerID != 0},
 	).Scan(&protocolID)
 
 	if err != nil {
@@ -151,7 +153,7 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol) (int, e
 }
 
 // SaveJettingProtocol saves a complete Jetting protocol to the database
-func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol) (int, error) {
+func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol, ownerID int64) (int, error) {
 	tx, err := db.Begin()
 	if err != nil {
 		return 0, fmt.Errorf("failed to begin transaction: %v", err)
@@ -160,12 +162,12 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol) (int,
 
 	// Insert main protocol record
 	var protocolID int
-	err = tx.QueryRow(`
+    err = tx.QueryRow(`
 		INSERT INTO protocols (
 			protocol_type, system_name, document_type, protocol_date, start_time,
 			project_number, section_nvt, company, service_provider, operator,
-			remarks, source_filename, parser_version, address
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			remarks, source_filename, parser_version, address, user_id
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id`,
 		"jetting",
 		protocol.ProtocolInfo.System,
@@ -181,6 +183,7 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol) (int,
 		protocol.ExportMetadata.SourceFilename,
 		protocol.ExportMetadata.ParserVersion,
 		extractAddressFromSectionNVT(protocol.ProtocolInfo.SectionNVT),
+		sql.NullInt64{Int64: ownerID, Valid: ownerID != 0},
 	).Scan(&protocolID)
 
 	if err != nil {
@@ -258,11 +261,22 @@ func LoadProtocol(db *sqlx.DB, protocolID int) (interface{}, error) {
 func LoadFremcoProtocol(db *sqlx.DB, protocolID int) (*simulator.FremcoProtocol, error) {
 	protocol := &simulator.FremcoProtocol{}
 
-	// Load protocol info
+	// Load protocol info with formatted date/time as text
 	err := db.QueryRow(`
-		SELECT system_name, document_type, protocol_date, start_time, project_number,
-		       section_nvt, company, service_provider, operator, remarks,
-		       source_filename, parser_version, parsed_at
+		SELECT 
+			COALESCE(system_name, ''), 
+			COALESCE(document_type, ''), 
+			COALESCE(to_char(protocol_date, 'YYYY-MM-DD'), ''),
+			COALESCE(to_char(start_time, 'HH24:MI'), ''),
+			COALESCE(project_number, ''),
+			COALESCE(section_nvt, ''),
+			COALESCE(company, ''),
+			COALESCE(service_provider, ''),
+			COALESCE(operator, ''),
+			COALESCE(remarks, ''),
+			COALESCE(source_filename, ''),
+			COALESCE(parser_version, ''),
+			COALESCE(parsed_at, NOW())
 		FROM protocols WHERE id = $1`, protocolID).Scan(
 		&protocol.ProtocolInfo.System,
 		&protocol.ProtocolInfo.DocumentType,
@@ -283,18 +297,174 @@ func LoadFremcoProtocol(db *sqlx.DB, protocolID int) (*simulator.FremcoProtocol,
 		return nil, fmt.Errorf("failed to load protocol info: %v", err)
 	}
 
-	// Load equipment (implementation continues...)
-	// Load summary (implementation continues...)
-	// Load measurements (implementation continues...)
+	// Load equipment
+	var (
+		deviceModel, controllerSN, pipeManufacturer, pipeBundle, pipeType, pipeInnerWall string
+		cableManufacturer, cableDesignation, cableLubricant string
+		compressorModel string
+		pipeTemp, cableTemp, cableDiameter sql.NullFloat64
+		colorCoding pq.StringArray
+		lubricator, crashPerformed, cableBlowingCap, compOilSep, compAfterCooler sql.NullBool
+		crashSpeed, crashMoment sql.NullString
+		fiberCount sql.NullInt64
+	)
+	_ = db.QueryRow(`
+		SELECT device_model, controller_sn, lubricator, crash_test_performed,
+			   crash_test_speed, crash_test_moment,
+			   pipe_manufacturer, pipe_bundle, pipe_type, pipe_color_coding, pipe_inner_wall, pipe_temperature,
+			   cable_manufacturer, cable_designation, cable_fiber_count, cable_diameter, cable_temperature, cable_lubricant, cable_blowing_cap,
+			   compressor_model, compressor_oil_separator, compressor_after_cooler
+		FROM protocol_equipment WHERE protocol_id = $1 LIMIT 1`, protocolID).Scan(
+		&deviceModel, &controllerSN, &lubricator, &crashPerformed,
+		&crashSpeed, &crashMoment,
+		&pipeManufacturer, &pipeBundle, &pipeType, &colorCoding, &pipeInnerWall, &pipeTemp,
+		&cableManufacturer, &cableDesignation, &fiberCount, &cableDiameter, &cableTemp, &cableLubricant, &cableBlowingCap,
+		&compressorModel, &compOilSep, &compAfterCooler,
+	)
+	// Map equipment if present (ignore scan errors if no row)
+	protocol.Equipment.BlowingDevice.Model = deviceModel
+	protocol.Equipment.BlowingDevice.ControllerSN = controllerSN
+	protocol.Equipment.BlowingDevice.Lubricator = lubricator.Bool
+	protocol.Equipment.BlowingDevice.CrashTestPerformed = crashPerformed.Bool
+	if crashSpeed.Valid { s := crashSpeed.String; protocol.Equipment.BlowingDevice.CrashTestSpeed = &s }
+	if crashMoment.Valid { s := crashMoment.String; protocol.Equipment.BlowingDevice.CrashTestMoment = &s }
 
+	protocol.Equipment.Pipe.Manufacturer = pipeManufacturer
+	protocol.Equipment.Pipe.PipeBundle = pipeBundle
+	protocol.Equipment.Pipe.PipeType = pipeType
+	protocol.Equipment.Pipe.ColorCoding = []string(colorCoding)
+	protocol.Equipment.Pipe.InnerWall = pipeInnerWall
+	if pipeTemp.Valid { v := pipeTemp.Float64; protocol.Equipment.Pipe.Temperature = &v }
+
+	protocol.Equipment.Cable.Manufacturer = cableManufacturer
+	protocol.Equipment.Cable.Designation = cableDesignation
+	if fiberCount.Valid { protocol.Equipment.Cable.FiberCount = int(fiberCount.Int64) }
+	if cableDiameter.Valid { protocol.Equipment.Cable.Diameter = cableDiameter.Float64 }
+	if cableTemp.Valid { v := cableTemp.Float64; protocol.Equipment.Cable.Temperature = &v }
+	protocol.Equipment.Cable.Lubricant = cableLubricant
+	protocol.Equipment.Cable.BlowingCap = cableBlowingCap.Bool
+
+	protocol.Equipment.Compressor.Model = compressorModel
+	protocol.Equipment.Compressor.OilSeparator = compOilSep.Bool
+	protocol.Equipment.Compressor.AfterCooler = compAfterCooler.Bool
+
+	// Load summary
+	var (
+		meterStart, meterEnd, totalDistance sql.NullInt64
+		blowingTime sql.NullString
+		weatherTemp, weatherHum, gpsLat, gpsLon sql.NullFloat64
+	)
+	_ = db.QueryRow(`
+		SELECT meter_start, meter_end, total_distance, 
+			   COALESCE(to_char(blowing_time, 'HH24:MI:SS'), ''),
+			   weather_temperature, weather_humidity, gps_latitude, gps_longitude
+		FROM protocol_summary WHERE protocol_id = $1 LIMIT 1`, protocolID).Scan(
+		&meterStart, &meterEnd, &totalDistance, &blowingTime, &weatherTemp, &weatherHum, &gpsLat, &gpsLon,
+	)
+	if meterStart.Valid { protocol.Measurements.MeterReadings.Start = int(meterStart.Int64) }
+	if meterEnd.Valid { protocol.Measurements.MeterReadings.End = int(meterEnd.Int64) }
+	if totalDistance.Valid { protocol.Measurements.Summary.Distance = int(totalDistance.Int64) }
+	protocol.Measurements.Summary.BlowingTime = blowingTime.String
+	if weatherTemp.Valid { protocol.Measurements.Summary.Weather.Temperature = weatherTemp.Float64 }
+	if weatherHum.Valid { protocol.Measurements.Summary.Weather.Humidity = weatherHum.Float64 }
+	if gpsLat.Valid { protocol.Measurements.Summary.GPSLocation.Latitude = gpsLat.Float64 }
+	if gpsLon.Valid { protocol.Measurements.Summary.GPSLocation.Longitude = gpsLon.Float64 }
+
+	// Load measurements
+	rows, err := db.Query(`
+		SELECT COALESCE(length_m,0), COALESCE(speed_m_min,0), COALESCE(pressure_bar,0), COALESCE(torque_percent,0), COALESCE(to_char(timestamp_value,'YYYY-MM-DD HH24:MI:SS'), '')
+		FROM protocol_measurements WHERE protocol_id = $1 ORDER BY COALESCE(sequence_number, id) ASC`, protocolID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load measurements: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var dp simulator.FremcoDataPoint
+		var ts string
+		if err := rows.Scan(&dp.LengthM, &dp.SpeedMMin, &dp.PressureBar, &dp.TorquePercent, &ts); err != nil {
+			return nil, fmt.Errorf("scan measurement: %v", err)
+		}
+		dp.Timestamp = ts
+		protocol.Measurements.DataPoints = append(protocol.Measurements.DataPoints, dp)
+	}
 	return protocol, nil
 }
 
 // LoadJettingProtocol loads a complete Jetting protocol from the database
 func LoadJettingProtocol(db *sqlx.DB, protocolID int) (*simulator.JettingProtocol, error) {
-	// Similar implementation to LoadFremcoProtocol but for Jetting type
 	protocol := &simulator.JettingProtocol{}
-	// Implementation continues...
+	// Protocol info
+	err := db.QueryRow(`
+		SELECT 
+			COALESCE(system_name, ''), 
+			COALESCE(document_type, ''), 
+			COALESCE(to_char(protocol_date, 'YYYY-MM-DD'), ''),
+			COALESCE(to_char(start_time, 'HH24:MI'), ''),
+			project_number,
+			COALESCE(section_nvt, ''),
+			COALESCE(company, ''),
+			COALESCE(service_provider, ''),
+			operator,
+			COALESCE(remarks, ''),
+			COALESCE(source_filename, ''),
+			COALESCE(parser_version, ''),
+			COALESCE(parsed_at, NOW())
+		FROM protocols WHERE id = $1`, protocolID).Scan(
+		&protocol.ProtocolInfo.System,
+		&protocol.ProtocolInfo.DocumentType,
+		&protocol.ProtocolInfo.Date,
+		&protocol.ProtocolInfo.StartTime,
+		&protocol.ProtocolInfo.ProjectNumber,
+		&protocol.ProtocolInfo.SectionNVT,
+		&protocol.ProtocolInfo.Company,
+		&protocol.ProtocolInfo.ServiceProvider,
+		&protocol.ProtocolInfo.Operator,
+		&protocol.ProtocolInfo.Remarks,
+		&protocol.ExportMetadata.SourceFilename,
+		&protocol.ExportMetadata.ParserVersion,
+		&protocol.ExportMetadata.ParsedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load protocol info: %v", err)
+	}
+
+	// Equipment (minimal)
+	var colorCoding pq.StringArray
+	_ = db.QueryRow(`SELECT pipe_color_coding FROM protocol_equipment WHERE protocol_id=$1 LIMIT 1`, protocolID).Scan(&colorCoding)
+	protocol.Equipment.Pipe.ColorCoding = []string(colorCoding)
+
+	// Summary (minimal)
+	var (
+		totalDistance sql.NullInt64
+		blowingTime sql.NullString
+		weatherTemp, weatherHum sql.NullFloat64
+	)
+	_ = db.QueryRow(`
+		SELECT total_distance, COALESCE(to_char(blowing_time,'HH24:MI:SS'),''), weather_temperature, weather_humidity
+		FROM protocol_summary WHERE protocol_id=$1 LIMIT 1`, protocolID).Scan(
+		&totalDistance, &blowingTime, &weatherTemp, &weatherHum,
+	)
+	if totalDistance.Valid { v := int(totalDistance.Int64); protocol.Measurements.Summary.Distance = &v }
+	if blowingTime.Valid { s := blowingTime.String; protocol.Measurements.Summary.BlowingTime = &s }
+	if weatherTemp.Valid { v := weatherTemp.Float64; protocol.Measurements.Summary.Weather.Temperature = &v }
+	if weatherHum.Valid { v := weatherHum.Float64; protocol.Measurements.Summary.Weather.Humidity = &v }
+
+	// Measurements for Jetting
+	rows, err := db.Query(`
+		SELECT COALESCE(length_m,0), COALESCE(temperature_c,0), COALESCE(force_n,0), COALESCE(pressure_bar,0), COALESCE(speed_m_min,0), 
+			   COALESCE(to_char(time_duration,'HH24:MI:SS'),'00:00:00')
+		FROM protocol_measurements WHERE protocol_id = $1 ORDER BY COALESCE(sequence_number, id) ASC`, protocolID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load measurements: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var dp simulator.JettingDataPoint
+		if err := rows.Scan(&dp.LengthM, &dp.TemperatureC, &dp.ForceN, &dp.PressureBar, &dp.SpeedMMin, &dp.TimeDuration); err != nil {
+			return nil, fmt.Errorf("scan measurement: %v", err)
+		}
+		protocol.Measurements.DataPoints = append(protocol.Measurements.DataPoints, dp)
+	}
 	return protocol, nil
 }
 

@@ -77,6 +77,26 @@
         </style>
     </head>
     <body>
+            <nav class="navbar">
+                <div class="navbar-brand">
+                    <a href="/" class="navbar-logo">Blowing Simulator</a>
+                </div>
+                <div class="navbar-links">
+                    <a href="/" class="navbar-link active">Dashboard</a>
+                    <a href="/protocols" class="navbar-link">Protocols</a>
+                    <a href="/protocols/length-report" class="navbar-link">Length Report</a>
+                    <a href="/bulk-upload" class="navbar-link">Bulk Upload</a>
+                    {{if .IsAdmin}}
+                    <a href="/admin/users" class="navbar-link">Users</a>
+                    {{end}}
+                    {{if .UserRole}}
+                    <span style="color:#fff;font-size:0.85em;opacity:0.85;padding-top:2px;">Role: {{.UserRole}}</span>
+                    <a href="/logout" class="navbar-link" style="border-bottom:none;">Logout</a>
+                    {{else}}
+                    <a href="/login" class="navbar-link" style="border-bottom:none;">Login</a>
+                    {{end}}
+                </div>
+            </nav>
         <div class="dashboard-container">
             <h1>Blowing Simulator Dashboard</h1>
             <div class="dashboard-stats">
@@ -114,18 +134,49 @@
                     <span class="tile-icon">📤</span>
                     <span>Bulk Upload</span>
                 </a>
+                                {{if .IsAdmin}}
+                                <a href="/admin/users" class="dashboard-tile" style="border-left: 6px solid #dc3545;">
+                                    <span class="tile-icon">👥</span>
+                                    <span>User Management</span>
+                                </a>
+                                <a href="/admin/backfill-ownership" class="dashboard-tile" style="border-left: 6px solid #dc3545;">
+                                    <span class="tile-icon">🧹</span>
+                                    <span>Backfill Ownership</span>
+                                </a>
+                                {{end}}
             </div>
         </div>
         <script>
-            // TODO: Fetch stats via API and update dashboard
-            // Example:
-            // fetch('/api/dashboard-stats').then(r => r.json()).then(stats => {
-            //   document.getElementById('protocolCount').textContent = stats.protocols;
-            //   document.getElementById('reportCount').textContent = stats.reports;
-            //   document.getElementById('lastUpload').textContent = stats.lastUpload;
-            // });
+                        // Fetch stats via API and update dashboard
+                        fetch('/api/dashboard-stats')
+                            .then(r => r.ok ? r.json() : Promise.reject())
+                            .then(stats => {
+                                document.getElementById('protocolCount').textContent = stats.protocols ?? '—';
+                                document.getElementById('reportCount').textContent = stats.reports ?? '—';
+                                document.getElementById('lastUpload').textContent = stats.lastUpload || '—';
+                            })
+                            .catch(() => {
+                                document.getElementById('protocolCount').textContent = '—';
+                                document.getElementById('reportCount').textContent = '—';
+                                document.getElementById('lastUpload').textContent = '—';
+                            });
         </script>
         <style>
+            .navbar {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                background: #1976d2;
+                padding: 0.7em 2em;
+                border-radius: 0 0 10px 10px;
+                margin-bottom: 2em;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+            }
+            .navbar-brand { font-size: 1.3em; font-weight: bold; }
+            .navbar-logo { color: #fff; text-decoration: none; font-weight: bold; letter-spacing: 1px; }
+            .navbar-links { display: flex; gap: 2em; }
+            .navbar-link { color: #fff; text-decoration: none; font-size: 1em; font-weight: 500; padding-bottom: 2px; border-bottom: 2px solid transparent; transition: border-color 0.2s; }
+            .navbar-link:hover, .navbar-link.active { border-bottom: 2px solid #fff; }
             .dashboard-container {
                 max-width: 900px;
                 margin: 0 auto;
@@ -195,9 +246,47 @@
             .dashboard-tile.protocols { border-left: 6px solid #28a745; }
             .dashboard-tile.length-report { border-left: 6px solid #28a745; }
             .dashboard-tile.bulk-upload { border-left: 6px solid #6f42c1; }
+            .navbar {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                background: #1976d2;
+                padding: 0.7em 2em;
+                border-radius: 0 0 10px 10px;
+                margin-bottom: 2em;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+            }
+            .navbar-brand {
+                font-size: 1.3em;
+                font-weight: bold;
+            }
+            .navbar-logo {
+                color: #fff;
+                text-decoration: none;
+                font-weight: bold;
+                letter-spacing: 1px;
+            }
+            .navbar-links {
+                display: flex;
+                gap: 2em;
+            }
+            .navbar-link {
+                color: #fff;
+                text-decoration: none;
+                font-size: 1em;
+                font-weight: 500;
+                padding-bottom: 2px;
+                border-bottom: 2px solid transparent;
+                transition: border-color 0.2s;
+            }
+            .navbar-link:hover, .navbar-link.active {
+                border-bottom: 2px solid #fff;
+            }
             @media (max-width: 600px) {
                 .dashboard-stats { flex-direction: column; gap: 1em; }
                 .dashboard-tiles { grid-template-columns: 1fr; gap: 1em; }
+                .navbar { flex-direction: column; gap: 1em; padding: 1em; }
+                .navbar-links { gap: 1em; }
             }
         </style>
     </body>
