@@ -1,37 +1,31 @@
-# Dockerfile for blowing-simulator Go app with PostgreSQL
-# Use Go 1.24+ to match your local environment
-FROM golang:1.24-alpine
+# Multi-stage build — runtime image je ~60 MB umesto ~800 MB.
+#
+# Bitno: aplikacija čita šablone relativnom putanjom ("web/templates/..."),
+# pa radni direktorijum mora biti /app i `web/` mora biti u finalnoj slici.
+# `poppler-utils` je potreban jer se PDF tekst izvlači preko `pdftotext`.
 
-# Install additional packages needed for the app
-RUN apk --no-cache add ca-certificates tzdata poppler-utils
+FROM golang:1.24-alpine AS build
+WORKDIR /src
 
-# Set working directory
-WORKDIR /app
-
-# Copy go mod files first for better caching
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source code
 COPY . .
+RUN CGO_ENABLED=0 GOOS=linux \
+    go build -trimpath -ldflags="-w -s" -o /out/blowing-simulator ./cmd/blowing-simulator
 
-# Ensure module dependencies and go.sum are in sync with current source
-RUN go mod tidy
+FROM alpine:3.22
+RUN apk --no-cache add ca-certificates tzdata poppler-utils \
+ && addgroup -g 65534 -S app 2>/dev/null || true
 
-# Build the application for the native architecture
-RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o blowing-simulator ./cmd/blowing-simulator
+WORKDIR /app
+COPY --from=build /out/blowing-simulator /app/blowing-simulator
+COPY web ./web
 
-# Ensure the binary is executable
-RUN chmod +x blowing-simulator
-
-# Debug: Check if binary exists  
-RUN ls -la blowing-simulator
-
-# Set environment
 ENV PORT=8080
-
-# Expose port
 EXPOSE 8080
 
-# Run the application
-CMD ["./blowing-simulator"]
+# Ne pokreći kao root; /tmp je world-writable pa obrada PDF-ova radi.
+USER 65534:65534
+
+CMD ["/app/blowing-simulator"]

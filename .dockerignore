@@ -1,0 +1,10 @@
+.git
+.gitignore
+.github
+blowing-simulator
+blowing-simulator.db
+*.md
+.env
+.env.example
+docker-compose.yml
+docker-compose.override.yml
