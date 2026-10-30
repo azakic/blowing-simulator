@@ -262,6 +262,10 @@ if strings.Contains(rawStr, "Länge") &&
 
 ### Environment Variables
 
+> **Tajne se ne commit-uju.** `AUTH_SECRET`, `DB_PASSWORD` i `ADMIN_PASSWORD`
+> se čitaju iz `.env` (vidi [`.env.example`](.env.example)); `docker compose`
+> odbija da se pokrene ako nisu postavljeni.
+
 The application supports the following environment variables:
 
 ```bash
@@ -269,7 +273,7 @@ The application supports the following environment variables:
 DB_HOST=localhost          # Database host (default: localhost)
 DB_PORT=5432              # Database port (default: 5432)  
 DB_USER=blowing           # Database username (default: blowing)
-DB_PASSWORD=password      # Database password (default: 7fG2vQp9sXw3Lk8r)
+DB_PASSWORD=password      # Database password (obavezno, iz .env)
 DB_NAME=blowing_simulator # Database name (default: blowing_simulator)
 
 # Application Configuration  
@@ -290,7 +294,7 @@ services:
       - DB_HOST=db
       - DB_PORT=5432
       - DB_USER=blowing
-      - DB_PASSWORD=7fG2vQp9sXw3Lk8r
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=blowing_simulator
     depends_on:
       - db
@@ -299,7 +303,7 @@ services:
     image: postgres:15
     environment:
       - POSTGRES_USER=blowing
-      - POSTGRES_PASSWORD=7fG2vQp9sXw3Lk8r  
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=blowing_simulator
     volumes:
       - postgres_data:/var/lib/postgresql/data

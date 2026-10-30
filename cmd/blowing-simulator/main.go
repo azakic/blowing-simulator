@@ -611,7 +611,7 @@ func main() {
 	dbHost := getEnvOrDefault("DB_HOST", "localhost")
 	dbPort := getEnvOrDefault("DB_PORT", "5432")
 	dbUser := getEnvOrDefault("DB_USER", "blowing")
-	dbPassword := getEnvOrDefault("DB_PASSWORD", "7fG2vQp9sXw3Lk8r")
+	dbPassword := os.Getenv("DB_PASSWORD")
 	dbName := getEnvOrDefault("DB_NAME", "blowing_simulator")
 	
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",

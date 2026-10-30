@@ -1,27 +1,29 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
-	"context"
+	"os"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jmoiron/sqlx"
 	"golang.org/x/crypto/bcrypt"
-	"text/template"
 )
 
 type User struct {
-	ID           int64          `db:"id"`
-	Email        string         `db:"email"`
-	PasswordHash string         `db:"password_hash"`
-	Role         string         `db:"role"`
-	CreatedAt    time.Time      `db:"created_at"`
-	UpdatedAt    sql.NullTime   `db:"updated_at"`
+	ID           int64        `db:"id"`
+	Email        string       `db:"email"`
+	PasswordHash string       `db:"password_hash"`
+	Role         string       `db:"role"`
+	CreatedAt    time.Time    `db:"created_at"`
+	UpdatedAt    sql.NullTime `db:"updated_at"`
 }
 
 func ensureUsersTable(db *sqlx.DB) error {
@@ -39,11 +41,11 @@ func ensureUsersTable(db *sqlx.DB) error {
 	if err != nil {
 		return err
 	}
-	
+
 	// Migrate existing constraint to include 'partner' role
 	_, _ = db.Exec("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check")
 	_, _ = db.Exec("ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin','editor','partner','viewer'))")
-	
+
 	return nil
 }
 
@@ -55,8 +57,16 @@ func seedDefaultAdmin(db *sqlx.DB) error {
 	if count > 0 {
 		return nil
 	}
-	email := getEnvOrDefault("ADMIN_EMAIL", "admin@example.com")
-	pwd := getEnvOrDefault("ADMIN_PASSWORD", "admin123!")
+	// Nema fallback lozinke: ako env nije postavljen, admin se ne seeduje.
+	email := strings.TrimSpace(os.Getenv("ADMIN_EMAIL"))
+	pwd := os.Getenv("ADMIN_PASSWORD")
+	if email == "" || pwd == "" {
+		log.Println("ADMIN_EMAIL/ADMIN_PASSWORD not set — skipping default admin seed")
+		return nil
+	}
+	if len(pwd) < 12 {
+		return fmt.Errorf("ADMIN_PASSWORD must be at least 12 characters")
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
 	if err != nil {
 		return err
@@ -81,8 +91,15 @@ type AuthClaims struct {
 	jwt.RegisteredClaims
 }
 
-func jwtSecret() []byte {
-	return []byte(getEnvOrDefault("AUTH_SECRET", "change-me-in-prod"))
+// jwtSecret vraća ključ za potpisivanje JWT-a. Namerno NEMA fallback:
+// ranije je postojao hardkodovan default u ovom repou, pa je svako ko ga
+// pročita mogao da iskuje važeći admin token.
+func jwtSecret() ([]byte, error) {
+	s := os.Getenv("AUTH_SECRET")
+	if len(s) < 32 {
+		return nil, fmt.Errorf("AUTH_SECRET must be set to at least 32 characters")
+	}
+	return []byte(s), nil
 }
 
 func mintJWT(u *User) (string, error) {
@@ -96,12 +113,16 @@ func mintJWT(u *User) (string, error) {
 		},
 	}
 	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return t.SignedString(jwtSecret())
+	secret, err := jwtSecret()
+	if err != nil {
+		return "", err
+	}
+	return t.SignedString(secret)
 }
 
 func parseJWT(tokenStr string) (*AuthClaims, error) {
 	tkn, err := jwt.ParseWithClaims(tokenStr, &AuthClaims{}, func(token *jwt.Token) (interface{}, error) {
-		return jwtSecret(), nil
+		return jwtSecret()
 	})
 	if err != nil {
 		return nil, err
@@ -112,14 +133,18 @@ func parseJWT(tokenStr string) (*AuthClaims, error) {
 	return nil, errors.New("invalid token")
 }
 
-func setAuthCookie(w http.ResponseWriter, token string) {
+func setAuthCookie(w http.ResponseWriter, r *http.Request, token string) {
+	// Cookie je `Secure` kad god je zahtev stigao preko HTTPS-a — bilo
+	// direktno (r.TLS) bilo kroz reverse proxy (X-Forwarded-Proto).
+	// Na taj način radi i lokalno preko http:// bez ručnog menjanja koda.
+	secure := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 	c := &http.Cookie{
 		Name:     "auth_token",
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
-		// Secure: true, // enable behind HTTPS
 	}
 	http.SetCookie(w, c)
 }
@@ -224,7 +249,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Login failed", http.StatusInternalServerError)
 		return
 	}
-	setAuthCookie(w, tok)
+	setAuthCookie(w, r, tok)
 	next := r.FormValue("next")
 	if next == "" {
 		next = "/"

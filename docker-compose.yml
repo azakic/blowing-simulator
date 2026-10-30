@@ -1,3 +1,5 @@
+# Tajne se čitaju iz `.env` (van Gita) — nikad nisu u ovom fajlu.
+# `:?` znači da compose puca sa jasnom greškom ako promenljiva nije postavljena.
 services:
   db:
     image: postgres:15
@@ -5,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: blowing_simulator
       POSTGRES_USER: blowing
-      POSTGRES_PASSWORD: 7fG2vQp9sXw3Lk8r
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
     ports:
       - "5432:5432"
     volumes:
@@ -18,12 +20,12 @@ services:
       DB_HOST: db
       DB_PORT: 5432
       DB_USER: blowing
-      DB_PASSWORD: 7fG2vQp9sXw3Lk8r
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       DB_NAME: blowing_simulator
       PORT: 8080
-      AUTH_SECRET: supersecretjwtkey_change_me
-      ADMIN_EMAIL: admin@example.com
-      ADMIN_PASSWORD: admin123!
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set in .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     ports:
       - "8080:8080"
 volumes:

@@ -7,6 +7,10 @@
 # SQLite database
 blowing.db
 
+# Secrets — NIKADA ne commit-ovati
+.env
+docker-compose.override.yml
+
 # Dependency directories
 vendor/
 
