@@ -31,6 +31,7 @@ type protocolMeta struct {
 	StartTime       sql.NullString
 	ProjectNumber   sql.NullString
 	SectionNVT      sql.NullString
+	Address         sql.NullString
 	Company         sql.NullString
 	ServiceProvider sql.NullString
 	Operator        sql.NullString
@@ -102,12 +103,12 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 	err := db.QueryRow(`
 		SELECT id, protocol_type, source_filename, source_sha256,
 		       protocol_date::text, start_time::text, project_number,
-		       section_nvt, company, service_provider, operator, remarks,
-		       parser_version
+		       section_nvt, coalesce(address, ''), company, service_provider,
+		       operator, remarks, parser_version
 		FROM protocols WHERE id = $1`, id).Scan(
 		&meta.ID, &meta.ProtocolType, &meta.SourceFilename, &meta.SourceSHA,
 		&meta.ProtocolDate, &meta.StartTime, &meta.ProjectNumber,
-		&meta.SectionNVT, &meta.Company, &meta.ServiceProvider, &meta.Operator,
+		&meta.SectionNVT, &meta.Address, &meta.Company, &meta.ServiceProvider, &meta.Operator,
 		&meta.Remarks, &meta.ParserVersion)
 	if err != nil {
 		res.Error = "protocol nije nađen: " + err.Error()
@@ -168,6 +169,7 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 		next["start_time"] = info.StartTime
 		next["project_number"] = info.ProjectNumber
 		next["section_nvt"] = info.SectionNVT
+		next["address"] = extractAddressFromSectionNVT(info.SectionNVT)
 		next["company"] = info.Company
 		next["service_provider"] = info.ServiceProvider
 		next["operator"] = info.Operator
@@ -187,6 +189,7 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 			next["project_number"] = *info.ProjectNumber
 		}
 		next["section_nvt"] = info.SectionNVT
+		next["address"] = extractAddressFromSectionNVT(info.SectionNVT)
 		next["company"] = info.Company
 		next["service_provider"] = info.ServiceProvider
 		if info.Operator != nil {
@@ -205,6 +208,7 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 		"start_time":       meta.StartTime.String,
 		"project_number":   meta.ProjectNumber.String,
 		"section_nvt":      meta.SectionNVT.String,
+		"address":          meta.Address.String,
 		"company":          meta.Company.String,
 		"service_provider": meta.ServiceProvider.String,
 		"operator":         meta.Operator.String,
@@ -218,6 +222,17 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 			continue // ne brišemo ono što je već upisano
 		}
 		oldVal := strings.TrimSpace(current[field])
+
+		// Datum, vreme i adresa se na uploadu uzimaju iz imena fajla, koje
+		// generiše uređaj i nema OCR grešaka. PDF (OCR) ih popunjava samo ako
+		// u bazi nema ničega; razliku samo logujemo.
+		if filenameAuthoritative[field] && oldVal != "" {
+			if !sameValue(field, oldVal, newVal) {
+				log.Printf("reparse %d: %s se razlikuje (baza %q, PDF %q) — zadržavam postojeće", id, field, oldVal, newVal)
+			}
+			continue
+		}
+
 		if sameValue(field, oldVal, newVal) {
 			continue
 		}
@@ -248,7 +263,7 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 		parseTime(firstNonEmpty(next["start_time"], current["start_time"])),
 		nullIfEmpty(firstNonEmpty(next["project_number"], current["project_number"])),
 		nullIfEmpty(section),
-		nullIfEmpty(extractAddressFromSectionNVT(section)),
+		nullIfEmpty(firstNonEmpty(next["address"], current["address"])),
 		nullIfEmpty(firstNonEmpty(next["company"], current["company"])),
 		nullIfEmpty(firstNonEmpty(next["service_provider"], current["service_provider"])),
 		nullIfEmpty(firstNonEmpty(next["operator"], current["operator"])),
@@ -260,6 +275,14 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 		return res
 	}
 	return res
+}
+
+// filenameAuthoritative su polja koja se na uploadu pune iz imena fajla.
+// Re-parse ih ne prepisuje OCR vrednošću (OCR ume da pogreši, npr. „1vV2200").
+var filenameAuthoritative = map[string]bool{
+	"protocol_date": true,
+	"start_time":    true,
+	"section_nvt":   true,
 }
 
 // sameValue poredi vrednosti po normalizovanom obliku (datum/vreme se u bazi

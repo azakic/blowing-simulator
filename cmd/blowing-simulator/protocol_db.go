@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"blowing-simulator/internal/simulator"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
-	"blowing-simulator/internal/simulator"
 )
 
 // SaveFremcoProtocol saves a complete Fremco protocol to the database
@@ -22,7 +22,7 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID
 
 	// Insert main protocol record
 	var protocolID int
-    err = tx.QueryRow(`
+	err = tx.QueryRow(`
 		INSERT INTO protocols (
 			protocol_type, system_name, document_type, protocol_date, start_time,
 			project_number, section_nvt, company, service_provider, operator,
@@ -114,9 +114,9 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID
 	log.Printf("SaveFremcoProtocol: Starting to insert %d measurements for protocol ID %d", len(protocol.Measurements.DataPoints), protocolID)
 	for i, dataPoint := range protocol.Measurements.DataPoints {
 		parsedTimestamp := parseTimestamp(dataPoint.Timestamp)
-		log.Printf("SaveFremcoProtocol: Inserting measurement %d - Length: %f, Speed: %f, Timestamp: %s -> Parsed: %v", 
+		log.Printf("SaveFremcoProtocol: Inserting measurement %d - Length: %f, Speed: %f, Timestamp: %s -> Parsed: %v",
 			i, dataPoint.LengthM, dataPoint.SpeedMMin, dataPoint.Timestamp, parsedTimestamp)
-		
+
 		_, err = tx.Exec(`
 			INSERT INTO protocol_measurements (
 				protocol_id, length_m, speed_m_min, pressure_bar, torque_percent,
@@ -135,8 +135,8 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID
 			log.Printf("SaveFremcoProtocol: Failed to insert measurement %d: %v", i, err)
 			return 0, fmt.Errorf("failed to insert measurement %d: %v", i, err)
 		}
-		
-		if i < 3 {  // Log first few measurements
+
+		if i < 3 { // Log first few measurements
 			log.Printf("SaveFremcoProtocol: Successfully inserted measurement %d", i)
 		}
 	}
@@ -162,7 +162,7 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol, owner
 
 	// Insert main protocol record
 	var protocolID int
-    err = tx.QueryRow(`
+	err = tx.QueryRow(`
 		INSERT INTO protocols (
 			protocol_type, system_name, document_type, protocol_date, start_time,
 			project_number, section_nvt, company, service_provider, operator,
@@ -300,13 +300,13 @@ func LoadFremcoProtocol(db *sqlx.DB, protocolID int) (*simulator.FremcoProtocol,
 	// Load equipment
 	var (
 		deviceModel, controllerSN, pipeManufacturer, pipeBundle, pipeType, pipeInnerWall string
-		cableManufacturer, cableDesignation, cableLubricant string
-		compressorModel string
-		pipeTemp, cableTemp, cableDiameter sql.NullFloat64
-		colorCoding pq.StringArray
-		lubricator, crashPerformed, cableBlowingCap, compOilSep, compAfterCooler sql.NullBool
-		crashSpeed, crashMoment sql.NullString
-		fiberCount sql.NullInt64
+		cableManufacturer, cableDesignation, cableLubricant                              string
+		compressorModel                                                                  string
+		pipeTemp, cableTemp, cableDiameter                                               sql.NullFloat64
+		colorCoding                                                                      pq.StringArray
+		lubricator, crashPerformed, cableBlowingCap, compOilSep, compAfterCooler         sql.NullBool
+		crashSpeed, crashMoment                                                          sql.NullString
+		fiberCount                                                                       sql.NullInt64
 	)
 	_ = db.QueryRow(`
 		SELECT device_model, controller_sn, lubricator, crash_test_performed,
@@ -326,21 +326,37 @@ func LoadFremcoProtocol(db *sqlx.DB, protocolID int) (*simulator.FremcoProtocol,
 	protocol.Equipment.BlowingDevice.ControllerSN = controllerSN
 	protocol.Equipment.BlowingDevice.Lubricator = lubricator.Bool
 	protocol.Equipment.BlowingDevice.CrashTestPerformed = crashPerformed.Bool
-	if crashSpeed.Valid { s := crashSpeed.String; protocol.Equipment.BlowingDevice.CrashTestSpeed = &s }
-	if crashMoment.Valid { s := crashMoment.String; protocol.Equipment.BlowingDevice.CrashTestMoment = &s }
+	if crashSpeed.Valid {
+		s := crashSpeed.String
+		protocol.Equipment.BlowingDevice.CrashTestSpeed = &s
+	}
+	if crashMoment.Valid {
+		s := crashMoment.String
+		protocol.Equipment.BlowingDevice.CrashTestMoment = &s
+	}
 
 	protocol.Equipment.Pipe.Manufacturer = pipeManufacturer
 	protocol.Equipment.Pipe.PipeBundle = pipeBundle
 	protocol.Equipment.Pipe.PipeType = pipeType
 	protocol.Equipment.Pipe.ColorCoding = []string(colorCoding)
 	protocol.Equipment.Pipe.InnerWall = pipeInnerWall
-	if pipeTemp.Valid { v := pipeTemp.Float64; protocol.Equipment.Pipe.Temperature = &v }
+	if pipeTemp.Valid {
+		v := pipeTemp.Float64
+		protocol.Equipment.Pipe.Temperature = &v
+	}
 
 	protocol.Equipment.Cable.Manufacturer = cableManufacturer
 	protocol.Equipment.Cable.Designation = cableDesignation
-	if fiberCount.Valid { protocol.Equipment.Cable.FiberCount = int(fiberCount.Int64) }
-	if cableDiameter.Valid { protocol.Equipment.Cable.Diameter = cableDiameter.Float64 }
-	if cableTemp.Valid { v := cableTemp.Float64; protocol.Equipment.Cable.Temperature = &v }
+	if fiberCount.Valid {
+		protocol.Equipment.Cable.FiberCount = int(fiberCount.Int64)
+	}
+	if cableDiameter.Valid {
+		protocol.Equipment.Cable.Diameter = cableDiameter.Float64
+	}
+	if cableTemp.Valid {
+		v := cableTemp.Float64
+		protocol.Equipment.Cable.Temperature = &v
+	}
 	protocol.Equipment.Cable.Lubricant = cableLubricant
 	protocol.Equipment.Cable.BlowingCap = cableBlowingCap.Bool
 
@@ -350,8 +366,8 @@ func LoadFremcoProtocol(db *sqlx.DB, protocolID int) (*simulator.FremcoProtocol,
 
 	// Load summary
 	var (
-		meterStart, meterEnd, totalDistance sql.NullInt64
-		blowingTime sql.NullString
+		meterStart, meterEnd, totalDistance     sql.NullInt64
+		blowingTime                             sql.NullString
 		weatherTemp, weatherHum, gpsLat, gpsLon sql.NullFloat64
 	)
 	_ = db.QueryRow(`
@@ -361,14 +377,28 @@ func LoadFremcoProtocol(db *sqlx.DB, protocolID int) (*simulator.FremcoProtocol,
 		FROM protocol_summary WHERE protocol_id = $1 LIMIT 1`, protocolID).Scan(
 		&meterStart, &meterEnd, &totalDistance, &blowingTime, &weatherTemp, &weatherHum, &gpsLat, &gpsLon,
 	)
-	if meterStart.Valid { protocol.Measurements.MeterReadings.Start = int(meterStart.Int64) }
-	if meterEnd.Valid { protocol.Measurements.MeterReadings.End = int(meterEnd.Int64) }
-	if totalDistance.Valid { protocol.Measurements.Summary.Distance = int(totalDistance.Int64) }
+	if meterStart.Valid {
+		protocol.Measurements.MeterReadings.Start = int(meterStart.Int64)
+	}
+	if meterEnd.Valid {
+		protocol.Measurements.MeterReadings.End = int(meterEnd.Int64)
+	}
+	if totalDistance.Valid {
+		protocol.Measurements.Summary.Distance = int(totalDistance.Int64)
+	}
 	protocol.Measurements.Summary.BlowingTime = blowingTime.String
-	if weatherTemp.Valid { protocol.Measurements.Summary.Weather.Temperature = weatherTemp.Float64 }
-	if weatherHum.Valid { protocol.Measurements.Summary.Weather.Humidity = weatherHum.Float64 }
-	if gpsLat.Valid { protocol.Measurements.Summary.GPSLocation.Latitude = gpsLat.Float64 }
-	if gpsLon.Valid { protocol.Measurements.Summary.GPSLocation.Longitude = gpsLon.Float64 }
+	if weatherTemp.Valid {
+		protocol.Measurements.Summary.Weather.Temperature = weatherTemp.Float64
+	}
+	if weatherHum.Valid {
+		protocol.Measurements.Summary.Weather.Humidity = weatherHum.Float64
+	}
+	if gpsLat.Valid {
+		protocol.Measurements.Summary.GPSLocation.Latitude = gpsLat.Float64
+	}
+	if gpsLon.Valid {
+		protocol.Measurements.Summary.GPSLocation.Longitude = gpsLon.Float64
+	}
 
 	// Load measurements
 	rows, err := db.Query(`
@@ -435,8 +465,8 @@ func LoadJettingProtocol(db *sqlx.DB, protocolID int) (*simulator.JettingProtoco
 
 	// Summary (minimal)
 	var (
-		totalDistance sql.NullInt64
-		blowingTime sql.NullString
+		totalDistance           sql.NullInt64
+		blowingTime             sql.NullString
 		weatherTemp, weatherHum sql.NullFloat64
 	)
 	_ = db.QueryRow(`
@@ -444,10 +474,22 @@ func LoadJettingProtocol(db *sqlx.DB, protocolID int) (*simulator.JettingProtoco
 		FROM protocol_summary WHERE protocol_id=$1 LIMIT 1`, protocolID).Scan(
 		&totalDistance, &blowingTime, &weatherTemp, &weatherHum,
 	)
-	if totalDistance.Valid { v := int(totalDistance.Int64); protocol.Measurements.Summary.Distance = &v }
-	if blowingTime.Valid { s := blowingTime.String; protocol.Measurements.Summary.BlowingTime = &s }
-	if weatherTemp.Valid { v := weatherTemp.Float64; protocol.Measurements.Summary.Weather.Temperature = &v }
-	if weatherHum.Valid { v := weatherHum.Float64; protocol.Measurements.Summary.Weather.Humidity = &v }
+	if totalDistance.Valid {
+		v := int(totalDistance.Int64)
+		protocol.Measurements.Summary.Distance = &v
+	}
+	if blowingTime.Valid {
+		s := blowingTime.String
+		protocol.Measurements.Summary.BlowingTime = &s
+	}
+	if weatherTemp.Valid {
+		v := weatherTemp.Float64
+		protocol.Measurements.Summary.Weather.Temperature = &v
+	}
+	if weatherHum.Valid {
+		v := weatherHum.Float64
+		protocol.Measurements.Summary.Weather.Humidity = &v
+	}
 
 	// Measurements for Jetting
 	rows, err := db.Query(`
@@ -473,7 +515,7 @@ func parseDate(dateStr string) *time.Time {
 	if dateStr == "" {
 		return nil
 	}
-	
+
 	// Try multiple date formats
 	formats := []string{"2006-01-02", "02.01.2006", "01/02/2006"}
 	for _, format := range formats {
@@ -488,7 +530,7 @@ func parseTime(timeStr string) *time.Time {
 	if timeStr == "" {
 		return nil
 	}
-	
+
 	// Try multiple time formats
 	formats := []string{"15:04", "15.04", "15:04:05"}
 	for _, format := range formats {
@@ -503,7 +545,7 @@ func parseDuration(durationStr string) *time.Duration {
 	if durationStr == "" {
 		return nil
 	}
-	
+
 	// Parse duration in format "hh:mm:ss"
 	if d, err := time.ParseDuration(durationStr); err == nil {
 		return &d
@@ -516,19 +558,19 @@ func parseTimestamp(timestampStr string) *time.Time {
 		log.Printf("parseTimestamp: Empty timestamp string")
 		return nil
 	}
-	
+
 	log.Printf("parseTimestamp: Parsing timestamp: '%s'", timestampStr)
-	
+
 	// Try multiple timestamp formats
 	formats := []string{
 		"2006-01-02 15:04:05",
-		"2006-01-02 15:04",      // Added this format for timestamps without seconds
+		"2006-01-02 15:04", // Added this format for timestamps without seconds
 		"2006-01-02T15:04:05",
-		"2006-01-02T15:04",      // Added this format too
+		"2006-01-02T15:04", // Added this format too
 		"02.01.2006 15:04:05",
-		"02.01.2006 15:04",      // And this one
+		"02.01.2006 15:04", // And this one
 	}
-	
+
 	for i, format := range formats {
 		if t, err := time.Parse(format, timestampStr); err == nil {
 			log.Printf("parseTimestamp: Successfully parsed '%s' using format %d (%s) -> %v", timestampStr, i, format, t)
@@ -537,17 +579,20 @@ func parseTimestamp(timestampStr string) *time.Time {
 			log.Printf("parseTimestamp: Failed format %d (%s): %v", i, format, err)
 		}
 	}
-	
+
 	log.Printf("parseTimestamp: All formats failed for '%s'", timestampStr)
 	return nil
 }
 
 // Helper to extract address from SectionNVT string
 func extractAddressFromSectionNVT(sectionNVT string) string {
-    // If SectionNVT is in format "address / NVT", extract address part
-    parts := strings.Split(sectionNVT, "/")
-    if len(parts) > 0 {
-        return strings.TrimSpace(parts[0])
-    }
-    return sectionNVT
+	// Dva zapisa u upotrebi: "Dammstr.15 / 1V2200" (ime fajla) i
+	// "Dammstr.15 NVT 1V2200" (zaglavlje dokumenta).
+	if idx := strings.Index(sectionNVT, "/"); idx > 0 {
+		return strings.TrimSpace(sectionNVT[:idx])
+	}
+	if idx := strings.Index(strings.ToUpper(sectionNVT), "NVT"); idx > 0 {
+		return strings.TrimSpace(strings.TrimRight(sectionNVT[:idx], " /,|"))
+	}
+	return strings.TrimSpace(sectionNVT)
 }
