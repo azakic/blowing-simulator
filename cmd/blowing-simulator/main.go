@@ -394,11 +394,16 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 	var normalized string
 	var jsonOutput []byte
 
-	// Try Go-native extraction first
-	text, err := extractTextWithGoLib(tempPdf)
+	// pdftotext -layout + OCR of page 1 when the header is an image.
+	text, err := extractPDFText(tempPdf)
 	if err != nil {
-		http.Error(w, "PDF extraction failed: "+err.Error(), http.StatusInternalServerError)
-		return
+		// Poslednji pokušaj: Go biblioteka (radi za PDF-ove koje poppler odbije).
+		if goText, goErr := extractTextWithGoLib(tempPdf); goErr == nil {
+			text = goText
+		} else {
+			http.Error(w, "PDF extraction failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 	err = os.WriteFile(tempTxt, []byte(text), 0644)
 	if err != nil {
@@ -2252,28 +2257,22 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 	}
 	tempFile.Close()
 	
-	// Extract text using pdftotext first
-	cmd := exec.Command("pdftotext", "-layout", tempFile.Name(), "-")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err = cmd.Run()
-	extractMethod := "pdftotext"
+	// Extract text: pdftotext -layout, plus OCR of page 1 when the header is an
+	// image (Jettlogger layout). OCR is serialized inside simulator.OCRPage.
+	rawText, err := extractPDFText(tempFile.Name())
+	extractMethod := "pdftotext+ocr"
 	if err != nil {
 		log.Printf("Bulk upload - %s: pdftotext failed, trying Go library - %v", filename, err)
 		// Try Go PDF library as fallback
-		text, err := extractTextWithGoLib(tempFile.Name())
-		if err != nil {
-			result["error"] = "Both PDF extraction methods failed: pdftotext: " + stderr.String() + ", Go library: " + err.Error()
-			log.Printf("Bulk upload error - %s: All extraction methods failed - pdftotext: %v, Go library: %v", filename, stderr.String(), err)
+		text, goErr := extractTextWithGoLib(tempFile.Name())
+		if goErr != nil {
+			result["error"] = "Both PDF extraction methods failed: pdftotext: " + err.Error() + ", Go library: " + goErr.Error()
+			log.Printf("Bulk upload error - %s: All extraction methods failed - pdftotext: %v, Go library: %v", filename, err, goErr)
 			return result
 		}
-		stdout.WriteString(text)
+		rawText = text
 		extractMethod = "go-library"
 	}
-	
-	rawText := stdout.String()
 	if rawText == "" {
 		result["error"] = "No text extracted from PDF"
 		log.Printf("Bulk upload error - %s: No text extracted using %s", filename, extractMethod)

@@ -15,7 +15,10 @@ RUN CGO_ENABLED=0 GOOS=linux \
     go build -trimpath -ldflags="-w -s" -o /out/blowing-simulator ./cmd/blowing-simulator
 
 FROM alpine:3.22
+# `tesseract` + nemački/engleski jezički paket: zaglavlje „Jettlogger"
+# protokola je slika, pa se čita OCR-om (vidi `internal/simulator/ocr.go`).
 RUN apk --no-cache add ca-certificates tzdata poppler-utils \
+    tesseract-ocr tesseract-ocr-data-deu tesseract-ocr-data-eng \
  && addgroup -g 65534 -S app 2>/dev/null || true
 
 WORKDIR /app
