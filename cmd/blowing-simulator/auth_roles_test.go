@@ -73,3 +73,33 @@ func TestTempPDFPath(t *testing.T) {
 		}
 	}
 }
+
+func TestSourceObjectKey(t *testing.T) {
+	s := &SourceStore{prefix: "blowing/protocols/"}
+	sha := "9f2c" + string([]byte("012345678901234567890123456789012345678901234567890123456789"))
+
+	if got, want := s.objectKey(sha), "blowing/protocols/9f/"+sha+".pdf"; got != want {
+		t.Errorf("objectKey = %q, očekivano %q", got, want)
+	}
+	if got, want := s.objectKey("ab"), "blowing/protocols/ab/ab.pdf"; got != want {
+		t.Errorf("objectKey(2 znaka) = %q, očekivano %q", got, want)
+	}
+	// Hash kraći od 2 znaka ne sme da panikuje (nikad se ne javlja u praksi).
+	if got, want := s.objectKey("a"), "blowing/protocols/a.pdf"; got != want {
+		t.Errorf("objectKey(1 znak) = %q, očekivano %q", got, want)
+	}
+}
+
+func TestSourceSHA256(t *testing.T) {
+	// Stabilan vektor: SHA-256 od "abc".
+	if got, want := sourceSHA256([]byte("abc")), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"; got != want {
+		t.Errorf("sourceSHA256 = %q, očekivano %q", got, want)
+	}
+}
+
+func TestSanitizeHeaderFilename(t *testing.T) {
+	in := "protokoll \"1\"" + "\r\n" + "X.pdf"
+	if got, want := sanitizeHeaderFilename(in), "protokoll 1X.pdf"; got != want {
+		t.Errorf("sanitizeHeaderFilename = %q, očekivano %q", got, want)
+	}
+}

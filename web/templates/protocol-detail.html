@@ -350,6 +350,7 @@
                 <div class="actions">
                     <a href="/protocols" class="btn">← Back to List</a>
                     {{if .Protocol.Company.Valid}}<a href="/protocols?search={{.Protocol.Company.String}}" class="btn btn-success">View Company Protocols</a>{{end}}
+                    {{if .SourceAvailable}}<a href="/protocols/source?id={{.Protocol.ID}}" class="btn btn-success">⬇ Original PDF</a>{{end}}
                     <a href="/protocols/api/get?id={{.Protocol.ID}}" class="btn btn-success">Download JSON</a>
                 </div>
         </div>
@@ -357,6 +358,7 @@
         <div class="actions">
             <a href="/protocols" class="btn">← Back to List</a>
             {{if .Protocol.Company.Valid}}<a href="/protocols?search={{.Protocol.Company.String}}" class="btn btn-success">View Company Protocols</a>{{end}}
+            {{if .SourceAvailable}}<a href="/protocols/source?id={{.Protocol.ID}}" class="btn btn-success">⬇ Original PDF</a>{{end}}
         </div>
     </div>
 </body>

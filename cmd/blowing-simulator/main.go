@@ -3,6 +3,7 @@ package main
 import (
 	"blowing-simulator/internal/simulator"
 	"bytes"
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"encoding/csv"
@@ -197,6 +198,53 @@ func extractTextWithPdftotext(pdfPath string) (string, error) {
 func runCommand(cmd string, args []string) error {
 	c := exec.Command(cmd, args...)
 	return c.Run()
+}
+
+// DownloadSourceHandler preusmerava na presigned URL originalnog PDF-a.
+//
+// Autorizacija ide kroz istu `canAccessProtocol` proveru kao i sve ostalo:
+// partner dobija URL samo za svoj protokol, interni za sve.
+func DownloadSourceHandler(w http.ResponseWriter, r *http.Request) {
+	if !sourceStore.Enabled() {
+		http.Error(w, "Original storage is not configured", http.StatusNotFound)
+		return
+	}
+
+	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+	if err != nil || id <= 0 {
+		http.Error(w, "Invalid protocol ID", http.StatusBadRequest)
+		return
+	}
+
+	var row struct {
+		UserID   sql.NullInt64  `db:"user_id"`
+		SHA      sql.NullString `db:"source_sha256"`
+		Filename sql.NullString `db:"source_filename"`
+	}
+	if err := db.Get(&row, "SELECT user_id, source_sha256, source_filename FROM protocols WHERE id = $1", id); err != nil {
+		http.Error(w, "Protocol not found", http.StatusNotFound)
+		return
+	}
+
+	claims := GetAuthClaims(r)
+	if claims == nil || !canAccessProtocol(claims.Role, claims.UserID, row.UserID) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	if !row.SHA.Valid || row.SHA.String == "" {
+		http.Error(w, "Original nije sačuvan za ovaj protokol", http.StatusNotFound)
+		return
+	}
+
+	url, err := sourceStore.PresignGet(r.Context(), row.SHA.String, row.Filename.String, 15*time.Minute)
+	if err != nil {
+		log.Printf("source storage: presign za protokol %d: %v", id, err)
+		http.Error(w, "Original is currently unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	http.Redirect(w, r, url, http.StatusFound)
 }
 
 // tempPDFPath vraća putanju u /tmp za uploadovani PDF.
@@ -505,6 +553,26 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 		fremcoMeta = simulator.ExtractFremcoMetadata(normalized)
 	}
 
+	// Original u Object Storage pre upisa u bazu (vidi STORAGE.md): ako
+	// storage padne, zahtev se odbija i izvođač ponavlja upload — bolje to
+	// nego protokol u bazi bez originala, koji se više ne može rekonstruisati.
+	var sourceSHA string
+	var sourceSize int64
+	if sourceStore.Enabled() {
+		data, readErr := os.ReadFile(tempPdf)
+		if readErr != nil {
+			log.Printf("source storage: ne mogu da pročitam %s: %v", tempPdf, readErr)
+			http.Error(w, "Cannot read uploaded PDF", http.StatusInternalServerError)
+			return
+		}
+		sourceSHA, sourceSize, readErr = prepareOriginal(r.Context(), data)
+		if readErr != nil {
+			log.Printf("source storage: %v", readErr)
+			http.Error(w, "Original could not be stored, please retry", http.StatusServiceUnavailable)
+			return
+		}
+	}
+
 	// Save protocol data to database
 	var protocolID int
 	var dbErr error
@@ -527,6 +595,8 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Successfully saved Jetting protocol with ID: %d", protocolID)
 		}
 	}
+
+	linkOriginal(protocolID, sourceSHA, sourceSize)
 
 	tmpl.Execute(w, map[string]interface{}{
 		"Text":            rawStr,
@@ -655,6 +725,13 @@ func main() {
 	if err := ensureOwnershipColumn(db); err != nil {
 		log.Fatal("Failed to ensure ownership column:", err)
 	}
+
+	// Originali protokola (Object Storage). Ako S3_* nije postavljen, store je
+	// isključen i aplikacija radi kao ranije.
+	sourceStore = NewSourceStoreFromEnv()
+	if err := ensureSourceTables(db); err != nil {
+		log.Fatal("Failed to ensure source storage schema:", err)
+	}
 	
 	http.HandleFunc("/", IndexHandler)
 	http.HandleFunc("/login", LoginHandler)
@@ -676,6 +753,7 @@ func main() {
 	http.HandleFunc("/protocols", requireAuth(ProtocolsHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/view", requireAuth(ViewProtocolHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/delete", requireAuth(DeleteProtocolHandler, "editor", "partner", "admin"))
+	http.HandleFunc("/protocols/source", requireAuth(DownloadSourceHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/measurements", requireAuth(ProtocolMeasurementsHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/length-report", requireAuth(LengthReportHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/api/get", requireAuth(ProtocolGetAPIHandler, "viewer", "editor", "partner", "admin"))
@@ -713,6 +791,7 @@ type Protocol struct {
 	CreatedAt       string         `db:"created_at"`
 	UserID          sql.NullInt64  `db:"user_id"`
 	OwnerEmail      sql.NullString `db:"owner_email"`
+	SourceSHA256    sql.NullString `db:"source_sha256"`
 }
 
 // NullTime represents a time.Time that may be null
@@ -1040,7 +1119,7 @@ func ViewProtocolHandler(w http.ResponseWriter, r *http.Request) {
 	err = db.Get(&protocol, `
 		SELECT id, protocol_type, system_name, protocol_date, start_time, 
 		       project_number, company, service_provider, operator, 
-		       source_filename, created_at::text, user_id
+		       source_filename, created_at::text, user_id, source_sha256
 		FROM protocols WHERE id = $1`, id)
 	
 	if err != nil {
@@ -1124,6 +1203,7 @@ func ViewProtocolHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	data := map[string]interface{}{
 		"Protocol":         protocol,
+		"SourceAvailable":  protocol.SourceSHA256.Valid && protocol.SourceSHA256.String != "",
 		"Equipment":        equipment,
 		"Summary":          summary,
 		"MeasurementCount": measurementCount,
@@ -2256,12 +2336,19 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 		log.Printf("Bulk upload - %s: Jetting protocol parsed successfully - %d measurements", filename, measurementCount)
 		
 		if autoSave && db != nil {
-			_, err := SaveJettingProtocol(db, protocol, ownerID)
+			sha, size, storeErr := prepareOriginal(context.Background(), content)
+			if storeErr != nil {
+				result["error"] = "Storage failed: " + storeErr.Error()
+				log.Printf("Bulk upload error - %s: storage failed - %v", filename, storeErr)
+				return result
+			}
+			protocolID, err := SaveJettingProtocol(db, protocol, ownerID)
 			if err != nil {
 				result["error"] = "Database save failed: " + err.Error()
 				log.Printf("Bulk upload error - %s: Jetting database save failed - %v", filename, err)
 				return result
 			}
+			linkOriginal(protocolID, sha, size)
 			result["saved"] = true
 			log.Printf("Bulk upload - %s: Jetting protocol saved to database successfully", filename)
 		}
@@ -2342,12 +2429,19 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 		log.Printf("Bulk upload - %s: Fremco protocol parsed successfully - %d measurements", filename, measurementCount)
 		
 		if autoSave && db != nil {
-			_, err := SaveFremcoProtocol(db, protocol, ownerID)
+			sha, size, storeErr := prepareOriginal(context.Background(), content)
+			if storeErr != nil {
+				result["error"] = "Storage failed: " + storeErr.Error()
+				log.Printf("Bulk upload error - %s: storage failed - %v", filename, storeErr)
+				return result
+			}
+			protocolID, err := SaveFremcoProtocol(db, protocol, ownerID)
 			if err != nil {
 				result["error"] = "Database save failed: " + err.Error()
 				log.Printf("Bulk upload error - %s: Fremco database save failed - %v", filename, err)
 				return result
 			}
+			linkOriginal(protocolID, sha, size)
 			result["saved"] = true
 			log.Printf("Bulk upload - %s: Fremco protocol saved to database successfully", filename)
 		}
@@ -2371,12 +2465,19 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 				log.Printf("Bulk upload - %s: Filename-based Jetting fallback successful - %d measurements", filename, measurementCount)
 				
 				if autoSave && db != nil {
-					_, err := SaveJettingProtocol(db, protocol, ownerID)
+					sha, size, storeErr := prepareOriginal(context.Background(), content)
+					if storeErr != nil {
+						result["error"] = "Storage failed: " + storeErr.Error()
+						log.Printf("Bulk upload error - %s: storage failed - %v", filename, storeErr)
+						return result
+					}
+					protocolID, err := SaveJettingProtocol(db, protocol, ownerID)
 					if err != nil {
 						result["error"] = "Database save failed: " + err.Error()
 						log.Printf("Bulk upload error - %s: Jetting database save failed - %v", filename, err)
 						return result
 					}
+					linkOriginal(protocolID, sha, size)
 					result["saved"] = true
 					log.Printf("Bulk upload - %s: Filename-fallback Jetting protocol saved to database successfully", filename)
 				}
