@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -51,5 +53,23 @@ func TestCanAccessProtocol(t *testing.T) {
 					tc.role, tc.uid, tc.owner, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestTempPDFPath(t *testing.T) {
+	tmp := os.TempDir()
+
+	cases := map[string]string{
+		"report.pdf":              filepath.Join(tmp, "report.pdf"),
+		"../../etc/passwd":        filepath.Join(tmp, "passwd"),
+		"/abs/path/protokoll.pdf": filepath.Join(tmp, "protokoll.pdf"),
+		"":                        filepath.Join(tmp, "upload.pdf"),
+		"..":                      filepath.Join(tmp, "upload.pdf"),
+	}
+
+	for in, want := range cases {
+		if got := tempPDFPath(in); got != want {
+			t.Errorf("tempPDFPath(%q) = %q, očekivano %q", in, got, want)
+		}
 	}
 }

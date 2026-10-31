@@ -199,6 +199,19 @@ func runCommand(cmd string, args []string) error {
 	return c.Run()
 }
 
+// tempPDFPath vraća putanju u /tmp za uploadovani PDF.
+//
+// `multipart` ime fajla dolazi iz `Content-Disposition` i Go ga **ne**
+// sanitizuje, pa `../../nešto` može da izađe iz /tmp. Zato se koristi samo
+// bazno ime; prazno ime dobija bezbedan fallback.
+func tempPDFPath(name string) string {
+	base := filepath.Base(name)
+	if base == "" || base == "." || base == ".." || base == string(filepath.Separator) {
+		base = "upload.pdf"
+	}
+	return filepath.Join(os.TempDir(), base)
+}
+
 func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 	tmpl := template.New("pdf2text.html").Funcs(template.FuncMap{
 		"formatTime": func(t string) string {
@@ -240,12 +253,15 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	tempPdf := filepath.Join(tempDir, header.Filename)
+	tempPdf := tempPDFPath(header.Filename)
 	out, err := os.Create(tempPdf)
 	if err != nil {
 		http.Error(w, "Cannot save PDF", http.StatusInternalServerError)
 		return
 	}
+	// Original se ne čuva: PDF se parsira i briše. `defer` ide obrnutim
+	// redom, pa se fajl prvo zatvori (`Close`) i tek onda obriše.
+	defer os.Remove(tempPdf)
 	defer out.Close()
 	_, err = io.Copy(out, file)
 	if err != nil {
