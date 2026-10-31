@@ -352,7 +352,7 @@ func extractJettingProtocolInfo(lines []string) JettingProtocolInfo {
 		line = strings.TrimSpace(line)
 
 		// Date detection - look for date patterns
-		if dateMatch := regexp.MustCompile(`(\d{2}\.\d{2}\.\d{4})`).FindString(line); dateMatch != "" {
+		if dateMatch := regexp.MustCompile(`(\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{4})`).FindString(line); dateMatch != "" {
 			info.Date = dateMatch
 			log.Printf("extractJettingProtocolInfo: Found Date - Line %d: '%s' -> Extracted: '%s'", i, line, dateMatch)
 		}

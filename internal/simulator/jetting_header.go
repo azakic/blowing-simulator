@@ -25,7 +25,7 @@ var (
 	jettingEinblaserRe   = regexp.MustCompile(`(?im)^[ \t]*Einbl[äa]ser[ \t]*:?[ \t]*(.+)$`)
 	jettingBemerkungenRe = regexp.MustCompile(`(?im)^[ \t]*Bemerkungen[ \t]*:?[ \t]*(.*)$`)
 	// „29.10.2025, 16:26" — Datum + Startzeit (OCR može da ubaci razmak posle zareza).
-	jettingDatumRe = regexp.MustCompile(`(\d{1,2}\.\d{1,2}\.\d{4})\s*[,;]?\s*(\d{1,2}:\d{2})`)
+	jettingDatumRe = regexp.MustCompile(`(\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4})\s*[,;]?\s*(\d{1,2}:\d{2})`)
 )
 
 // extractJettingHeader čita zaglavlje iz (OCR) teksta. Vrednosti su bukvalno

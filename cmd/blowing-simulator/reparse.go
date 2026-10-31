@@ -244,8 +244,15 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 
 	// Telemetrija se osvežava i kada nema izmena — opisuje poslednje parsiranje.
 	saveParseTelemetry(db, id, parseTelemetry{
-		Source:   textSource,
-		Warnings: buildWarnings(parseTelemetry{Source: textSource}, len(text), measurements, next, nil),
+		Source: textSource,
+		Warnings: buildWarnings(parseTelemetry{Source: textSource}, len(text), measurements, map[string]string{
+			"date":     next["protocol_date"],
+			"time":     next["start_time"],
+			"project":  next["project_number"],
+			"section":  next["section_nvt"],
+			"company":  next["company"],
+			"operator": next["operator"],
+		}, nil),
 	})
 
 	if len(res.Changed) == 0 {

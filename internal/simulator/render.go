@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jung-kurt/gofpdf"
 )
@@ -115,6 +116,14 @@ func RenderProtocolPDF(w io.Writer, m RenderModel, fontPath string) error {
 			}
 		}
 	}
+	// Datum iz baze je ISO, a Jetting parser očekuje DD.MM.YYYY (i obrnuto).
+	if t, err := time.Parse("2006-01-02", strings.TrimSpace(m.Date)); err == nil && m.Format == "jetting" {
+		m.Date = t.Format("02.01.2006")
+	}
+	if t, err := time.Parse("02.01.2006", strings.TrimSpace(m.Date)); err == nil && m.Format == "fremco" {
+		m.Date = t.Format("2006-01-02")
+	}
+
 	pdf.SetMargins(12, 12, 12)
 	pdf.SetAutoPageBreak(true, 15)
 	pdf.AddPage()
