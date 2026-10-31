@@ -304,11 +304,11 @@
                 <option value="fremco" {{if eq .Type "fremco"}}selected{{end}}>Fremco</option>
                 <option value="jetting" {{if eq .Type "jetting"}}selected{{end}}>Jetting</option>
             </select>
-            {{if .IsAdmin}}
+            {{if .CanFilterUsers}}
             <select name="partner_id">
-                <option value="">All Partners</option>
-                {{range .Partners}}
-                    <option value="{{.ID}}" {{if eq $.SelectedPartnerID .ID}}selected{{end}}>{{.Email}}</option>
+                <option value="">Svi korisnici</option>
+                {{range .Users}}
+                    <option value="{{.ID}}" {{if eq $.SelectedPartnerID .ID}}selected{{end}}>[{{.Role}}] {{.Email}}</option>
                 {{end}}
             </select>
             {{end}}

@@ -319,13 +319,13 @@
                     <label for="end_date">End Date:</label>
                     <input type="date" name="end_date" id="end_date" value="{{.EndDate}}">
                 </div>
-                {{if .IsAdmin}}
+                {{if .CanFilterUsers}}
                 <div class="filter-group">
-                    <label for="partner_id">Partner:</label>
+                    <label for="partner_id">Korisnik:</label>
                     <select name="partner_id" id="partner_id">
-                        <option value="">All Partners</option>
-                        {{range .Partners}}
-                            <option value="{{.ID}}" {{if eq $.SelectedPartnerID .ID}}selected{{end}}>{{.Email}}</option>
+                        <option value="">Svi korisnici</option>
+                        {{range .Users}}
+                            <option value="{{.ID}}" {{if eq $.SelectedPartnerID .ID}}selected{{end}}>[{{.Role}}] {{.Email}}</option>
                         {{end}}
                     </select>
                 </div>

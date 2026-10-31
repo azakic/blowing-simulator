@@ -645,7 +645,7 @@ func main() {
 	http.HandleFunc("/logout", LogoutHandler)
 	http.HandleFunc("/download-json", DownloadJSONHandler)
 	// Upload/conversion requires editor+ role
-	http.HandleFunc("/pdf2text", requireAuth(Pdf2TextHandler, "editor", "admin"))
+	http.HandleFunc("/pdf2text", requireAuth(Pdf2TextHandler, "editor", "partner", "admin"))
 	http.HandleFunc("/create-report", CreateReportHandler)
 	http.HandleFunc("/edit-report", EditReportHandler)
 	http.HandleFunc("/create-fremco", CreateFremcoHandler)
@@ -656,7 +656,7 @@ func main() {
 	http.HandleFunc("/export-pdf", ExportPDFHandler)
 	http.HandleFunc("/download-csv", DownloadCSVHandler)
 	http.HandleFunc("/download-pdf", DownloadPDFHandler)
-	http.HandleFunc("/export-csv", requireAuth(ExportCSVHandler, "editor", "partner", "admin"))
+	http.HandleFunc("/export-csv", requireAuth(ExportCSVHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols", requireAuth(ProtocolsHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/view", requireAuth(ViewProtocolHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/delete", requireAuth(DeleteProtocolHandler, "editor", "partner", "admin"))
@@ -782,6 +782,9 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 	dateFrom := r.URL.Query().Get("date_from")
 	dateTo := r.URL.Query().Get("date_to")
 	partnerIDStr := r.URL.Query().Get("partner_id")
+	if partnerIDStr == "" {
+		partnerIDStr = r.URL.Query().Get("user_id") // novi naziv; partner_id ostaje alias
+	}
 
 	// Base query (include owner email for admin display)
 	query := `
@@ -796,17 +799,13 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 	arg := 0
 
 	// Ownership filter: partners and non-admins always see only their data; admins see their own unless scope=all
+	// Vidljivost: samo partner vidi isključivo svoje; admin/editor/viewer vide sve.
 	claims := GetAuthClaims(r)
-	isAdmin := claims != nil && strings.EqualFold(claims.Role, "admin")
-	isPartner := claims != nil && strings.EqualFold(claims.Role, "partner")
-	scope := r.URL.Query().Get("scope")
-	
-	// Filter by user_id: partners ALWAYS see only their own data (no scope override)
-	// Admins can use scope=all to see everything
-	showAll := isAdmin && scope == "all"
+	isAdmin := claims != nil && strings.EqualFold(claims.Role, RoleAdmin)
+	showAll := claims != nil && seesAllProtocols(claims.Role)
 	var selectedPartnerID int64
 	var haveSelectedPartner bool
-	if isAdmin && partnerIDStr != "" {
+	if showAll && partnerIDStr != "" {
 		if v, err := strconv.ParseInt(partnerIDStr, 10, 64); err == nil && v > 0 {
 			selectedPartnerID = v
 			haveSelectedPartner = true
@@ -816,7 +815,7 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		arg++
 		query += fmt.Sprintf(" AND user_id = $%d", arg)
 		args = append(args, selectedPartnerID)
-	} else if (!showAll && claims != nil) || isPartner {
+	} else if !showAll && claims != nil {
 		arg++
 		query += fmt.Sprintf(" AND user_id = $%d", arg)
 		args = append(args, claims.UserID)
@@ -923,7 +922,7 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 	if search != "" { queryString += "&search=" + url.QueryEscape(search) }
 	if protocolType != "" && protocolType != "all" { queryString += "&type=" + url.QueryEscape(protocolType) }
 	if company := r.URL.Query().Get("company"); company != "" { queryString += "&company=" + url.QueryEscape(company) }
-	if isAdmin && partnerIDStr != "" { queryString += "&partner_id=" + url.QueryEscape(partnerIDStr) }
+	if showAll && partnerIDStr != "" { queryString += "&partner_id=" + url.QueryEscape(partnerIDStr) }
 	if dateFrom != "" { queryString += "&date_from=" + url.QueryEscape(dateFrom) }
 	if dateTo != "" { queryString += "&date_to=" + url.QueryEscape(dateTo) }
 
@@ -967,11 +966,17 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// Load partners list for admin filter
-	type simpleUser struct { ID int64 `db:"id"`; Email string `db:"email"` }
-	var partners []simpleUser
-	if isAdmin {
-		_ = db.Select(&partners, "SELECT id, email FROM users WHERE role='partner' ORDER BY email ASC")
+	// Lista korisnika za filter (partneri i naši radnici) — samo za interne role.
+	// Partner je ne vidi: on ionako vidi isključivo svoje.
+	type simpleUser struct {
+		ID    int64  `db:"id"`
+		Email string `db:"email"`
+		Role  string `db:"role"`
+	}
+	var filterUsers []simpleUser
+	if showAll {
+		_ = db.Select(&filterUsers, `SELECT id, email, role FROM users
+			ORDER BY CASE WHEN role = 'partner' THEN 1 ELSE 0 END, role, email`)
 	}
 
 	data := map[string]interface{}{
@@ -986,7 +991,8 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		"PageNumbers": pageNumbers,
 		"UserRole":    func() string { c:=GetAuthClaims(r); if c!=nil {return c.Role}; return "" }(),
 		"IsAdmin":     isAdmin,
-		"Partners":    partners,
+		"Users":          filterUsers,
+		"CanFilterUsers": showAll,
 		"SelectedPartnerID": func() int64 { if haveSelectedPartner { return selectedPartnerID }; return 0 }(),
 		"Company":     r.URL.Query().Get("company"),
 		"DateFrom":    dateFrom,
@@ -1026,14 +1032,12 @@ func ViewProtocolHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	// Ownership check
+	// Ownership check: partner samo svoje, ostali vide sve.
 	claims := GetAuthClaims(r)
-	isAdmin := claims != nil && strings.EqualFold(claims.Role, "admin")
-	if !isAdmin && claims != nil {
-		if protocol.UserID.Valid && protocol.UserID.Int64 != claims.UserID {
-			http.Error(w, "Forbidden", http.StatusForbidden)
-			return
-		}
+	isAdmin := claims != nil && strings.EqualFold(claims.Role, RoleAdmin)
+	if claims == nil || !canAccessProtocol(claims.Role, claims.UserID, protocol.UserID) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
 	}
 	
 	// Get equipment info
@@ -1151,8 +1155,8 @@ func DeleteProtocolHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	// Only allow deletion if user owns the protocol or is admin
-	if protocol.UserID.Valid && protocol.UserID.Int64 != claims.UserID && claims.Role != "admin" {
+	// Partner briše samo svoje; admin/editor brišu sve.
+	if !canAccessProtocol(claims.Role, claims.UserID, protocol.UserID) {
 		http.Error(w, "You can only delete your own protocols", http.StatusForbidden)
 		return
 	}
@@ -1194,14 +1198,13 @@ func ProtocolMeasurementsHandler(w http.ResponseWriter, r *http.Request) {
 	
 	// Ownership check
 	claims := GetAuthClaims(r)
-	isAdmin := claims != nil && strings.EqualFold(claims.Role, "admin")
-	if !isAdmin {
+	if claims == nil || !seesAllProtocols(claims.Role) {
 		var owner sql.NullInt64
 		if err := db.QueryRow("SELECT user_id FROM protocols WHERE id = $1", id).Scan(&owner); err != nil {
 			http.Error(w, "Protocol not found", http.StatusNotFound)
 			return
 		}
-		if !owner.Valid || owner.Int64 != claims.UserID {
+		if !canAccessProtocol(claims.Role, claims.UserID, owner) {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
@@ -1322,14 +1325,13 @@ func ProtocolGetAPIHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// Ownership check
 	claims := GetAuthClaims(r)
-	isAdmin := claims != nil && strings.EqualFold(claims.Role, "admin")
-	if !isAdmin {
+	if claims == nil || !seesAllProtocols(claims.Role) {
 		var owner sql.NullInt64
 		if err := db.QueryRow("SELECT user_id FROM protocols WHERE id = $1", id).Scan(&owner); err != nil {
 			http.Error(w, "Protocol not found", http.StatusNotFound)
 			return
 		}
-		if !owner.Valid || owner.Int64 != claims.UserID {
+		if !canAccessProtocol(claims.Role, claims.UserID, owner) {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
@@ -1372,13 +1374,13 @@ func ensureOwnershipColumn(db *sqlx.DB) error {
 	return nil
 }
 
-// DashboardStatsHandler returns per-user (or global for admin) dashboard stats
+// DashboardStatsHandler returns per-user (partner) or global dashboard stats
 func DashboardStatsHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetAuthClaims(r)
-	isAdmin := claims != nil && strings.EqualFold(claims.Role, "admin")
+	showAll := claims != nil && seesAllProtocols(claims.Role)
 	var totalProtocols int
 	var lastUpload sql.NullString
-	if isAdmin {
+	if showAll {
 		_ = db.Get(&totalProtocols, "SELECT COUNT(*) FROM protocols")
 		_ = db.Get(&lastUpload, "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols")
 	} else {
@@ -1432,6 +1434,9 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 	includeFremco := r.URL.Query().Get("fremco") == "on" || r.URL.Query().Get("fremco") == "true"
 	includeJetting := r.URL.Query().Get("jetting") == "on" || r.URL.Query().Get("jetting") == "true"
 	partnerIDStr := r.URL.Query().Get("partner_id")
+	if partnerIDStr == "" {
+		partnerIDStr = r.URL.Query().Get("user_id") // novi naziv; partner_id ostaje alias
+	}
 	
 	// Default to both if none selected
 	if !includeFremco && !includeJetting {
@@ -1463,10 +1468,8 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 	argCount := 0
 
 	claims := GetAuthClaims(r)
-	isAdmin := claims != nil && strings.EqualFold(claims.Role, "admin")
-	isPartner := claims != nil && strings.EqualFold(claims.Role, "partner")
-	scope := r.URL.Query().Get("scope")
-	showAll := isAdmin && scope == "all"
+	isAdmin := claims != nil && strings.EqualFold(claims.Role, RoleAdmin)
+	showAll := claims != nil && seesAllProtocols(claims.Role)
 	
 	// Add date filters
 	if startDate != "" {
@@ -1497,7 +1500,7 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 	// Ownership filter: partners ALWAYS see only their own data (no scope override)
 	var selectedPartnerID int64
 	var haveSelectedPartner bool
-	if isAdmin && partnerIDStr != "" {
+	if showAll && partnerIDStr != "" {
 		if v, err := strconv.ParseInt(partnerIDStr, 10, 64); err == nil && v > 0 {
 			selectedPartnerID = v
 			haveSelectedPartner = true
@@ -1507,7 +1510,7 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 		argCount++
 		query += fmt.Sprintf(" AND p.user_id = $%d", argCount)
 		args = append(args, selectedPartnerID)
-	} else if (!showAll && claims != nil) || isPartner {
+	} else if !showAll && claims != nil {
 		argCount++
 		query += fmt.Sprintf(" AND p.user_id = $%d", argCount)
 		args = append(args, claims.UserID)
@@ -1612,11 +1615,17 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	tmpl := template.Must(template.New("length-report.html").Funcs(funcMap).ParseFiles("web/templates/length-report.html"))
-	// Load partners list for admin filter
-	type simpleUser struct { ID int64 `db:"id"`; Email string `db:"email"` }
-	var partners []simpleUser
-	if isAdmin {
-		_ = db.Select(&partners, "SELECT id, email FROM users WHERE role='partner' ORDER BY email ASC")
+	// Lista korisnika za filter (partneri i naši radnici) — samo za interne role.
+	// Partner je ne vidi: on ionako vidi isključivo svoje.
+	type simpleUser struct {
+		ID    int64  `db:"id"`
+		Email string `db:"email"`
+		Role  string `db:"role"`
+	}
+	var filterUsers []simpleUser
+	if showAll {
+		_ = db.Select(&filterUsers, `SELECT id, email, role FROM users
+			ORDER BY CASE WHEN role = 'partner' THEN 1 ELSE 0 END, role, email`)
 	}
 
 	data := map[string]interface{}{
@@ -1631,7 +1640,8 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 		"OverallAverage":    overallAverage,
 		"UserRole":          func() string { c:=GetAuthClaims(r); if c!=nil {return c.Role}; return "" }(),
 		"IsAdmin":           isAdmin,
-		"Partners":          partners,
+		"Users":             filterUsers,
+		"CanFilterUsers":    showAll,
 		"SelectedPartnerID": func() int64 { if haveSelectedPartner { return selectedPartnerID }; return 0 }(),
 	}
 

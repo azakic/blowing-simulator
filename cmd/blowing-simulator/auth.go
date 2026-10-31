@@ -271,3 +271,31 @@ func initAuth(db *sqlx.DB) error {
 	}
 	return nil
 }
+
+// Role names used in the users.role column.
+const (
+	RoleAdmin   = "admin"
+	RoleEditor  = "editor"
+	RolePartner = "partner"
+	RoleViewer  = "viewer"
+)
+
+// seesAllProtocols kaže da li rola vidi protokole svih korisnika.
+//
+// Samo je `partner` (izvođač radova) ograničen na svoje podatke. Interni
+// korisnici (`admin`, `editor`) i revizor (`viewer`) vide sve.
+func seesAllProtocols(role string) bool {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case RoleAdmin, RoleEditor, RoleViewer:
+		return true
+	}
+	return false
+}
+
+// canAccessProtocol proverava pristup konkretnom protokolu.
+func canAccessProtocol(role string, userID int64, owner sql.NullInt64) bool {
+	if seesAllProtocols(role) {
+		return true
+	}
+	return userID != 0 && owner.Valid && owner.Int64 == userID
+}

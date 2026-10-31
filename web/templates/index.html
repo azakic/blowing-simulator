@@ -85,7 +85,10 @@
                     <a href="/" class="navbar-link active">Dashboard</a>
                     <a href="/protocols" class="navbar-link">Protocols</a>
                     <a href="/protocols/length-report" class="navbar-link">Length Report</a>
+                    {{if or .IsAdmin (eq .UserRole "editor") (eq .UserRole "partner")}}
+                    <a href="/pdf2text" class="navbar-link">Upload</a>
                     <a href="/bulk-upload" class="navbar-link">Bulk Upload</a>
+                    {{end}}
                     {{if .IsAdmin}}
                     <a href="/admin/users" class="navbar-link">Users</a>
                     {{end}}
@@ -130,10 +133,16 @@
                     <span class="tile-icon">📏</span>
                     <span>Length Report</span>
                 </a>
+                {{if or .IsAdmin (eq .UserRole "editor") (eq .UserRole "partner")}}
+                <a href="/pdf2text" class="dashboard-tile bulk-upload">
+                    <span class="tile-icon">📄</span>
+                    <span>Upload Protocol</span>
+                </a>
                 <a href="/bulk-upload" class="dashboard-tile bulk-upload">
                     <span class="tile-icon">📤</span>
                     <span>Bulk Upload</span>
                 </a>
+                {{end}}
                                 {{if .IsAdmin}}
                                 <a href="/admin/users" class="dashboard-tile" style="border-left: 6px solid #dc3545;">
                                     <span class="tile-icon">👥</span>

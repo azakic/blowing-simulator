@@ -258,6 +258,38 @@ if strings.Contains(rawStr, "Länge") &&
 - Dynamic table headers based on format
 - Responsive chart visualization
 
+## 👥 User Roles & Permissions
+
+Users live in the `users` table (`admin`, `editor`, `partner`, `viewer`). The
+only role restricted to its own data is **partner**.
+
+| | `admin` | `editor` | `partner` | `viewer` |
+|---|---|---|---|---|
+| Sees protocols | all | all | **only own** | all |
+| Upload single PDF (`/pdf2text`) | ✅ | ✅ | ✅ | ❌ |
+| Bulk upload (`/bulk-upload`) | ✅ | ✅ | ✅ | ❌ |
+| Delete protocol | any | any | **only own** | ❌ |
+| Export CSV (`/export-csv`) | ✅ | ✅ | own only | ✅ |
+| Manage users (`/admin/users`) | ✅ | ❌ | ❌ | ❌ |
+
+**Partner (izvođač radova)** is the contractor account: it uploads its own
+protocols (PDF), which are parsed and stored with `protocols.user_id` = that
+user. Everything partner sees is filtered by `user_id` — protocols, details,
+measurements, length report, API and CSV export. Admins can still browse all
+data and filter per partner (`?partner_id=<user id>`).
+
+**Internal filtering.** `admin`, `editor` and `viewer` also get a user filter
+on `/protocols` and `/protocols/length-report`: the dropdown lists **all**
+users with their role (`[partner] firma@example.com`, `[editor]
+ana@wolken.de`, …) and filters by `protocols.user_id`. The parameter is
+`user_id` (`partner_id` is kept as an alias for old links). A partner never
+sees this dropdown and the parameter is ignored for that role — the filter is
+only applied when `seesAllProtocols(role)` is true.
+
+Implementation: `seesAllProtocols` / `canAccessProtocol` in
+`cmd/blowing-simulator/auth.go`; all visibility and ownership checks go
+through them.
+
 ## 🔧 Configuration
 
 ### Environment Variables
