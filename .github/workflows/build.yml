@@ -6,7 +6,9 @@ on:
     # Samo izmene koje utiču na image. Dokumentacija i sam workflow ne
     # pokreću build — za ručni test koristi workflow_dispatch.
     paths:
-      - 'cmd/**'
+      # Samo server; dev alati (cmd/protocolctl, cmd/parse2json) ne ulaze u
+      # image, pa ne treba da pokreću build.
+      - 'cmd/blowing-simulator/**'
       - 'internal/**'
       - 'web/**'
       - 'go.mod'

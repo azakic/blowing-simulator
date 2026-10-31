@@ -29,10 +29,16 @@ func main() {
 	asJSON := flag.Bool("json", false, "ispiši parsirane podatke kao JSON")
 	ocrMode := flag.String("ocr", "auto", "auto | off | force")
 	minChars := flag.Int("min-chars", 200, "prag (znakova) ispod kog -ocr=auto pokreće OCR")
+	dir := flag.String("dir", "", "obradi sve PDF-ove u folderu (rekurzivno) i ispiši jednu liniju po fajlu")
 	flag.Parse()
 
+	if *dir != "" {
+		runDir(*dir, *formatFlag, *ocrMode, *minChars)
+		return
+	}
 	if *in == "" {
 		fmt.Fprintln(os.Stderr, "upotreba: protocolctl -in protokol.pdf [-format auto|fremco|jetting] [-dump|-json] [-ocr auto|off|force]")
+		fmt.Fprintln(os.Stderr, "       protocolctl -dir /putanja/do/pdf-ova")
 		os.Exit(2)
 	}
 
@@ -60,55 +66,9 @@ func main() {
 		fail(fmt.Errorf("format nije prepoznat (%d znakova); probaj -format fremco|jetting ili -dump", len(text)))
 	}
 
-	var payload any
-	fields := [][2]string{}
-	measurements := 0
-
-	switch format {
-	case simulator.FormatFremco:
-		p := simulator.ParseFremcoProtocol(simulator.NormalizeFremcoTxt(text))
-		if p == nil {
-			fail(fmt.Errorf("Fremco parser vratio nil"))
-		}
-		info := p.ProtocolInfo
-		fields = [][2]string{
-			{"date", info.Date},
-			{"start_time", info.StartTime},
-			{"project_number", info.ProjectNumber},
-			{"section_nvt", info.SectionNVT},
-			{"company", info.Company},
-			{"service_provider", info.ServiceProvider},
-			{"operator", info.Operator},
-			{"remarks", info.Remarks},
-		}
-		measurements = len(p.Measurements.DataPoints)
-		payload = p
-
-	case simulator.FormatJetting:
-		p := simulator.ParseJettingProtocol(simulator.NormalizeJettingTxt(text))
-		if p == nil {
-			fail(fmt.Errorf("Jetting parser vratio nil"))
-		}
-		info := p.ProtocolInfo
-		op, pn := "", ""
-		if info.Operator != nil {
-			op = *info.Operator
-		}
-		if info.ProjectNumber != nil {
-			pn = *info.ProjectNumber
-		}
-		fields = [][2]string{
-			{"date", info.Date},
-			{"start_time", info.StartTime},
-			{"project_number", pn},
-			{"section_nvt", info.SectionNVT},
-			{"company", info.Company},
-			{"service_provider", info.ServiceProvider},
-			{"operator", op},
-			{"remarks", info.Remarks},
-		}
-		measurements = len(p.Measurements.DataPoints)
-		payload = p
+	fields, measurements, payload, err := parseProtocol(text, format)
+	if err != nil {
+		fail(err)
 	}
 
 	if *asJSON {
@@ -265,4 +225,132 @@ func looksLikeProjectNumber(s string) bool {
 func fail(err error) {
 	fmt.Fprintln(os.Stderr, "greška:", err)
 	os.Exit(1)
+}
+
+// runDir prolazi kroz folder i za svaki PDF ispiše jednu liniju:
+// fajl, izvor teksta, format, broj merenja i broj upozorenja.
+func runDir(dir, formatFlag, ocrMode string, minChars int) {
+	files := 0
+	failed := 0
+	warned := 0
+
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			fmt.Printf("%s\tERROR\t%s\n", path, err)
+			failed++
+			return nil
+		}
+		if d.IsDir() || !strings.EqualFold(filepath.Ext(path), ".pdf") {
+			return nil
+		}
+		files++
+
+		text, source, err := extractText(path, ocrMode, minChars)
+		if err != nil {
+			fmt.Printf("%s\tERROR\t%s\n", path, err)
+			failed++
+			return nil
+		}
+		format := detectFormat(text, formatFlag)
+		if format == simulator.FormatUnknown {
+			fmt.Printf("%s\t%s\tunknown\t-\t-\tformat nije prepoznat\n", path, source)
+			failed++
+			return nil
+		}
+
+		fields, measurements := parseFields(text, format)
+		warnings := collectWarnings(fields, measurements, source)
+		if len(warnings) > 0 {
+			warned++
+		}
+		fmt.Printf("%s\t%s\t%s\t%d\t%d\t%s\n",
+			path, source, format, measurements, len(warnings), strings.Join(warnings, "; "))
+		return nil
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "greška:", err)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "\n%d PDF-ova, %d sa greškom, %d sa upozorenjima\n", files, failed, warned)
+}
+
+func detectFormat(text, formatFlag string) simulator.PDFFormat {
+	switch formatFlag {
+	case "fremco":
+		return simulator.FormatFremco
+	case "jetting":
+		return simulator.FormatJetting
+	case "", "auto":
+		return simulator.DetectFormat(text)
+	}
+	return simulator.FormatUnknown
+}
+
+// parseProtocol vraća polja za prikaz, broj merenja i kompletan objekat.
+func parseProtocol(text string, format simulator.PDFFormat) ([][2]string, int, any, error) {
+	var (
+		fields       [][2]string
+		measurements int
+		payload      any
+	)
+
+	switch format {
+	case simulator.FormatFremco:
+		p := simulator.ParseFremcoProtocol(simulator.NormalizeFremcoTxt(text))
+		if p == nil {
+			fail(fmt.Errorf("Fremco parser vratio nil"))
+		}
+		info := p.ProtocolInfo
+		fields = [][2]string{
+			{"date", info.Date},
+			{"start_time", info.StartTime},
+			{"project_number", info.ProjectNumber},
+			{"section_nvt", info.SectionNVT},
+			{"company", info.Company},
+			{"service_provider", info.ServiceProvider},
+			{"operator", info.Operator},
+			{"remarks", info.Remarks},
+		}
+		measurements = len(p.Measurements.DataPoints)
+		payload = p
+
+	case simulator.FormatJetting:
+		p := simulator.ParseJettingProtocol(simulator.NormalizeJettingTxt(text))
+		if p == nil {
+			fail(fmt.Errorf("Jetting parser vratio nil"))
+		}
+		info := p.ProtocolInfo
+		op, pn := "", ""
+		if info.Operator != nil {
+			op = *info.Operator
+		}
+		if info.ProjectNumber != nil {
+			pn = *info.ProjectNumber
+		}
+		fields = [][2]string{
+			{"date", info.Date},
+			{"start_time", info.StartTime},
+			{"project_number", pn},
+			{"section_nvt", info.SectionNVT},
+			{"company", info.Company},
+			{"service_provider", info.ServiceProvider},
+			{"operator", op},
+			{"remarks", info.Remarks},
+		}
+		measurements = len(p.Measurements.DataPoints)
+		payload = p
+	}
+
+	if payload == nil {
+		return nil, 0, nil, fmt.Errorf("nepoznat format %q", format)
+	}
+	return fields, measurements, payload, nil
+}
+
+func parseFields(text string, format simulator.PDFFormat) ([][2]string, int) {
+	fields, measurements, _, err := parseProtocol(text, format)
+	if err != nil {
+		return nil, 0
+	}
+	return fields, measurements
 }
