@@ -78,12 +78,109 @@ func TestCorpus(t *testing.T) {
 		if measurements != c.measurements {
 			t.Errorf("%s: merenja = %d, očekivano %d", c.match, measurements, c.measurements)
 		}
+
+		// Round-trip: parse → render → parse → diff mora biti 0.
+		want, err := buildRenderModel(text, c.format)
+		if err != nil {
+			t.Errorf("%s: buildRenderModel: %v", c.match, err)
+			continue
+		}
+		tmp, err := os.CreateTemp("", "corpus-rt-*.pdf")
+		if err != nil {
+			t.Fatalf("temp: %v", err)
+		}
+		if err := simulator.RenderProtocolPDF(tmp, want, roundTripFont()); err != nil {
+			tmp.Close()
+			os.Remove(tmp.Name())
+			t.Errorf("%s: render: %v", c.match, err)
+			continue
+		}
+		tmp.Close()
+		rendered, err := runCapture("pdftotext", "-layout", tmp.Name(), "-")
+		os.Remove(tmp.Name())
+		if err != nil {
+			t.Errorf("%s: pdftotext render: %v", c.match, err)
+			continue
+		}
+		got, err := buildRenderModel(rendered, simulator.DetectFormat(rendered))
+		if err != nil {
+			t.Errorf("%s: reparse render: %v", c.match, err)
+			continue
+		}
+		for _, d := range simulator.CompareRenderModels(want, got) {
+			t.Errorf("%s: round-trip: %s", c.match, d)
+		}
 		for _, f := range fields {
 			if f[0] == "date" || f[0] == "start_time" || f[0] == "project_number" || f[0] == "section_nvt" {
 				if strings.TrimSpace(f[1]) == "" {
 					t.Errorf("%s: prazno polje %s", c.match, f[0])
 				}
 			}
+		}
+	}
+}
+
+// roundTripFont vraća font iz repoa. `go test` radi iz direktorijuma paketa,
+// pa probamo i putanju do korena modula.
+func roundTripFont() string {
+	for _, path := range []string{
+		"web/static/fonts/DejaVuSans.ttf",
+		"../../web/static/fonts/DejaVuSans.ttf",
+	} {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return ""
+}
+
+// TestBBoxCorpus proverava da koordinatni parser daje isti broj merenja kao
+// tekstualni (i kao baza).
+func TestBBoxCorpus(t *testing.T) {
+	dir := os.Getenv("PROTOCOL_SAMPLES_DIR")
+	if dir == "" {
+		t.Skip("PROTOCOL_SAMPLES_DIR nije postavljen")
+	}
+	cases := []struct {
+		match        string
+		format       string
+		measurements int
+	}{
+		{"Haflinger Weg 10", "fremco", 204},
+		{"Oldenburger Koppel 23", "fremco", 293},
+		{"Oldenburger Koppel 27", "fremco", 234},
+		{"Oldenburger Koppel 19a", "fremco", 371},
+		{"Haflinger Weg _9 _", "fremco", 182},
+		{"Haflinger Weg 5", "fremco", 151},
+		{"Oldenburger Koppel 15", "fremco", 395},
+		{"Oldenburger Koppel 13", "fremco", 381},
+		{"Mühlenstr 13f", "fremco", 278},
+		{"Eiermarkt 14 B", "jetting", 180},
+		{"Eiermarkt 15 B", "jetting", 48},
+		{"Eiermarkt 13", "jetting", 165},
+		{"Eiermarkt 3E", "jetting", 222},
+		{"Eiermarkt 3D", "jetting", 189},
+		{"Eiermarkt 9", "jetting", 145},
+	}
+	files, _ := filepath.Glob(filepath.Join(dir, "*", "*.pdf"))
+	for _, c := range cases {
+		var match string
+		for _, f := range files {
+			if strings.Contains(filepath.Base(f), c.match) {
+				match = f
+				break
+			}
+		}
+		if match == "" {
+			continue
+		}
+		rows, err := simulator.MeasurementsFromPDFBBox(match, c.format)
+		if err != nil {
+			t.Errorf("%s: %v", c.match, err)
+			continue
+		}
+		if len(rows) != c.measurements {
+			t.Errorf("%s: bbox merenja = %d, očekivano %d", c.match, len(rows), c.measurements)
 		}
 	}
 }

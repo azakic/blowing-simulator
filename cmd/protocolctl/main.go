@@ -31,6 +31,10 @@ func main() {
 	ocrMode := flag.String("ocr", "auto", "auto | off | force")
 	minChars := flag.Int("min-chars", 40, "prag (znakova) po strani ispod kog -ocr=auto pokreće OCR")
 	dir := flag.String("dir", "", "obradi sve PDF-ove u folderu (rekurzivno) i ispiši jednu liniju po fajlu")
+	renderOut := flag.String("render", "", "generiši PDF iz parsiranih podataka")
+	verify := flag.Bool("verify", false, "round-trip: parse → render → parse → diff")
+	bboxCount := flag.Bool("bbox", false, "prikaži broj merenja iz koordinatnog (bbox) parsera")
+	fontPath := flag.String("font", "web/static/fonts/DejaVuSans.ttf", "TTF font za generisani PDF")
 	flag.Parse()
 
 	if *dir != "" {
@@ -40,6 +44,8 @@ func main() {
 	if *in == "" {
 		fmt.Fprintln(os.Stderr, "upotreba: protocolctl -in protokol.pdf [-format auto|fremco|jetting] [-dump|-json] [-ocr auto|off|force]")
 		fmt.Fprintln(os.Stderr, "       protocolctl -dir /putanja/do/pdf-ova")
+		fmt.Fprintln(os.Stderr, "       protocolctl -in protokol.pdf -render out.pdf")
+		fmt.Fprintln(os.Stderr, "       protocolctl -in protokol.pdf -verify")
 		os.Exit(2)
 	}
 
@@ -65,6 +71,27 @@ func main() {
 	}
 	if format == simulator.FormatUnknown {
 		fail(fmt.Errorf("format nije prepoznat (%d znakova); probaj -format fremco|jetting ili -dump", len(text)))
+	}
+
+	if *renderOut != "" {
+		model, err := buildRenderModel(text, format)
+		if err != nil {
+			fail(err)
+		}
+		out, err := os.Create(*renderOut)
+		if err != nil {
+			fail(err)
+		}
+		defer out.Close()
+		if err := simulator.RenderProtocolPDF(out, model, *fontPath); err != nil {
+			fail(err)
+		}
+		fmt.Printf("render: %s (%d merenja)\n", *renderOut, len(model.Rows))
+		return
+	}
+	if *verify {
+		verifyRoundTrip(*in, text, format, *fontPath)
+		return
 	}
 
 	fields, measurements, payload, err := parseProtocol(text, format)
@@ -93,6 +120,14 @@ func main() {
 		fmt.Printf("%-18s%s\n", f[0]+":", value)
 	}
 	fmt.Printf("measurements:      %d\n", measurements)
+	if *bboxCount {
+		rows, err := simulator.MeasurementsFromPDFBBox(*in, string(format))
+		if err != nil {
+			fmt.Printf("measurements_bbox: greška: %v\n", err)
+		} else {
+			fmt.Printf("measurements_bbox: %d\n", len(rows))
+		}
+	}
 
 	for _, w := range collectWarnings(fields, measurements, source) {
 		fmt.Printf("⚠ %s\n", w)
@@ -409,4 +444,70 @@ func parseFields(text string, format simulator.PDFFormat) ([][2]string, int) {
 		return nil, 0
 	}
 	return fields, measurements
+}
+
+// buildRenderModel parsira tekst u model za render.
+func buildRenderModel(text string, format simulator.PDFFormat) (simulator.RenderModel, error) {
+	switch format {
+	case simulator.FormatFremco:
+		p := simulator.ParseFremcoProtocol(simulator.NormalizeFremcoTxt(text))
+		if p == nil {
+			return simulator.RenderModel{}, fmt.Errorf("Fremco parser vratio nil")
+		}
+		return simulator.RenderModelFromFremco(p), nil
+	case simulator.FormatJetting:
+		p := simulator.ParseJettingProtocol(simulator.NormalizeJettingTxt(text))
+		if p == nil {
+			return simulator.RenderModel{}, fmt.Errorf("Jetting parser vratio nil")
+		}
+		return simulator.RenderModelFromJetting(p), nil
+	}
+	return simulator.RenderModel{}, fmt.Errorf("format nije prepoznat")
+}
+
+// verifyRoundTrip: parsira original, generiše PDF, ponovo ga parsira i poredi.
+func verifyRoundTrip(in, text string, format simulator.PDFFormat, fontPath string) {
+	want, err := buildRenderModel(text, format)
+	if err != nil {
+		fail(err)
+	}
+
+	tmp, err := os.CreateTemp("", "roundtrip-*.pdf")
+	if err != nil {
+		fail(err)
+	}
+	defer os.Remove(tmp.Name())
+
+	if err := simulator.RenderProtocolPDF(tmp, want, fontPath); err != nil {
+		fail(err)
+	}
+	tmp.Close()
+
+	renderedText, err := runCapture("pdftotext", "-layout", tmp.Name(), "-")
+	if err != nil {
+		fail(err)
+	}
+
+	gotFormat := simulator.DetectFormat(renderedText)
+	if gotFormat != format {
+		fmt.Printf("format se promenio: %s -> %s\n", format, gotFormat)
+	}
+	got, err := buildRenderModel(renderedText, gotFormat)
+	if err != nil {
+		fail(err)
+	}
+
+	diffs := simulator.CompareRenderModels(want, got)
+	fmt.Printf("file:        %s\n", filepath.Base(in))
+	fmt.Printf("format:      %s\n", format)
+	fmt.Printf("merenja:     %d -> %d\n", len(want.Rows), len(got.Rows))
+	if len(diffs) == 0 {
+		fmt.Println("round-trip:  OK (0 razlika)")
+		return
+	}
+	fmt.Printf("round-trip:  %d razlika\n", len(diffs))
+	for _, d := range diffs {
+		fmt.Println("  -", d)
+	}
+	os.Exit(1)
 }
