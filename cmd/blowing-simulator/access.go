@@ -4,9 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"io"
 	"log"
-	"mime/multipart"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
@@ -75,11 +73,9 @@ func grantProtocolAccess(db *sqlx.DB, protocolID int, userID int64) error {
 // Vraća `handled=false` kad u bazi postoje samo fajlovi sa istim imenom ali
 // **različitim sadržajem** — tada je to drugi dokument i ide u normalnu obradu
 // (novi protokol).
-func handleExistingUpload(filename string, ownerID int64, file multipart.File) (bool, string) {
-	content, err := io.ReadAll(file)
-	if err != nil {
-		return true, "File already exists, but it could not be read: " + err.Error()
-	}
+// `content` se čita jednom u handleru: `multipart.File` je potrošen posle prvog
+// čitanja, pa bi drugo čitanje vratilo prazan sadržaj.
+func handleExistingUpload(filename string, ownerID int64, content []byte) (bool, string) {
 	sha := sourceSHA256(content)
 
 	type existingRow struct {

@@ -2155,21 +2155,8 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 				// dokument već postoji red se NE duplira: ako ga je učitao neko
 				// drugi, uploader dobija pristup kroz `protocol_access`, a ako
 				// original nije sačuvan (sve pre 2026-10-31) sada se dopunjava.
-				if skipExisting && db != nil {
-					if handled, message := handleExistingUpload(fh.Filename, ownerID, file); handled {
-						mutex.Lock()
-						results = append(results, map[string]interface{}{
-							"filename": fh.Filename,
-							"success":  true,
-							"skipped":  true,
-							"message":  message,
-						})
-						mutex.Unlock()
-						return
-					}
-				}
-				
-				// Read file content
+				// Read file content once; `multipart.File` is consumed by the first
+				// read, so the dedupe check and the parser must share it.
 				content, err := io.ReadAll(file)
 				if err != nil {
 					mutex.Lock()
@@ -2180,6 +2167,20 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 					})
 					mutex.Unlock()
 					return
+				}
+				
+				if skipExisting && db != nil {
+					if handled, message := handleExistingUpload(fh.Filename, ownerID, content); handled {
+						mutex.Lock()
+						results = append(results, map[string]interface{}{
+							"filename": fh.Filename,
+							"success":  true,
+							"skipped":  true,
+							"message":  message,
+						})
+						mutex.Unlock()
+						return
+					}
 				}
 				
 				// Process the PDF
