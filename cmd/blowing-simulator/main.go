@@ -227,7 +227,7 @@ func DownloadSourceHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	claims := GetAuthClaims(r)
-	if claims == nil || !canAccessProtocol(claims.Role, claims.UserID, row.UserID) {
+	if claims == nil || !hasProtocolAccess(db, claims.Role, claims.UserID, row.UserID, id) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -732,6 +732,9 @@ func main() {
 	if err := ensureSourceTables(db); err != nil {
 		log.Fatal("Failed to ensure source storage schema:", err)
 	}
+	if err := ensureProtocolAccess(db); err != nil {
+		log.Fatal("Failed to ensure protocol_access schema:", err)
+	}
 	
 	http.HandleFunc("/", IndexHandler)
 	http.HandleFunc("/login", LoginHandler)
@@ -911,8 +914,11 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		query += fmt.Sprintf(" AND user_id = $%d", arg)
 		args = append(args, selectedPartnerID)
 	} else if !showAll && claims != nil {
+		// Partner vidi svoje + protokole koje su mu dodeljeni kroz
+		// `protocol_access` (isti dokument je uvezao neko drugi).
 		arg++
-		query += fmt.Sprintf(" AND user_id = $%d", arg)
+		query += fmt.Sprintf(` AND (p.user_id = $%[1]d OR EXISTS (
+			SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $%[1]d))`, arg)
 		args = append(args, claims.UserID)
 	}
 
@@ -947,7 +953,8 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		countArgs = append(countArgs, selectedPartnerID)
 	} else if !showAll && claims != nil {
 		cArg++
-		countQuery += fmt.Sprintf(" AND user_id = $%d", cArg)
+		countQuery += fmt.Sprintf(` AND (protocols.user_id = $%[1]d OR EXISTS (
+			SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = protocols.id AND pa.user_id = $%[1]d))`, cArg)
 		countArgs = append(countArgs, claims.UserID)
 	}
 	if search != "" {
@@ -1006,7 +1013,8 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 	} else if showAll {
 		_ = db.Get(&lastImport, "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols")
 	} else if claims != nil {
-		_ = db.Get(&lastImport, "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols WHERE user_id = $1", claims.UserID)
+		_ = db.Get(&lastImport, `SELECT to_char(MAX(p.created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols p
+			WHERE p.user_id = $1 OR EXISTS (SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $1)`, claims.UserID)
 	}
 	totalPages := (totalCount + pageSize - 1) / pageSize
 	pageNumbers := []int{}
@@ -1086,6 +1094,10 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		"PageNumbers": pageNumbers,
 		"UserRole":    func() string { c:=GetAuthClaims(r); if c!=nil {return c.Role}; return "" }(),
 		"IsAdmin":     isAdmin,
+		// Brisanje: admin/editor brišu sve, partner samo svoje; red dobijen
+		// kroz `protocol_access` partner ne može da obriše.
+		"CurrentUserID": func() int64 { c:=GetAuthClaims(r); if c!=nil {return c.UserID}; return 0 }(),
+		"CanDeleteAny":  func() bool { c:=GetAuthClaims(r); if c==nil {return false}; return strings.EqualFold(c.Role, RoleAdmin) || strings.EqualFold(c.Role, RoleEditor) }(),
 		"Users":          filterUsers,
 		"CanFilterUsers": showAll,
 		"SelectedPartnerID": func() int64 { if haveSelectedPartner { return selectedPartnerID }; return 0 }(),
@@ -1130,7 +1142,7 @@ func ViewProtocolHandler(w http.ResponseWriter, r *http.Request) {
 	// Ownership check: partner samo svoje, ostali vide sve.
 	claims := GetAuthClaims(r)
 	isAdmin := claims != nil && strings.EqualFold(claims.Role, RoleAdmin)
-	if claims == nil || !canAccessProtocol(claims.Role, claims.UserID, protocol.UserID) {
+	if claims == nil || !hasProtocolAccess(db, claims.Role, claims.UserID, protocol.UserID, protocol.ID) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -1300,7 +1312,7 @@ func ProtocolMeasurementsHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Protocol not found", http.StatusNotFound)
 			return
 		}
-		if !canAccessProtocol(claims.Role, claims.UserID, owner) {
+		if !hasProtocolAccess(db, claims.Role, claims.UserID, owner, id) {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
@@ -1427,7 +1439,7 @@ func ProtocolGetAPIHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Protocol not found", http.StatusNotFound)
 			return
 		}
-		if !canAccessProtocol(claims.Role, claims.UserID, owner) {
+		if !hasProtocolAccess(db, claims.Role, claims.UserID, owner, id) {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
@@ -1480,8 +1492,10 @@ func DashboardStatsHandler(w http.ResponseWriter, r *http.Request) {
 		_ = db.Get(&totalProtocols, "SELECT COUNT(*) FROM protocols")
 		_ = db.Get(&lastUpload, "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols")
 	} else {
-		_ = db.Get(&totalProtocols, "SELECT COUNT(*) FROM protocols WHERE user_id = $1", claims.UserID)
-		_ = db.Get(&lastUpload, "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols WHERE user_id = $1", claims.UserID)
+		_ = db.Get(&totalProtocols, `SELECT COUNT(*) FROM protocols p
+			WHERE p.user_id = $1 OR EXISTS (SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $1)`, claims.UserID)
+		_ = db.Get(&lastUpload, `SELECT to_char(MAX(p.created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols p
+			WHERE p.user_id = $1 OR EXISTS (SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $1)`, claims.UserID)
 	}
 	resp := map[string]any{
 		"protocols": totalProtocols,
@@ -1608,7 +1622,8 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 		args = append(args, selectedPartnerID)
 	} else if !showAll && claims != nil {
 		argCount++
-		query += fmt.Sprintf(" AND p.user_id = $%d", argCount)
+		query += fmt.Sprintf(` AND (p.user_id = $%[1]d OR EXISTS (
+			SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $%[1]d))`, argCount)
 		args = append(args, claims.UserID)
 	}
 
@@ -2136,31 +2151,12 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				defer file.Close()
 				
-				// Preskoči samo ako **isti korisnik** već ima protokol sa tim imenom.
-				// Ranije se gledalo samo ime fajla, pa je partner dobijao
-				// "already exists" za dokument koji je admin importovao — i onda
-				// nije video ništa (partner vidi samo svoje).
+				// Dedupe je **globalni po imenu fajla** (kao i ranije), ali kad
+				// dokument već postoji red se NE duplira: ako ga je učitao neko
+				// drugi, uploader dobija pristup kroz `protocol_access`, a ako
+				// original nije sačuvan (sve pre 2026-10-31) sada se dopunjava.
 				if skipExisting && db != nil {
-					var existingID int
-					var existingSHA sql.NullString
-					err = db.QueryRow(`
-						SELECT id, source_sha256 FROM protocols
-						WHERE source_filename = $1 AND user_id = $2
-						ORDER BY id LIMIT 1`, fh.Filename, ownerID).Scan(&existingID, &existingSHA)
-					if err == nil {
-						message := "File already exists in database"
-						// Protokoli uploadovani pre 2026-10-31 nemaju original; ako
-						// ga nema, sačuvaj ga sada i poveži sa postojećim redom.
-						if sourceStore.Enabled() && (!existingSHA.Valid || existingSHA.String == "") {
-							if content, readErr := io.ReadAll(file); readErr == nil {
-								if sha, size, storeErr := prepareOriginal(context.Background(), content); storeErr != nil {
-									message = "File already exists, but storing the original failed: " + storeErr.Error()
-								} else {
-									linkOriginal(existingID, sha, size)
-									message = "File already exists — original stored and linked"
-								}
-							}
-						}
+					if handled, message := handleExistingUpload(fh.Filename, ownerID, file); handled {
 						mutex.Lock()
 						results = append(results, map[string]interface{}{
 							"filename": fh.Filename,
