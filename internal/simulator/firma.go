@@ -142,3 +142,22 @@ func cleanOperator(s string) string {
 	}
 	return strings.Join(fields, " ")
 }
+
+// looksLikeLabel prepoznaje liniju koja je oznaka polja, a ne vrednost.
+// Koristi se da se ne uzme sledeći red kao vrednost praznog polja.
+func looksLikeLabel(line string) bool {
+	t := strings.TrimSpace(line)
+	if t == "" {
+		return true
+	}
+	if fieldLabelRe.MatchString(t) {
+		return true
+	}
+	// „Zeit - Dauer [hh:mm:ss] 00:22:46", „Ort(GPS) 52.4°…" — oznaka pa vrednost.
+	if idx := strings.Index(t, ":"); idx > 0 {
+		if len(strings.Fields(t[:idx])) <= 5 {
+			return true
+		}
+	}
+	return false
+}

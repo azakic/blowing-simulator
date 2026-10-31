@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"blowing-simulator/internal/simulator"
@@ -28,7 +29,7 @@ func main() {
 	dump := flag.Bool("dump", false, "ispiši normalizovan tekst i završi")
 	asJSON := flag.Bool("json", false, "ispiši parsirane podatke kao JSON")
 	ocrMode := flag.String("ocr", "auto", "auto | off | force")
-	minChars := flag.Int("min-chars", 200, "prag (znakova) ispod kog -ocr=auto pokreće OCR")
+	minChars := flag.Int("min-chars", 40, "prag (znakova) po strani ispod kog -ocr=auto pokreće OCR")
 	dir := flag.String("dir", "", "obradi sve PDF-ove u folderu (rekurzivno) i ispiši jednu liniju po fajlu")
 	flag.Parse()
 
@@ -98,36 +99,98 @@ func main() {
 	}
 }
 
-// extractText vraća tekst PDF-a i izvor: "text" (text layer) ili "ocr".
+// extractText vraća tekst PDF-a i izvor: "text", "ocr" ili "mixed".
+//
+// Radi po strani: text layer se koristi gde postoji, a OCR samo za strane bez
+// teksta. To je bitno jer „Jettlogger / Einblas-Protokoll" ima prvu stranu kao
+// raster sliku, a tabele merenja na ostalim stranama kao pravi tekst.
 func extractText(path, ocrMode string, minChars int) (string, string, error) {
 	if _, err := os.Stat(path); err != nil {
 		return "", "", fmt.Errorf("ne mogu da otvorim %s: %w", path, err)
 	}
+	pages, err := pdfPageCount(path)
+	if err != nil {
+		return "", "", err
+	}
 
-	text, err := runCapture("pdftotext", "-layout", path, "-")
-	if err != nil && ocrMode == "off" {
-		return "", "", fmt.Errorf("pdftotext: %w", err)
-	}
-	if ocrMode == "force" || (ocrMode == "auto" && len(strings.TrimSpace(text)) < minChars) {
-		ocrText, ocrErr := ocrPDF(path)
+	var out strings.Builder
+	usedText, usedOCR := 0, 0
+
+	for page := 1; page <= pages; page++ {
+		pageText, _ := runCapture("pdftotext", "-layout", "-f", strconv.Itoa(page), "-l", strconv.Itoa(page), path, "-")
+		trimmed := strings.TrimSpace(pageText)
+
+		needOCR := false
+		switch ocrMode {
+		case "off":
+		case "force":
+			needOCR = true
+		default:
+			needOCR = len(trimmed) < minChars
+		}
+
+		if !needOCR {
+			out.WriteString(pageText)
+			out.WriteString("\n")
+			usedText++
+			continue
+		}
+
+		ocrText, ocrErr := ocrPage(path, page)
 		if ocrErr != nil {
-			if len(strings.TrimSpace(text)) == 0 {
-				return "", "", fmt.Errorf("OCR nije uspeo: %w", ocrErr)
+			if trimmed == "" {
+				return "", "", fmt.Errorf("strana %d: nema teksta i OCR nije uspeo: %w", page, ocrErr)
 			}
-			return text, "text", nil
+			out.WriteString(pageText)
+			out.WriteString("\n")
+			usedText++
+			continue
 		}
-		if len(strings.TrimSpace(ocrText)) > len(strings.TrimSpace(text)) {
-			return ocrText, "ocr", nil
+		// OCR ume da izgubi kratak text layer (npr. naziv firme) — zadrži oba.
+		if len(ocrText) < len(trimmed) {
+			out.WriteString(pageText)
+			out.WriteString("\n")
 		}
+		out.WriteString(ocrText)
+		out.WriteString("\n")
+		usedOCR++
 	}
+
+	text := out.String()
 	if strings.TrimSpace(text) == "" {
-		return "", "", fmt.Errorf("PDF nema tekst (probaj -ocr force)")
+		return "", "", fmt.Errorf("PDF nema teksta (probaj -ocr force)")
 	}
-	return text, "text", nil
+	source := "text"
+	switch {
+	case usedOCR > 0 && usedText == 0:
+		source = "ocr"
+	case usedOCR > 0 && usedText > 0:
+		source = "mixed"
+	}
+	return text, source, nil
 }
 
-// ocrPDF radi rasterizaciju (pdftoppm) pa OCR svake strane (tesseract).
-func ocrPDF(path string) (string, error) {
+func pdfPageCount(path string) (int, error) {
+	info, err := runCapture("pdfinfo", path)
+	if err != nil {
+		return 0, fmt.Errorf("pdfinfo: %w", err)
+	}
+	for _, line := range strings.Split(info, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "Pages:") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				if n, convErr := strconv.Atoi(fields[1]); convErr == nil && n > 0 {
+					return n, nil
+				}
+			}
+		}
+	}
+	return 0, fmt.Errorf("pdfinfo: broj strana nije pronađen")
+}
+
+// ocrPage rasterizuje jednu stranu na 400 dpi i pušta tesseract.
+// `--psm 4` se pokazao najboljim za zaglavlja sa tabelom (psm 6 gubi redove).
+func ocrPage(path string, page int) (string, error) {
 	if _, err := exec.LookPath("pdftoppm"); err != nil {
 		return "", fmt.Errorf("pdftoppm nije instaliran")
 	}
@@ -142,25 +205,18 @@ func ocrPDF(path string) (string, error) {
 	defer os.RemoveAll(dir)
 
 	prefix := filepath.Join(dir, "page")
-	if _, err := runCapture("pdftoppm", "-r", "300", "-png", path, prefix); err != nil {
+	if _, err := runCapture("pdftoppm", "-r", "400", "-png", "-f", strconv.Itoa(page), "-l", strconv.Itoa(page), path, prefix); err != nil {
 		return "", fmt.Errorf("pdftoppm: %w", err)
 	}
-
-	pages, err := filepath.Glob(prefix + "*.png")
-	if err != nil || len(pages) == 0 {
-		return "", fmt.Errorf("pdftoppm nije napravio stranice")
+	images, err := filepath.Glob(prefix + "*.png")
+	if err != nil || len(images) == 0 {
+		return "", fmt.Errorf("pdftoppm nije napravio sliku za stranu %d", page)
 	}
-
-	var out strings.Builder
-	for _, page := range pages {
-		text, err := runCapture("tesseract", page, "stdout", "-l", "deu+eng", "--psm", "6")
-		if err != nil {
-			return "", fmt.Errorf("tesseract (%s): %w", filepath.Base(page), err)
-		}
-		out.WriteString(text)
-		out.WriteString("\n")
+	text, err := runCapture("tesseract", images[0], "stdout", "-l", "deu+eng", "--psm", "4")
+	if err != nil {
+		return "", fmt.Errorf("tesseract: %w", err)
 	}
-	return out.String(), nil
+	return text, nil
 }
 
 func runCapture(name string, args ...string) (string, error) {
@@ -183,8 +239,8 @@ func collectWarnings(fields [][2]string, measurements int, source string) []stri
 	if measurements == 0 {
 		warnings = append(warnings, "nema izmerenih tačaka — proveri format i ekstrakciju")
 	}
-	if source == "ocr" {
-		warnings = append(warnings, "tekst je iz OCR-a: očekuj greške u brojevima i umlautima")
+	if source == "ocr" || source == "mixed" {
+		warnings = append(warnings, "tekst je delimično iz OCR-a ("+source+"): očekuj greške u brojevima i umlautima")
 	}
 	for _, f := range fields {
 		if strings.TrimSpace(f[1]) == "" {
