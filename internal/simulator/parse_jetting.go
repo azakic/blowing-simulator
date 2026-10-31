@@ -358,16 +358,31 @@ func extractJettingProtocolInfo(lines []string) JettingProtocolInfo {
 			}
 		}
 		
-		// Company detection
-		if strings.Contains(line, "Wolken-ASM") {
-			info.Company = "Wolken-ASM GMBH"
+		// Company detection (fallback; tačne vrednosti daje „Firma" blok)
+		if strings.Contains(line, "Wolken-ASM") && info.Company == "" {
+			info.Company = "Wolken-ASM GmbH"
 			log.Printf("extractJettingProtocolInfo: Found Company - Line %d: '%s'", i, line)
 		}
 		
-		if strings.Contains(line, "M.A.X. Bauservice") {
+		if strings.Contains(line, "M.A.X. Bauservice") && info.ServiceProvider == "" {
 			info.ServiceProvider = "M.A.X. Bauservice"
 			log.Printf("extractJettingProtocolInfo: Found Service Provider - Line %d: '%s'", i, line)
 		}
+	}
+	
+	// „Firma" blok ima prednost: prva linija = izvođač, druga = podizvođač.
+	if firma := extractFirmaInfo(lines); firma.Company != "" || firma.ServiceProvider != "" || firma.Operator != "" {
+		if firma.Company != "" {
+			info.Company = firma.Company
+		}
+		if firma.ServiceProvider != "" {
+			info.ServiceProvider = firma.ServiceProvider
+		}
+		if firma.Operator != "" {
+			op := firma.Operator
+			info.Operator = &op
+		}
+		log.Printf("extractJettingProtocolInfo: Firma block -> company=%q provider=%q operator=%q", info.Company, info.ServiceProvider, firma.Operator)
 	}
 	
 	return info

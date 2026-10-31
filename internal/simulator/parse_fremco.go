@@ -258,7 +258,7 @@ func extractFremcoProtocolInfo(lines []string) FremcoProtocolInfo {
 			// Extract company from same line
 			companyMatch := regexp.MustCompile(`Firma\s+(.+)`).FindStringSubmatch(line)
 			if len(companyMatch) > 1 {
-				info.Company = strings.TrimSpace(companyMatch[1])
+				info.Company = cleanOrgName(companyMatch[1])
 				log.Printf("extractFremcoProtocolInfo: Found Company - Line %d: '%s' -> Extracted: '%s'", i, line, info.Company)
 			}
 		}
@@ -280,6 +280,20 @@ func extractFremcoProtocolInfo(lines []string) FremcoProtocolInfo {
 		if strings.Contains(line, "Bemerkungen") && i+1 < len(lines) {
 			info.Remarks = strings.TrimSpace(lines[i+1])
 		}
+	}
+	
+	// „Firma" blok ima prednost: prva linija = izvođač, druga = podizvođač.
+	if firma := extractFirmaInfo(lines); firma.Company != "" || firma.ServiceProvider != "" || firma.Operator != "" {
+		if firma.Company != "" {
+			info.Company = firma.Company
+		}
+		if firma.ServiceProvider != "" {
+			info.ServiceProvider = firma.ServiceProvider
+		}
+		if firma.Operator != "" {
+			info.Operator = firma.Operator
+		}
+		log.Printf("extractFremcoProtocolInfo: Firma block -> company=%q provider=%q operator=%q", info.Company, info.ServiceProvider, info.Operator)
 	}
 	
 	return info
