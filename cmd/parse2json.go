@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"strings"
 )
 
 func main() {
@@ -29,15 +28,18 @@ func main() {
 	}
 	rawStr := string(raw)
 
-	var measurements []simulator.SimpleMeasurement
 	// Auto-detect format if not forced
 	if *format == "" {
-		if strings.Contains(rawStr, "Streckenlänge") && strings.Contains(rawStr, "Drehmoment") {
+		switch simulator.DetectFormat(rawStr) {
+		case simulator.FormatFremco:
 			*format = "fremco"
-		} else if strings.Contains(rawStr, "Länge") && strings.Contains(rawStr, "Schubkraft") {
+		case simulator.FormatJetting:
 			*format = "jetting"
 		}
 	}
+
+	// Parseri vraćaju različite tipove merenja, a oba se samo serijalizuju.
+	var measurements any
 
 	switch *format {
 	case "fremco":

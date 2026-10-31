@@ -368,6 +368,20 @@ func extractJettingProtocolInfo(lines []string) JettingProtocolInfo {
 			info.ServiceProvider = "M.A.X. Bauservice"
 			log.Printf("extractJettingProtocolInfo: Found Service Provider - Line %d: '%s'", i, line)
 		}
+		
+		// Remarks: vrednost je obično u istoj liniji, a kod starijih
+		// layout-a u sledećoj.
+		if strings.Contains(line, "Bemerkungen") {
+			if idx := strings.Index(line, "Bemerkungen"); idx >= 0 {
+				same := strings.TrimSpace(line[idx+len("Bemerkungen"):])
+				switch {
+				case same != "":
+					info.Remarks = same
+				case i+1 < len(lines) && !fieldLabelRe.MatchString(lines[i+1]):
+					info.Remarks = strings.TrimSpace(lines[i+1])
+				}
+			}
+		}
 	}
 	
 	// „Firma" blok ima prednost: prva linija = izvođač, druga = podizvođač.

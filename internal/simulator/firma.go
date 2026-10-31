@@ -24,8 +24,8 @@ type FirmaInfo struct {
 
 var (
 	firmaLabelRe = regexp.MustCompile(`(?i)^\s*Firma\b`)
-	// Polja koja prekidaju „Firma" blok.
-	firmaFieldRe = regexp.MustCompile(`(?i)^\s*(Firma|Bemerkungen|Bauvorhaben|Streckenabschnitt|Datum|Adresse|Auftrag|Kunde|Objekt|Rohrparameter|Kabel|Einblasgerät|Hersteller|Rohr|Zusammenfassung|Ort|Projekt|Anlage|Messwerte|Nr\.)\b`)
+	// Oznake polja koja prekidaju višelinijski blok (Firma, Bemerkungen, ...).
+	fieldLabelRe = regexp.MustCompile(`(?i)^\s*(Firma|Bemerkungen|Bauvorhaben|Streckenabschnitt|Datum|Adresse|Auftrag|Kunde|Objekt|Rohrparameter|Kabel|Einblasgerät|Hersteller|Rohr|Zusammenfassung|Ort|Projekt|Anlage|Messwerte|Nr\.)\b`)
 	einblaserRe  = regexp.MustCompile(`(?i)Einbl(?:ä|ae)ser\s*:\s*([^,;/]+)`)
 	// Pravne forme — koriste se da se prepozna gde se završava naziv firme.
 	orgSuffixRe = regexp.MustCompile(`(?i)\b(GmbH|KG|AG|UG|GbR|OHG|SE|e\.\s?K\.|Inc\.?|Ltd\.?|SARL|S\.\s?A\.)\b`)
@@ -45,7 +45,7 @@ func extractFirmaInfo(lines []string) FirmaInfo {
 		chunks := []string{raw[loc[1]:]}
 		for j := i + 1; j < len(lines) && j <= i+3; j++ {
 			next := lines[j]
-			if strings.TrimSpace(next) == "" || firmaFieldRe.MatchString(next) {
+			if strings.TrimSpace(next) == "" || fieldLabelRe.MatchString(next) {
 				break
 			}
 			// Nastavak je uvučen (-layout) ili očigledno naziv firme.

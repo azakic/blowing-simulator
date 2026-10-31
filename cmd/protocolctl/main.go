@@ -1,0 +1,268 @@
+// protocolctl je offline alat za rad sa protokolima: izvlači tekst iz PDF-a
+// (uz OCR fallback), prepoznaje format, parsira i ispisuje rezultat.
+//
+// Ne dira bazu i ne treba mu klaster — koristi se za razvoj parsera i za
+// proveru stvarnih dokumenata pre upload-a.
+//
+//	go run ./cmd/protocolctl -in protokol.pdf
+//	go run ./cmd/protocolctl -in protokol.pdf -json
+//	go run ./cmd/protocolctl -in protokol.pdf -dump
+//	go run ./cmd/protocolctl -in sken.pdf -ocr force
+package main
+
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"blowing-simulator/internal/simulator"
+)
+
+func main() {
+	in := flag.String("in", "", "putanja do PDF-a")
+	formatFlag := flag.String("format", "auto", "auto | fremco | jetting")
+	dump := flag.Bool("dump", false, "ispiši normalizovan tekst i završi")
+	asJSON := flag.Bool("json", false, "ispiši parsirane podatke kao JSON")
+	ocrMode := flag.String("ocr", "auto", "auto | off | force")
+	minChars := flag.Int("min-chars", 200, "prag (znakova) ispod kog -ocr=auto pokreće OCR")
+	flag.Parse()
+
+	if *in == "" {
+		fmt.Fprintln(os.Stderr, "upotreba: protocolctl -in protokol.pdf [-format auto|fremco|jetting] [-dump|-json] [-ocr auto|off|force]")
+		os.Exit(2)
+	}
+
+	text, source, err := extractText(*in, *ocrMode, *minChars)
+	if err != nil {
+		fail(err)
+	}
+	if *dump {
+		fmt.Println(text)
+		return
+	}
+
+	format := simulator.FormatUnknown
+	switch *formatFlag {
+	case "fremco":
+		format = simulator.FormatFremco
+	case "jetting":
+		format = simulator.FormatJetting
+	case "", "auto":
+		format = simulator.DetectFormat(text)
+	default:
+		fail(fmt.Errorf("nepoznat -format %q (auto|fremco|jetting)", *formatFlag))
+	}
+	if format == simulator.FormatUnknown {
+		fail(fmt.Errorf("format nije prepoznat (%d znakova); probaj -format fremco|jetting ili -dump", len(text)))
+	}
+
+	var payload any
+	fields := [][2]string{}
+	measurements := 0
+
+	switch format {
+	case simulator.FormatFremco:
+		p := simulator.ParseFremcoProtocol(simulator.NormalizeFremcoTxt(text))
+		if p == nil {
+			fail(fmt.Errorf("Fremco parser vratio nil"))
+		}
+		info := p.ProtocolInfo
+		fields = [][2]string{
+			{"date", info.Date},
+			{"start_time", info.StartTime},
+			{"project_number", info.ProjectNumber},
+			{"section_nvt", info.SectionNVT},
+			{"company", info.Company},
+			{"service_provider", info.ServiceProvider},
+			{"operator", info.Operator},
+			{"remarks", info.Remarks},
+		}
+		measurements = len(p.Measurements.DataPoints)
+		payload = p
+
+	case simulator.FormatJetting:
+		p := simulator.ParseJettingProtocol(simulator.NormalizeJettingTxt(text))
+		if p == nil {
+			fail(fmt.Errorf("Jetting parser vratio nil"))
+		}
+		info := p.ProtocolInfo
+		op, pn := "", ""
+		if info.Operator != nil {
+			op = *info.Operator
+		}
+		if info.ProjectNumber != nil {
+			pn = *info.ProjectNumber
+		}
+		fields = [][2]string{
+			{"date", info.Date},
+			{"start_time", info.StartTime},
+			{"project_number", pn},
+			{"section_nvt", info.SectionNVT},
+			{"company", info.Company},
+			{"service_provider", info.ServiceProvider},
+			{"operator", op},
+			{"remarks", info.Remarks},
+		}
+		measurements = len(p.Measurements.DataPoints)
+		payload = p
+	}
+
+	if *asJSON {
+		out, err := json.MarshalIndent(payload, "", "  ")
+		if err != nil {
+			fail(err)
+		}
+		fmt.Println(string(out))
+		return
+	}
+
+	fmt.Printf("file:              %s\n", filepath.Base(*in))
+	fmt.Printf("text_source:       %s (%d znakova)\n", source, len(text))
+	fmt.Printf("format:            %s\n", format)
+	for _, f := range fields {
+		value := strings.TrimSpace(f[1])
+		if value == "" {
+			fmt.Printf("%-18s—\n", f[0]+":")
+			continue
+		}
+		fmt.Printf("%-18s%s\n", f[0]+":", value)
+	}
+	fmt.Printf("measurements:      %d\n", measurements)
+
+	for _, w := range collectWarnings(fields, measurements, source) {
+		fmt.Printf("⚠ %s\n", w)
+	}
+}
+
+// extractText vraća tekst PDF-a i izvor: "text" (text layer) ili "ocr".
+func extractText(path, ocrMode string, minChars int) (string, string, error) {
+	if _, err := os.Stat(path); err != nil {
+		return "", "", fmt.Errorf("ne mogu da otvorim %s: %w", path, err)
+	}
+
+	text, err := runCapture("pdftotext", "-layout", path, "-")
+	if err != nil && ocrMode == "off" {
+		return "", "", fmt.Errorf("pdftotext: %w", err)
+	}
+	if ocrMode == "force" || (ocrMode == "auto" && len(strings.TrimSpace(text)) < minChars) {
+		ocrText, ocrErr := ocrPDF(path)
+		if ocrErr != nil {
+			if len(strings.TrimSpace(text)) == 0 {
+				return "", "", fmt.Errorf("OCR nije uspeo: %w", ocrErr)
+			}
+			return text, "text", nil
+		}
+		if len(strings.TrimSpace(ocrText)) > len(strings.TrimSpace(text)) {
+			return ocrText, "ocr", nil
+		}
+	}
+	if strings.TrimSpace(text) == "" {
+		return "", "", fmt.Errorf("PDF nema tekst (probaj -ocr force)")
+	}
+	return text, "text", nil
+}
+
+// ocrPDF radi rasterizaciju (pdftoppm) pa OCR svake strane (tesseract).
+func ocrPDF(path string) (string, error) {
+	if _, err := exec.LookPath("pdftoppm"); err != nil {
+		return "", fmt.Errorf("pdftoppm nije instaliran")
+	}
+	if _, err := exec.LookPath("tesseract"); err != nil {
+		return "", fmt.Errorf("tesseract nije instaliran")
+	}
+
+	dir, err := os.MkdirTemp("", "protocolctl-ocr-*")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(dir)
+
+	prefix := filepath.Join(dir, "page")
+	if _, err := runCapture("pdftoppm", "-r", "300", "-png", path, prefix); err != nil {
+		return "", fmt.Errorf("pdftoppm: %w", err)
+	}
+
+	pages, err := filepath.Glob(prefix + "*.png")
+	if err != nil || len(pages) == 0 {
+		return "", fmt.Errorf("pdftoppm nije napravio stranice")
+	}
+
+	var out strings.Builder
+	for _, page := range pages {
+		text, err := runCapture("tesseract", page, "stdout", "-l", "deu+eng", "--psm", "6")
+		if err != nil {
+			return "", fmt.Errorf("tesseract (%s): %w", filepath.Base(page), err)
+		}
+		out.WriteString(text)
+		out.WriteString("\n")
+	}
+	return out.String(), nil
+}
+
+func runCapture(name string, args ...string) (string, error) {
+	var stdout, stderr strings.Builder
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return stdout.String(), fmt.Errorf("%s: %s", name, msg)
+	}
+	return stdout.String(), nil
+}
+
+func collectWarnings(fields [][2]string, measurements int, source string) []string {
+	var warnings []string
+	if measurements == 0 {
+		warnings = append(warnings, "nema izmerenih tačaka — proveri format i ekstrakciju")
+	}
+	if source == "ocr" {
+		warnings = append(warnings, "tekst je iz OCR-a: očekuj greške u brojevima i umlautima")
+	}
+	for _, f := range fields {
+		if strings.TrimSpace(f[1]) == "" {
+			warnings = append(warnings, "prazno polje: "+f[0])
+		}
+	}
+	if pn := fieldValue(fields, "project_number"); pn != "" && !looksLikeProjectNumber(pn) {
+		warnings = append(warnings, "project_number ne liči na očekivani format: "+pn)
+	}
+	if nvt := fieldValue(fields, "section_nvt"); nvt != "" && !strings.Contains(strings.ToUpper(nvt), "NVT") {
+		warnings = append(warnings, "section_nvt ne sadrži NVT: "+nvt)
+	}
+	return warnings
+}
+
+func fieldValue(fields [][2]string, name string) string {
+	for _, f := range fields {
+		if f[0] == name {
+			return strings.TrimSpace(f[1])
+		}
+	}
+	return ""
+}
+
+func looksLikeProjectNumber(s string) bool {
+	letters, digits := 0, 0
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			digits++
+		case (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z'):
+			letters++
+		}
+	}
+	return letters >= 1 && digits >= 4
+}
+
+func fail(err error) {
+	fmt.Fprintln(os.Stderr, "greška:", err)
+	os.Exit(1)
+}

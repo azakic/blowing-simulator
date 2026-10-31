@@ -250,7 +250,9 @@ func extractFremcoProtocolInfo(lines []string) FremcoProtocolInfo {
 		
 		// Section/NVT
 		if strings.Contains(line, "Streckenabschnitt") && strings.Contains(line, "NVt") && i+1 < len(lines) {
-			info.SectionNVT = strings.TrimSpace(lines[i+1])
+			if next := strings.TrimSpace(lines[i+1]); next != "" && !fieldLabelRe.MatchString(next) {
+				info.SectionNVT = next
+			}
 		}
 		
 		// Company - extract from same line after "Firma"
@@ -276,9 +278,16 @@ func extractFremcoProtocolInfo(lines []string) FremcoProtocolInfo {
 			}
 		}
 		
-		// Remarks
-		if strings.Contains(line, "Bemerkungen") && i+1 < len(lines) {
-			info.Remarks = strings.TrimSpace(lines[i+1])
+		// Remarks: vrednost je obično u istoj liniji, a kod starijih
+		// layout-a u sledećoj.
+		if strings.Contains(line, "Bemerkungen") {
+			same := strings.TrimSpace(line[strings.Index(line, "Bemerkungen")+len("Bemerkungen"):])
+			switch {
+			case same != "":
+				info.Remarks = same
+			case i+1 < len(lines) && !fieldLabelRe.MatchString(lines[i+1]):
+				info.Remarks = strings.TrimSpace(lines[i+1])
+			}
 		}
 	}
 	

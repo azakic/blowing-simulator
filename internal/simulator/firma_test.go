@@ -109,4 +109,26 @@ func TestFirmaFromRealPDF(t *testing.T) {
 	if pi.Operator == nil || *pi.Operator != "Marko" {
 		t.Errorf("ProtocolInfo.Operator = %v", pi.Operator)
 	}
+
+	// Isti PDF je Fremco/SpeedNet dokument — proveri i taj parser.
+	fremco := ParseFremcoProtocol(NormalizeFremcoTxt(raw))
+	if fremco == nil {
+		t.Fatal("ParseFremcoProtocol vratio nil")
+	}
+	fi := fremco.ProtocolInfo
+	if fi.Company != "Wolken-ASM GmbH" || fi.ServiceProvider != "M.A.X. Bauservice GmbH" {
+		t.Errorf("Fremco ProtocolInfo: company=%q provider=%q", fi.Company, fi.ServiceProvider)
+	}
+	if fi.Operator != "Marko" {
+		t.Errorf("Fremco Operator = %q", fi.Operator)
+	}
+	if fi.Remarks != "Stoped 412m" {
+		t.Errorf("Fremco Remarks = %q", fi.Remarks)
+	}
+	if fi.ProjectNumber != "SM209214964" {
+		t.Errorf("Fremco ProjectNumber = %q", fi.ProjectNumber)
+	}
+	if got := len(fremco.Measurements.DataPoints); got != 413 {
+		t.Errorf("Fremco DataPoints = %d, očekivano 413", got)
+	}
 }
