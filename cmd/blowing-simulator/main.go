@@ -2136,17 +2136,37 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				defer file.Close()
 				
-				// Check if file exists in database if skipExisting is enabled
+				// Preskoči samo ako **isti korisnik** već ima protokol sa tim imenom.
+				// Ranije se gledalo samo ime fajla, pa je partner dobijao
+				// "already exists" za dokument koji je admin importovao — i onda
+				// nije video ništa (partner vidi samo svoje).
 				if skipExisting && db != nil {
-					var count int
-					err = db.QueryRow("SELECT COUNT(*) FROM protocols WHERE source_filename = $1", fh.Filename).Scan(&count)
-					if err == nil && count > 0 {
+					var existingID int
+					var existingSHA sql.NullString
+					err = db.QueryRow(`
+						SELECT id, source_sha256 FROM protocols
+						WHERE source_filename = $1 AND user_id = $2
+						ORDER BY id LIMIT 1`, fh.Filename, ownerID).Scan(&existingID, &existingSHA)
+					if err == nil {
+						message := "File already exists in database"
+						// Protokoli uploadovani pre 2026-10-31 nemaju original; ako
+						// ga nema, sačuvaj ga sada i poveži sa postojećim redom.
+						if sourceStore.Enabled() && (!existingSHA.Valid || existingSHA.String == "") {
+							if content, readErr := io.ReadAll(file); readErr == nil {
+								if sha, size, storeErr := prepareOriginal(context.Background(), content); storeErr != nil {
+									message = "File already exists, but storing the original failed: " + storeErr.Error()
+								} else {
+									linkOriginal(existingID, sha, size)
+									message = "File already exists — original stored and linked"
+								}
+							}
+						}
 						mutex.Lock()
 						results = append(results, map[string]interface{}{
 							"filename": fh.Filename,
 							"success":  true,
 							"skipped":  true,
-							"message":  "File already exists in database",
+							"message":  message,
 						})
 						mutex.Unlock()
 						return
