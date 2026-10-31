@@ -2513,10 +2513,10 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 			}
 			linkOriginal(protocolID, sha, size)
 			tel := parseTelemetry{Source: textSource}
+			tel.Warnings = buildWarnings(tel, len(rawText), measurementCount, pdfValues, hints)
 			if bboxNote != "" {
 				tel.Warnings = append(tel.Warnings, bboxNote)
 			}
-			tel.Warnings = append(tel.Warnings, buildWarnings(tel, len(rawText), measurementCount, pdfValues, hints)...)
 			saveParseTelemetry(db, protocolID, tel)
 			result["saved"] = true
 			log.Printf("Bulk upload - %s: Jetting protocol saved to database successfully", filename)
@@ -2631,10 +2631,10 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 			}
 			linkOriginal(protocolID, sha, size)
 			tel := parseTelemetry{Source: textSource}
+			tel.Warnings = buildWarnings(tel, len(rawText), measurementCount, pdfValues, hints)
 			if bboxNote != "" {
 				tel.Warnings = append(tel.Warnings, bboxNote)
 			}
-			tel.Warnings = append(tel.Warnings, buildWarnings(tel, len(rawText), measurementCount, pdfValues, hints)...)
 			saveParseTelemetry(db, protocolID, tel)
 			result["saved"] = true
 			log.Printf("Bulk upload - %s: Fremco protocol saved to database successfully", filename)
