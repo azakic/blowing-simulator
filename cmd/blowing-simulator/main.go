@@ -24,8 +24,8 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/jung-kurt/gofpdf"
 	"github.com/jmoiron/sqlx"
+	"github.com/jung-kurt/gofpdf"
 	"github.com/ledongthuc/pdf"
 	_ "github.com/lib/pq"
 )
@@ -293,14 +293,14 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	
+
 	// Ensure temp directory exists
 	tempDir := os.TempDir()
 	if err := os.MkdirAll(tempDir, 0755); err != nil {
 		http.Error(w, "Cannot create temp directory", http.StatusInternalServerError)
 		return
 	}
-	
+
 	tempPdf := tempPDFPath(header.Filename)
 	out, err := os.Create(tempPdf)
 	if err != nil {
@@ -322,37 +322,37 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 	if strings.Contains(baseName, ",") {
 		// Jetting format: "29.10.2025, 11 20, Eiermarkt 15 B NVT 1V2200"
 		parts := strings.Split(baseName, ",")
-		   if len(parts) >= 3 {
-			   // Try to extract date from filename, fallback to content if missing
-			   dateFromFilename := strings.TrimSpace(parts[0])
-			   if dateFromFilename != "" {
-				   date = dateFromFilename
-			   }
-			   timeRaw := strings.TrimSpace(parts[1])
-			   if strings.Contains(timeRaw, " ") {
-				   timeParts := strings.Fields(timeRaw)
-				   if len(timeParts) == 2 {
-					   time = timeParts[0] + ":" + timeParts[1]
-				   }
-			   } else {
-				   time = timeRaw
-			   }
-			   rest := strings.TrimSpace(parts[2])
-			   nvtIdx := strings.Index(rest, "NVT ")
-			   if nvtIdx != -1 {
-				   address = strings.TrimSpace(rest[:nvtIdx])
-				   nvt = strings.TrimSpace(rest[nvtIdx+4:])
-			   } else {
-				   address = rest
-			   }
-		   }
+		if len(parts) >= 3 {
+			// Try to extract date from filename, fallback to content if missing
+			dateFromFilename := strings.TrimSpace(parts[0])
+			if dateFromFilename != "" {
+				date = dateFromFilename
+			}
+			timeRaw := strings.TrimSpace(parts[1])
+			if strings.Contains(timeRaw, " ") {
+				timeParts := strings.Fields(timeRaw)
+				if len(timeParts) == 2 {
+					time = timeParts[0] + ":" + timeParts[1]
+				}
+			} else {
+				time = timeRaw
+			}
+			rest := strings.TrimSpace(parts[2])
+			nvtIdx := strings.Index(rest, "NVT ")
+			if nvtIdx != -1 {
+				address = strings.TrimSpace(rest[:nvtIdx])
+				nvt = strings.TrimSpace(rest[nvtIdx+4:])
+			} else {
+				address = rest
+			}
+		}
 		log.Printf("[Jetting] Parsed filename: %s | Date: %s | Time: %s | Address: %s | NVT: %s", baseName, date, time, address, nvt)
 	} else {
 		// Fremco format: "SM209214964_2025-10-22 10_51_Oldenburger Koppel_10_NVT1V3400"
 		parts := strings.Split(baseName, "_")
 		if len(parts) >= 4 {
 			project = parts[0]
-			
+
 			// Parse date and time from second part "2025-10-22 10"
 			dateTimePart := parts[1]
 			if strings.Contains(dateTimePart, " ") {
@@ -369,7 +369,7 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 					time = hour + ":" + minute
 				}
 			}
-			
+
 			// Find NVT part (starts with "NVT")
 			nvtIndex := -1
 			for i, part := range parts {
@@ -379,7 +379,7 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 					break
 				}
 			}
-			
+
 			// Address is everything between time part and NVT
 			if nvtIndex > 3 {
 				addressParts := parts[3:nvtIndex]
@@ -395,7 +395,7 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 	var jsonOutput []byte
 
 	// pdftotext -layout + OCR of page 1 when the header is an image.
-	text, err := extractPDFText(tempPdf)
+	text, _, err := extractPDFText(tempPdf)
 	if err != nil {
 		// Poslednji pokušaj: Go biblioteka (radi za PDF-ove koje poppler odbije).
 		if goText, goErr := extractTextWithGoLib(tempPdf); goErr == nil {
@@ -422,11 +422,11 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 	var pdfMeta map[string]string
 	var fremcoProtocol *simulator.FremcoProtocol
 	var jettingProtocol *simulator.JettingProtocol
-	
+
 	// Check for Fremco first (most specific indicators)
-	if (strings.Contains(rawStr, "Streckenabschnitt") && strings.Contains(rawStr, "Einblasgerät")) || 
-	   strings.Contains(rawStr, "Fremco") || 
-	   (strings.Contains(rawStr, "Streckenlänge [m]") && strings.Contains(rawStr, "Geschwindigkeit [m/min]") && strings.Contains(rawStr, "Rohr-Druck [bar]") && strings.Contains(rawStr, "Drehmoment [%]")) {
+	if (strings.Contains(rawStr, "Streckenabschnitt") && strings.Contains(rawStr, "Einblasgerät")) ||
+		strings.Contains(rawStr, "Fremco") ||
+		(strings.Contains(rawStr, "Streckenlänge [m]") && strings.Contains(rawStr, "Geschwindigkeit [m/min]") && strings.Contains(rawStr, "Rohr-Druck [bar]") && strings.Contains(rawStr, "Drehmoment [%]")) {
 		// Fremco format detected, use pdftotext extraction
 		text, err := extractTextWithPdftotext(tempPdf)
 		if err != nil {
@@ -436,21 +436,21 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 		normalized = simulator.NormalizeFremcoTxt(text)
 		log.Println("Normalized text (Fremco/pdftotext):")
 		log.Println(normalized)
-		
+
 		// Parse comprehensive protocol data
 		fremcoProtocol = simulator.ParseFremcoProtocol(normalized)
 		// Fill in filename-based metadata
-		   if fremcoProtocol != nil {
-			   fremcoProtocol.ProtocolInfo.ProjectNumber = project
-			   // Prefer date from filename, fallback to parsed content if missing
-			   if date != "" {
-				   fremcoProtocol.ProtocolInfo.Date = date
-			   }
-			   fremcoProtocol.ProtocolInfo.StartTime = time
-			   fremcoProtocol.ProtocolInfo.SectionNVT = address + " / " + nvt
-			   fremcoProtocol.ExportMetadata.SourceFilename = header.Filename
-		   }
-		
+		if fremcoProtocol != nil {
+			fremcoProtocol.ProtocolInfo.ProjectNumber = project
+			// Prefer date from filename, fallback to parsed content if missing
+			if date != "" {
+				fremcoProtocol.ProtocolInfo.Date = date
+			}
+			fremcoProtocol.ProtocolInfo.StartTime = time
+			fremcoProtocol.ProtocolInfo.SectionNVT = address + " / " + nvt
+			fremcoProtocol.ExportMetadata.SourceFilename = header.Filename
+		}
+
 		measurements = simulator.ParseFremcoSimple(normalized)
 		log.Printf("Parsed measurements (Fremco): %+v\n", measurements)
 		log.Printf("Comprehensive protocol (Fremco): %+v\n", fremcoProtocol)
@@ -465,20 +465,20 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 		normalized = simulator.NormalizeJettingTxt(rawStr)
 		log.Println("Normalized text (Old Jetting):")
 		log.Println(normalized)
-		
+
 		// Parse comprehensive protocol data
 		jettingProtocol = simulator.ParseJettingProtocol(normalized)
 		// Fill in filename-based metadata
-		   if jettingProtocol != nil {
-			   // Prefer date from filename, fallback to parsed content if missing
-			   if date != "" {
-				   jettingProtocol.ProtocolInfo.Date = date
-			   }
-			   jettingProtocol.ProtocolInfo.StartTime = time
-			   jettingProtocol.ProtocolInfo.SectionNVT = address + " / " + nvt
-			   jettingProtocol.ExportMetadata.SourceFilename = header.Filename
-		   }
-		
+		if jettingProtocol != nil {
+			// Prefer date from filename, fallback to parsed content if missing
+			if date != "" {
+				jettingProtocol.ProtocolInfo.Date = date
+			}
+			jettingProtocol.ProtocolInfo.StartTime = time
+			jettingProtocol.ProtocolInfo.SectionNVT = address + " / " + nvt
+			jettingProtocol.ExportMetadata.SourceFilename = header.Filename
+		}
+
 		jettingMeasurements = simulator.ParseJettingTxt(normalized)
 		log.Printf("Parsed measurements (Old Jetting): %+v\n", jettingMeasurements)
 		log.Printf("Comprehensive protocol (Jetting): %+v\n", jettingProtocol)
@@ -638,7 +638,7 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	data := map[string]interface{}{
 		"UserRole": role,
-		"IsAdmin": strings.EqualFold(role, "admin"),
+		"IsAdmin":  strings.EqualFold(role, "admin"),
 	}
 	_ = tmpl.Execute(w, data)
 }
@@ -704,21 +704,21 @@ func main() {
 	dbUser := getEnvOrDefault("DB_USER", "blowing")
 	dbPassword := os.Getenv("DB_PASSWORD")
 	dbName := getEnvOrDefault("DB_NAME", "blowing_simulator")
-	
+
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		dbHost, dbPort, dbUser, dbPassword, dbName)
-	
+
 	db, err = sqlx.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
 	defer db.Close()
-	
+
 	// Test database connection
 	if err = db.Ping(); err != nil {
 		log.Fatal("Failed to ping database:", err)
 	}
-	
+
 	log.Println("Successfully connected to database")
 
 	// Initialize auth (users table + default admin)
@@ -737,10 +737,13 @@ func main() {
 	if err := ensureSourceTables(db); err != nil {
 		log.Fatal("Failed to ensure source storage schema:", err)
 	}
+	if err := ensureParseTelemetry(db); err != nil {
+		log.Fatal("Failed to ensure parse telemetry schema:", err)
+	}
 	if err := ensureProtocolAccess(db); err != nil {
 		log.Fatal("Failed to ensure protocol_access schema:", err)
 	}
-	
+
 	http.HandleFunc("/", IndexHandler)
 	http.HandleFunc("/login", LoginHandler)
 	http.HandleFunc("/logout", LogoutHandler)
@@ -762,6 +765,7 @@ func main() {
 	http.HandleFunc("/protocols/view", requireAuth(ViewProtocolHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/delete", requireAuth(DeleteProtocolHandler, "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/source", requireAuth(DownloadSourceHandler, "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/protocols/render", requireAuth(RenderProtocolHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/measurements", requireAuth(ProtocolMeasurementsHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/length-report", requireAuth(LengthReportHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/api/get", requireAuth(ProtocolGetAPIHandler, "viewer", "editor", "partner", "admin"))
@@ -801,6 +805,9 @@ type Protocol struct {
 	UserID          sql.NullInt64  `db:"user_id"`
 	OwnerEmail      sql.NullString `db:"owner_email"`
 	SourceSHA256    sql.NullString `db:"source_sha256"`
+	ParseSource     sql.NullString `db:"parse_source"`
+	ParseWarnings   sql.NullString `db:"parse_warnings"`
+	ParsedAt        sql.NullString `db:"parsed_at"`
 }
 
 // NullTime represents a time.Time that may be null
@@ -848,17 +855,17 @@ func convertAssign(dest, src interface{}) error {
 
 // ProtocolMeasurement represents a measurement data point for display
 type ProtocolMeasurement struct {
-	ID               int             `db:"id"`
-	SequenceNumber   sql.NullInt64   `db:"sequence_number"`
-	LengthM          sql.NullFloat64 `db:"length_m"`
-	TimestampValue   NullTime        `db:"timestamp_value"`
-	SpeedMMin        sql.NullFloat64 `db:"speed_m_min"`
-	PressureBar      sql.NullFloat64 `db:"pressure_bar"`
-	TorquePercent    sql.NullFloat64 `db:"torque_percent"`
-	TemperatureC     sql.NullFloat64 `db:"temperature_c"`
-	ForceN           sql.NullFloat64 `db:"force_n"`
-	TimeDuration     sql.NullString  `db:"time_duration"`
-	CreatedAt        string          `db:"created_at"`
+	ID             int             `db:"id"`
+	SequenceNumber sql.NullInt64   `db:"sequence_number"`
+	LengthM        sql.NullFloat64 `db:"length_m"`
+	TimestampValue NullTime        `db:"timestamp_value"`
+	SpeedMMin      sql.NullFloat64 `db:"speed_m_min"`
+	PressureBar    sql.NullFloat64 `db:"pressure_bar"`
+	TorquePercent  sql.NullFloat64 `db:"torque_percent"`
+	TemperatureC   sql.NullFloat64 `db:"temperature_c"`
+	ForceN         sql.NullFloat64 `db:"force_n"`
+	TimeDuration   sql.NullString  `db:"time_duration"`
+	CreatedAt      string          `db:"created_at"`
 }
 
 // LengthReportData represents aggregated length data for reporting
@@ -895,7 +902,8 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		SELECT p.id, p.protocol_type, p.system_name, p.protocol_date, p.start_time,
 			   p.project_number, p.company, p.service_provider, p.operator,
 			   p.source_filename, p.created_at::text, p.user_id,
-			   u.email AS owner_email
+			   u.email AS owner_email,
+			   coalesce(p.parse_warnings::text, '') AS parse_warnings
 		FROM protocols p
 		LEFT JOIN users u ON u.id = p.user_id
 		WHERE 1=1`
@@ -996,7 +1004,7 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 			page = pi
 		}
 	}
-	
+
 	// Apply pagination to query
 	offset := (page - 1) * pageSize
 	arg++
@@ -1024,23 +1032,39 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	totalPages := (totalCount + pageSize - 1) / pageSize
 	pageNumbers := []int{}
-	for i := 1; i <= totalPages; i++ { pageNumbers = append(pageNumbers, i) }
+	for i := 1; i <= totalPages; i++ {
+		pageNumbers = append(pageNumbers, i)
+	}
 
 	// Build query string for link preservation
 	queryString := ""
-	if search != "" { queryString += "&search=" + url.QueryEscape(search) }
-	if protocolType != "" && protocolType != "all" { queryString += "&type=" + url.QueryEscape(protocolType) }
-	if company := r.URL.Query().Get("company"); company != "" { queryString += "&company=" + url.QueryEscape(company) }
-	if showAll && partnerIDStr != "" { queryString += "&partner_id=" + url.QueryEscape(partnerIDStr) }
-	if dateFrom != "" { queryString += "&date_from=" + url.QueryEscape(dateFrom) }
-	if dateTo != "" { queryString += "&date_to=" + url.QueryEscape(dateTo) }
+	if search != "" {
+		queryString += "&search=" + url.QueryEscape(search)
+	}
+	if protocolType != "" && protocolType != "all" {
+		queryString += "&type=" + url.QueryEscape(protocolType)
+	}
+	if company := r.URL.Query().Get("company"); company != "" {
+		queryString += "&company=" + url.QueryEscape(company)
+	}
+	if showAll && partnerIDStr != "" {
+		queryString += "&partner_id=" + url.QueryEscape(partnerIDStr)
+	}
+	if dateFrom != "" {
+		queryString += "&date_from=" + url.QueryEscape(dateFrom)
+	}
+	if dateTo != "" {
+		queryString += "&date_to=" + url.QueryEscape(dateTo)
+	}
 
 	// Render template with helpers for date/time formatting
 	tmpl := template.New("protocols.html").Funcs(template.FuncMap{
 		"add": func(a, b int) int { return a + b },
 		"sub": func(a, b int) int { return a - b },
 		"dateOnly": func(dateStr string) string {
-			if dateStr == "" { return "" }
+			if dateStr == "" {
+				return ""
+			}
 			if strings.Contains(dateStr, "T") {
 				dateStr = strings.Split(dateStr, "T")[0]
 			}
@@ -1060,7 +1084,9 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 			return dateStr
 		},
 		"timeOnly": func(s string) string {
-			if s == "" { return "" }
+			if s == "" {
+				return ""
+			}
 			// Extract HH:MM
 			re := regexp.MustCompile(`(\d{2}):(\d{2})`)
 			match := re.FindStringSubmatch(s)
@@ -1098,19 +1124,42 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		"TotalPages":  totalPages,
 		"Page":        page,
 		"PageNumbers": pageNumbers,
-		"UserRole":    func() string { c:=GetAuthClaims(r); if c!=nil {return c.Role}; return "" }(),
-		"IsAdmin":     isAdmin,
+		"UserRole": func() string {
+			c := GetAuthClaims(r)
+			if c != nil {
+				return c.Role
+			}
+			return ""
+		}(),
+		"IsAdmin": isAdmin,
 		// Brisanje: admin/editor brišu sve, partner samo svoje; red dobijen
 		// kroz `protocol_access` partner ne može da obriše.
-		"CurrentUserID": func() int64 { c:=GetAuthClaims(r); if c!=nil {return c.UserID}; return 0 }(),
-		"CanDeleteAny":  func() bool { c:=GetAuthClaims(r); if c==nil {return false}; return strings.EqualFold(c.Role, RoleAdmin) || strings.EqualFold(c.Role, RoleEditor) }(),
+		"CurrentUserID": func() int64 {
+			c := GetAuthClaims(r)
+			if c != nil {
+				return c.UserID
+			}
+			return 0
+		}(),
+		"CanDeleteAny": func() bool {
+			c := GetAuthClaims(r)
+			if c == nil {
+				return false
+			}
+			return strings.EqualFold(c.Role, RoleAdmin) || strings.EqualFold(c.Role, RoleEditor)
+		}(),
 		"Users":          filterUsers,
 		"CanFilterUsers": showAll,
-		"SelectedPartnerID": func() int64 { if haveSelectedPartner { return selectedPartnerID }; return 0 }(),
-		"Company":     r.URL.Query().Get("company"),
-		"DateFrom":    dateFrom,
-		"DateTo":      dateTo,
-		"LastImport":  lastImport.String,
+		"SelectedPartnerID": func() int64 {
+			if haveSelectedPartner {
+				return selectedPartnerID
+			}
+			return 0
+		}(),
+		"Company":    r.URL.Query().Get("company"),
+		"DateFrom":   dateFrom,
+		"DateTo":     dateTo,
+		"LastImport": lastImport.String,
 	}
 	if err := tmpl.Execute(w, data); err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
@@ -1125,26 +1174,29 @@ func ViewProtocolHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Protocol ID required", http.StatusBadRequest)
 		return
 	}
-	
+
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		http.Error(w, "Invalid protocol ID", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Get protocol info first
 	var protocol Protocol
 	err = db.Get(&protocol, `
 		SELECT id, protocol_type, system_name, protocol_date, start_time, 
 		       project_number, company, service_provider, operator, 
-		       source_filename, created_at::text, user_id, source_sha256
+		       source_filename, created_at::text, user_id, source_sha256,
+		coalesce(parse_source, '') AS parse_source,
+		coalesce(parse_warnings::text, '') AS parse_warnings,
+		coalesce(parsed_at::text, '') AS parsed_at
 		FROM protocols WHERE id = $1`, id)
-	
+
 	if err != nil {
 		http.Error(w, "Protocol not found", http.StatusNotFound)
 		return
 	}
-	
+
 	// Ownership check: partner samo svoje, ostali vide sve.
 	claims := GetAuthClaims(r)
 	isAdmin := claims != nil && strings.EqualFold(claims.Role, RoleAdmin)
@@ -1152,7 +1204,7 @@ func ViewProtocolHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
-	
+
 	// Get equipment info
 	var equipment map[string]interface{}
 	equipmentRows, err := db.Query(`
@@ -1165,22 +1217,22 @@ func ViewProtocolHandler(w http.ResponseWriter, r *http.Request) {
 			var deviceModel, controllerSN, compressorModel, pipeManuf, cableManuf sql.NullString
 			var fiberCount sql.NullInt64
 			var cableDiam sql.NullFloat64
-			
-			equipmentRows.Scan(&deviceModel, &controllerSN, &compressorModel, 
+
+			equipmentRows.Scan(&deviceModel, &controllerSN, &compressorModel,
 				&pipeManuf, &cableManuf, &fiberCount, &cableDiam)
-			
+
 			equipment = map[string]interface{}{
-				"DeviceModel":      deviceModel.String,
-				"ControllerSN":     controllerSN.String,
-				"CompressorModel":  compressorModel.String,
-				"PipeManufacturer": pipeManuf.String,
+				"DeviceModel":       deviceModel.String,
+				"ControllerSN":      controllerSN.String,
+				"CompressorModel":   compressorModel.String,
+				"PipeManufacturer":  pipeManuf.String,
 				"CableManufacturer": cableManuf.String,
-				"FiberCount":       fiberCount.Int64,
-				"CableDiameter":    cableDiam.Float64,
+				"FiberCount":        fiberCount.Int64,
+				"CableDiameter":     cableDiam.Float64,
 			}
 		}
 	}
-	
+
 	// Get summary info
 	var summary map[string]interface{}
 	summaryRows, err := db.Query(`
@@ -1193,10 +1245,10 @@ func ViewProtocolHandler(w http.ResponseWriter, r *http.Request) {
 			var totalDist sql.NullInt64
 			var blowingTime sql.NullString
 			var weatherTemp, weatherHum, gpsLat, gpsLon sql.NullFloat64
-			
-			summaryRows.Scan(&totalDist, &blowingTime, &weatherTemp, 
+
+			summaryRows.Scan(&totalDist, &blowingTime, &weatherTemp,
 				&weatherHum, &gpsLat, &gpsLon)
-			
+
 			summary = map[string]interface{}{
 				"TotalDistance":      totalDist.Int64,
 				"BlowingTime":        blowingTime.String,
@@ -1207,7 +1259,7 @@ func ViewProtocolHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	
+
 	// Get measurements count
 	var measurementCount int
 	db.Get(&measurementCount, "SELECT COUNT(*) FROM protocol_measurements WHERE protocol_id = $1", id)
@@ -1225,8 +1277,17 @@ func ViewProtocolHandler(w http.ResponseWriter, r *http.Request) {
 		"Equipment":        equipment,
 		"Summary":          summary,
 		"MeasurementCount": measurementCount,
-		"UserRole":         func() string { c:=GetAuthClaims(r); if c!=nil {return c.Role}; return "" }(),
-		"IsAdmin":          isAdmin,
+		"ParseSource":      protocol.ParseSource.String,
+		"ParseWarnings":    parseWarningsList(protocol.ParseWarnings.String),
+		"ParsedAt":         protocol.ParsedAt.String,
+		"UserRole": func() string {
+			c := GetAuthClaims(r)
+			if c != nil {
+				return c.Role
+			}
+			return ""
+		}(),
+		"IsAdmin": isAdmin,
 	}
 	if err := tmpl.Execute(w, data); err != nil {
 		log.Printf("Error rendering protocol-detail template: %v", err)
@@ -1241,26 +1302,26 @@ func DeleteProtocolHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	
+
 	idStr := r.FormValue("id")
 	if idStr == "" {
 		http.Error(w, "Protocol ID required", http.StatusBadRequest)
 		return
 	}
-	
+
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		http.Error(w, "Invalid protocol ID", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Check ownership
 	claims := GetAuthClaims(r)
 	if claims == nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	
+
 	// Get the protocol to check ownership
 	var protocol Protocol
 	err = db.Get(&protocol, "SELECT id, user_id FROM protocols WHERE id = $1", id)
@@ -1268,27 +1329,27 @@ func DeleteProtocolHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Protocol not found", http.StatusNotFound)
 		return
 	}
-	
+
 	// Partner briše samo svoje; admin/editor brišu sve.
 	if !canAccessProtocol(claims.Role, claims.UserID, protocol.UserID) {
 		http.Error(w, "You can only delete your own protocols", http.StatusForbidden)
 		return
 	}
-	
+
 	// Delete associated measurements first (foreign key constraint)
 	_, err = db.Exec("DELETE FROM protocol_measurements WHERE protocol_id = $1", id)
 	if err != nil {
 		http.Error(w, "Failed to delete measurements", http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Delete the protocol
 	_, err = db.Exec("DELETE FROM protocols WHERE id = $1", id)
 	if err != nil {
 		http.Error(w, "Failed to delete protocol", http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Redirect back to protocols page
 	http.Redirect(w, r, "/protocols", http.StatusSeeOther)
 }
@@ -1296,20 +1357,20 @@ func DeleteProtocolHandler(w http.ResponseWriter, r *http.Request) {
 // ProtocolMeasurementsHandler displays detailed measurement data for a protocol
 func ProtocolMeasurementsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("ProtocolMeasurementsHandler called with URL: %s, Query: %s", r.URL.Path, r.URL.RawQuery)
-	
+
 	idStr := r.URL.Query().Get("id")
 	if idStr == "" {
 		log.Printf("Protocol ID missing from request: %v", r.URL.Query())
 		http.Error(w, "Protocol ID required", http.StatusBadRequest)
 		return
 	}
-	
+
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		http.Error(w, "Invalid protocol ID", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Ownership check
 	claims := GetAuthClaims(r)
 	if claims == nil || !seesAllProtocols(claims.Role) {
@@ -1331,12 +1392,12 @@ func ProtocolMeasurementsHandler(w http.ResponseWriter, r *http.Request) {
 		       project_number, company, service_provider, operator, 
 		       source_filename, created_at::text 
 		FROM protocols WHERE id = $1`, id)
-	
+
 	if err != nil {
 		http.Error(w, "Protocol not found: "+err.Error(), http.StatusNotFound)
 		return
 	}
-	
+
 	// Get pagination parameters
 	page := 1
 	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
@@ -1344,10 +1405,10 @@ func ProtocolMeasurementsHandler(w http.ResponseWriter, r *http.Request) {
 			page = p
 		}
 	}
-	
+
 	limit := 50 // measurements per page
 	offset := (page - 1) * limit
-	
+
 	// Get measurements with pagination
 	var measurements []ProtocolMeasurement
 	err = db.Select(&measurements, `
@@ -1358,7 +1419,7 @@ func ProtocolMeasurementsHandler(w http.ResponseWriter, r *http.Request) {
 		WHERE protocol_id = $1 
 		ORDER BY COALESCE(sequence_number, id) ASC 
 		LIMIT $2 OFFSET $3`, id, limit, offset)
-	
+
 	if err != nil {
 		http.Error(w, "Error fetching measurements: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1377,47 +1438,47 @@ func ProtocolMeasurementsHandler(w http.ResponseWriter, r *http.Request) {
 		// Do not fail the page; just leave chart empty
 		allMeasurements = nil
 	}
-	
+
 	// Get total measurement count
 	var totalCount int
 	err = db.Get(&totalCount, "SELECT COUNT(*) FROM protocol_measurements WHERE protocol_id = $1", id)
 	if err != nil {
 		totalCount = 0
 	}
-	
+
 	// Calculate pagination info
 	totalPages := (totalCount + limit - 1) / limit
 	hasNext := page < totalPages
 	hasPrev := page > 1
-	
+
 	// Create template with custom functions
 	funcMap := template.FuncMap{
 		"add": func(a, b int) int { return a + b },
 		"sub": func(a, b int) int { return a - b },
 	}
 	tmpl := template.Must(template.New("protocol-measurements.html").Funcs(funcMap).ParseFiles("web/templates/protocol-measurements.html"))
-	
+
 	role := ""
 	if claims != nil {
 		role = claims.Role
 	}
-	
+
 	data := map[string]interface{}{
-		"Protocol":     protocol,
-		"Measurements": measurements,
+		"Protocol":        protocol,
+		"Measurements":    measurements,
 		"AllMeasurements": allMeasurements,
-		"CurrentPage":  page,
-		"TotalPages":   totalPages,
-		"TotalCount":   totalCount,
-		"HasNext":      hasNext,
-		"HasPrev":      hasPrev,
-		"NextPage":     page + 1,
-		"PrevPage":     page - 1,
-		"Limit":        limit,
-		"UserRole":     role,
-		"IsAdmin":      strings.EqualFold(role, "admin"),
+		"CurrentPage":     page,
+		"TotalPages":      totalPages,
+		"TotalCount":      totalCount,
+		"HasNext":         hasNext,
+		"HasPrev":         hasPrev,
+		"NextPage":        page + 1,
+		"PrevPage":        page - 1,
+		"Limit":           limit,
+		"UserRole":        role,
+		"IsAdmin":         strings.EqualFold(role, "admin"),
 	}
-	
+
 	err = tmpl.Execute(w, data)
 	if err != nil {
 		http.Error(w, "Error rendering template: "+err.Error(), http.StatusInternalServerError)
@@ -1465,14 +1526,14 @@ func ProtocolGetAPIHandler(w http.ResponseWriter, r *http.Request) {
 // HealthCheckHandler provides a simple health check endpoint
 func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Health check requested from: %s", r.RemoteAddr)
-	
+
 	// Test database connection
 	if err := db.Ping(); err != nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		fmt.Fprintf(w, "Database connection failed: %v", err)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprintf(w, `{"status": "healthy", "timestamp": "%s", "routes": ["/", "/protocols", "/protocols/view", "/protocols/measurements", "/protocols/length-report"]}`, time.Now().Format(time.RFC3339))
 }
@@ -1506,7 +1567,7 @@ func DashboardStatsHandler(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]any{
 		"protocols": totalProtocols,
 		// Placeholder: treat protocols as reports for now
-		"reports": totalProtocols,
+		"reports":    totalProtocols,
 		"lastUpload": lastUpload.String,
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1543,7 +1604,7 @@ func AdminBackfillOwnershipHandler(w http.ResponseWriter, r *http.Request) {
 // LengthReportHandler displays length reports with date filtering and format selection
 func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("LengthReportHandler called with URL: %s, Query: %s", r.URL.Path, r.URL.RawQuery)
-	
+
 	// Get filter parameters
 	startDate := r.URL.Query().Get("start_date")
 	endDate := r.URL.Query().Get("end_date")
@@ -1553,14 +1614,14 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 	if partnerIDStr == "" {
 		partnerIDStr = r.URL.Query().Get("user_id") // novi naziv; partner_id ostaje alias
 	}
-	
+
 	// Default to both if none selected
 	if !includeFremco && !includeJetting {
 		includeFremco = true
 		includeJetting = true
 	}
-	
-    // Build query
+
+	// Build query
 	query := `
 		SELECT 
 			p.id as protocol_id,
@@ -1579,27 +1640,27 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 		FROM protocols p
 		LEFT JOIN protocol_measurements m ON p.id = m.protocol_id
 		WHERE 1=1`
-	
+
 	args := []interface{}{}
 	argCount := 0
 
 	claims := GetAuthClaims(r)
 	isAdmin := claims != nil && strings.EqualFold(claims.Role, RoleAdmin)
 	showAll := claims != nil && seesAllProtocols(claims.Role)
-	
+
 	// Add date filters
 	if startDate != "" {
 		argCount++
 		query += fmt.Sprintf(" AND p.protocol_date >= $%d", argCount)
 		args = append(args, startDate)
 	}
-	
+
 	if endDate != "" {
 		argCount++
 		query += fmt.Sprintf(" AND p.protocol_date <= $%d", argCount)
 		args = append(args, endDate)
 	}
-	
+
 	// Add format filters
 	var formatConditions []string
 	if includeFremco {
@@ -1608,11 +1669,11 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 	if includeJetting {
 		formatConditions = append(formatConditions, "p.protocol_type = 'jetting'")
 	}
-	
+
 	if len(formatConditions) > 0 {
 		query += " AND (" + strings.Join(formatConditions, " OR ") + ")"
 	}
-	
+
 	// Ownership filter: partners ALWAYS see only their own data (no scope override)
 	var selectedPartnerID int64
 	var haveSelectedPartner bool
@@ -1637,7 +1698,7 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 		GROUP BY p.id, p.protocol_type, p.protocol_date, p.company, 
 		         p.service_provider, p.source_filename, p.created_at
 		ORDER BY p.protocol_date DESC, p.created_at DESC`
-	
+
 	// Execute query
 	var reports []LengthReportData
 	err := db.Select(&reports, query, args...)
@@ -1645,13 +1706,13 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error fetching length report: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Calculate totals
-	var totalMeasurementCount int     // Count of all measurement records
-	var totalMaxLengthSum float64     // Sum of maximum lengths from each protocol
+	var totalMeasurementCount int // Count of all measurement records
+	var totalMaxLengthSum float64 // Sum of maximum lengths from each protocol
 	var totalProtocols = len(reports)
 	var maxLengthOverall float64
-	
+
 	for _, report := range reports {
 		totalMeasurementCount += report.MeasurementCount
 		if report.MaxLength.Valid && report.MaxLength.Float64 > maxLengthOverall {
@@ -1662,52 +1723,52 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 			totalMaxLengthSum += report.MaxLength.Float64
 		}
 	}
-	
+
 	// Overall average is average of maximum lengths from each protocol
 	var overallAverage float64
 	if totalProtocols > 0 {
 		// Calculate average of max lengths (same as totalMaxLengthSum / number of protocols)
 		overallAverage = totalMaxLengthSum / float64(totalProtocols)
 	}
-	
+
 	// Render template
 	funcMap := template.FuncMap{
-		   "dateFormat": func(dateStr string) string {
-			   // Remove time part if present
-			   if strings.Contains(dateStr, "T") {
-				   dateStr = strings.Split(dateStr, "T")[0]
-			   }
-			   // Handle YYYY-MM-DD
-			   if matched, _ := regexp.MatchString(`^\d{4}-\d{2}-\d{2}$`, dateStr); matched {
-				   parts := strings.Split(dateStr, "-")
-				   return parts[2] + "." + parts[1] + "." + parts[0]
-			   }
-			   // Handle DD.MM.YYYY
-			   if matched, _ := regexp.MatchString(`^\d{2}\.\d{2}\.\d{4}$`, dateStr); matched {
-				   return dateStr
-			   }
-			   // Handle DD-MM-YYYY
-			   if matched, _ := regexp.MatchString(`^\d{2}-\d{2}-\d{4}$`, dateStr); matched {
-				   parts := strings.Split(dateStr, "-")
-				   return parts[0] + "." + parts[1] + "." + parts[2]
-			   }
-			   // Handle MM/DD/YYYY
-			   if matched, _ := regexp.MatchString(`^\d{2}/\d{2}/\d{4}$`, dateStr); matched {
-				   parts := strings.Split(dateStr, "/")
-				   return parts[1] + "." + parts[0] + "." + parts[2]
-			   }
-			   // If only DD, MM, or YYYY, return as is
-			   if matched, _ := regexp.MatchString(`^\d{2}$`, dateStr); matched {
-				   return dateStr
-			   }
-			   // Fallback: try to extract DD.MM.YYYY from any string
-			   re := regexp.MustCompile(`(\d{2})[.\-/](\d{2})[.\-/](\d{4})`)
-			   match := re.FindStringSubmatch(dateStr)
-			   if len(match) == 4 {
-				   return match[1] + "." + match[2] + "." + match[3]
-			   }
-			   return dateStr
-		   },
+		"dateFormat": func(dateStr string) string {
+			// Remove time part if present
+			if strings.Contains(dateStr, "T") {
+				dateStr = strings.Split(dateStr, "T")[0]
+			}
+			// Handle YYYY-MM-DD
+			if matched, _ := regexp.MatchString(`^\d{4}-\d{2}-\d{2}$`, dateStr); matched {
+				parts := strings.Split(dateStr, "-")
+				return parts[2] + "." + parts[1] + "." + parts[0]
+			}
+			// Handle DD.MM.YYYY
+			if matched, _ := regexp.MatchString(`^\d{2}\.\d{2}\.\d{4}$`, dateStr); matched {
+				return dateStr
+			}
+			// Handle DD-MM-YYYY
+			if matched, _ := regexp.MatchString(`^\d{2}-\d{2}-\d{4}$`, dateStr); matched {
+				parts := strings.Split(dateStr, "-")
+				return parts[0] + "." + parts[1] + "." + parts[2]
+			}
+			// Handle MM/DD/YYYY
+			if matched, _ := regexp.MatchString(`^\d{2}/\d{2}/\d{4}$`, dateStr); matched {
+				parts := strings.Split(dateStr, "/")
+				return parts[1] + "." + parts[0] + "." + parts[2]
+			}
+			// If only DD, MM, or YYYY, return as is
+			if matched, _ := regexp.MatchString(`^\d{2}$`, dateStr); matched {
+				return dateStr
+			}
+			// Fallback: try to extract DD.MM.YYYY from any string
+			re := regexp.MustCompile(`(\d{2})[.\-/](\d{2})[.\-/](\d{4})`)
+			match := re.FindStringSubmatch(dateStr)
+			if len(match) == 4 {
+				return match[1] + "." + match[2] + "." + match[3]
+			}
+			return dateStr
+		},
 		"dateOnly": func(dateStr string) string {
 			// Accepts date in YYYY-MM-DD or RFC3339, returns DD.MM.YYYY (no time)
 			if len(dateStr) >= 10 {
@@ -1752,14 +1813,25 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 		"IncludeFremco":     includeFremco,
 		"IncludeJetting":    includeJetting,
 		"TotalProtocols":    totalProtocols,
-		"TotalMeasurements": totalMaxLengthSum,     // Now shows sum of max lengths
+		"TotalMeasurements": totalMaxLengthSum, // Now shows sum of max lengths
 		"MaxLengthOverall":  maxLengthOverall,
 		"OverallAverage":    overallAverage,
-		"UserRole":          func() string { c:=GetAuthClaims(r); if c!=nil {return c.Role}; return "" }(),
-		"IsAdmin":           isAdmin,
-		"Users":             filterUsers,
-		"CanFilterUsers":    showAll,
-		"SelectedPartnerID": func() int64 { if haveSelectedPartner { return selectedPartnerID }; return 0 }(),
+		"UserRole": func() string {
+			c := GetAuthClaims(r)
+			if c != nil {
+				return c.Role
+			}
+			return ""
+		}(),
+		"IsAdmin":        isAdmin,
+		"Users":          filterUsers,
+		"CanFilterUsers": showAll,
+		"SelectedPartnerID": func() int64 {
+			if haveSelectedPartner {
+				return selectedPartnerID
+			}
+			return 0
+		}(),
 	}
 
 	err = tmpl.Execute(w, data)
@@ -1781,22 +1853,22 @@ func getEnvOrDefault(key, defaultValue string) string {
 func isJettingFormatWithFilename(text string, filename string) bool {
 	// Check filename patterns first - strong indicator
 	filenameHints := 0
-	
+
 	// German Jetting filename pattern: "DD.MM.YYYY, HH MM, Location NVT XXXXX.pdf"
 	if strings.Contains(filename, "NVT") && strings.Contains(filename, ",") {
 		filenameHints += 3 // Strong Jetting indicator
 	}
-	
+
 	// Date pattern: DD.MM.YYYY
 	if matched, _ := regexp.MatchString(`\d{2}\.\d{2}\.\d{4}`, filename); matched {
 		filenameHints++
 	}
-	
+
 	// Time pattern: HH MM
 	if matched, _ := regexp.MatchString(`\d{2} \d{2}`, filename); matched {
 		filenameHints++
 	}
-	
+
 	return isJettingFormat(text) || filenameHints >= 3
 }
 
@@ -1804,52 +1876,88 @@ func isJettingFormatWithFilename(text string, filename string) bool {
 func isJettingFormat(text string) bool {
 	// Check for Jetting-specific indicators (more comprehensive)
 	jettingIndicators := 0
-	
+
 	// German language indicators (primary)
-	if strings.Contains(text, "Streckenlänge") { jettingIndicators += 2 }
-	if strings.Contains(text, "Geschwindigkeit") { jettingIndicators += 2 }
-	if strings.Contains(text, "Drehmoment") { jettingIndicators += 2 }
-	if strings.Contains(text, "Schubkraft") { jettingIndicators += 2 }
-	if strings.Contains(text, "Uhrzeit") { jettingIndicators += 1 }
-	
+	if strings.Contains(text, "Streckenlänge") {
+		jettingIndicators += 2
+	}
+	if strings.Contains(text, "Geschwindigkeit") {
+		jettingIndicators += 2
+	}
+	if strings.Contains(text, "Drehmoment") {
+		jettingIndicators += 2
+	}
+	if strings.Contains(text, "Schubkraft") {
+		jettingIndicators += 2
+	}
+	if strings.Contains(text, "Uhrzeit") {
+		jettingIndicators += 1
+	}
+
 	// Common patterns
-	if strings.Contains(text, "Länge") && strings.Contains(text, "m/min") { jettingIndicators += 2 }
-	if strings.Contains(text, "[m]") && strings.Contains(text, "[bar]") { jettingIndicators += 1 }
-	
+	if strings.Contains(text, "Länge") && strings.Contains(text, "m/min") {
+		jettingIndicators += 2
+	}
+	if strings.Contains(text, "[m]") && strings.Contains(text, "[bar]") {
+		jettingIndicators += 1
+	}
+
 	// Additional German indicators
-	if strings.Contains(text, "Rohr-Druck") { jettingIndicators += 2 }
-	if strings.Contains(text, "Lufttemperatur") { jettingIndicators += 1 }
-	if strings.Contains(text, "Einblasdruck") { jettingIndicators += 1 }
-	
+	if strings.Contains(text, "Rohr-Druck") {
+		jettingIndicators += 2
+	}
+	if strings.Contains(text, "Lufttemperatur") {
+		jettingIndicators += 1
+	}
+	if strings.Contains(text, "Einblasdruck") {
+		jettingIndicators += 1
+	}
+
 	// Time format patterns (German)
-	if strings.Contains(text, "[hh:mm:ss]") { jettingIndicators++ }
-	if strings.Contains(text, "Zeit - Dauer") { jettingIndicators++ }
-	
+	if strings.Contains(text, "[hh:mm:ss]") {
+		jettingIndicators++
+	}
+	if strings.Contains(text, "Zeit - Dauer") {
+		jettingIndicators++
+	}
+
 	// Unit patterns
-	if strings.Contains(text, "[°C]") { jettingIndicators++ }
-	if strings.Contains(text, "[N]") { jettingIndicators++ }
-	if strings.Contains(text, "[%]") { jettingIndicators++ }
-	
+	if strings.Contains(text, "[°C]") {
+		jettingIndicators++
+	}
+	if strings.Contains(text, "[N]") {
+		jettingIndicators++
+	}
+	if strings.Contains(text, "[%]") {
+		jettingIndicators++
+	}
+
 	// Additional fallback patterns for difficult-to-detect files
 	if strings.Contains(text, "Protokoll") && (strings.Contains(text, "Meter") || strings.Contains(text, "Zeit")) {
 		jettingIndicators++
 	}
-	
+
 	// Very generic patterns as last resort
 	if strings.Contains(text, "bar") && strings.Contains(text, "min") {
 		jettingIndicators++
 	}
-	
+
 	// If text contains measurement-like patterns
 	if matched, _ := regexp.MatchString(`\d+[.,]\d+\s*(m|bar|°C|N|%)`, text); matched {
 		jettingIndicators++
 	}
-	
+
 	// Exclude Fremco files (strong exclusion)
-	if strings.Contains(text, "Fremco") { return false }
-	if strings.Contains(text, "SpeedNet") { return false }
-	if strings.Contains(text, "MicroFlow") { return false }
-	
+	if strings.Contains(text, "Fremco") {
+		return false
+	}
+	if strings.Contains(text, "SpeedNet") {
+		return false
+	}
+	if strings.Contains(text, "MicroFlow") {
+		return false
+	}
+
 	// Very low threshold - be more permissive
 	return jettingIndicators >= 1
 }
@@ -1858,18 +1966,32 @@ func isJettingFormat(text string) bool {
 func isFremcoFormat(text string) bool {
 	// Check for Fremco-specific indicators (prioritized detection)
 	fremcoIndicators := 0
-	
+
 	// Primary indicators
-	if strings.Contains(text, "Fremco") { fremcoIndicators += 3 }
-	if strings.Contains(text, "SpeedNet") { fremcoIndicators += 2 }
-	if strings.Contains(text, "MicroFlow") { fremcoIndicators += 2 }
-	
+	if strings.Contains(text, "Fremco") {
+		fremcoIndicators += 3
+	}
+	if strings.Contains(text, "SpeedNet") {
+		fremcoIndicators += 2
+	}
+	if strings.Contains(text, "MicroFlow") {
+		fremcoIndicators += 2
+	}
+
 	// Secondary indicators
-	if strings.Contains(text, "Blowing distance") { fremcoIndicators++ }
-	if strings.Contains(text, "Blowing time") { fremcoIndicators++ }
-	if strings.Contains(text, "Streckenabschnitt") { fremcoIndicators++ }
-	if strings.Contains(text, "Equipment") && strings.Contains(text, "Serial") { fremcoIndicators++ }
-	
+	if strings.Contains(text, "Blowing distance") {
+		fremcoIndicators++
+	}
+	if strings.Contains(text, "Blowing time") {
+		fremcoIndicators++
+	}
+	if strings.Contains(text, "Streckenabschnitt") {
+		fremcoIndicators++
+	}
+	if strings.Contains(text, "Equipment") && strings.Contains(text, "Serial") {
+		fremcoIndicators++
+	}
+
 	return fremcoIndicators >= 2
 }
 
@@ -2000,14 +2122,14 @@ func debugPDFProcessing(filename string, content []byte) map[string]interface{} 
 	isJetting := isJettingFormatWithFilename(rawText, filename)
 	isFremco := isFremcoFormat(rawText)
 	isJettingContentOnly := isJettingFormat(rawText)
-	
+
 	result["format_detection"] = map[string]interface{}{
-		"is_jetting": isJetting,
+		"is_jetting":              isJetting,
 		"is_jetting_content_only": isJettingContentOnly,
-		"is_fremco":  isFremco,
-		"jetting_indicators": analyzeJettingIndicators(rawText),
-		"fremco_indicators":  analyzeFremcoIndicators(rawText),
-		"filename_hints": analyzeFilenameHints(filename),
+		"is_fremco":               isFremco,
+		"jetting_indicators":      analyzeJettingIndicators(rawText),
+		"fremco_indicators":       analyzeFremcoIndicators(rawText),
+		"filename_hints":          analyzeFilenameHints(filename),
 	}
 
 	// Try parsing if format detected
@@ -2039,29 +2161,29 @@ func debugPDFProcessing(filename string, content []byte) map[string]interface{} 
 // analyzeJettingIndicators provides detailed analysis of Jetting format indicators
 func analyzeJettingIndicators(text string) map[string]bool {
 	return map[string]bool{
-		"has_streckenlänge": strings.Contains(text, "Streckenlänge"),
+		"has_streckenlänge":   strings.Contains(text, "Streckenlänge"),
 		"has_geschwindigkeit": strings.Contains(text, "Geschwindigkeit"),
-		"has_drehmoment": strings.Contains(text, "Drehmoment"),
-		"has_schubkraft": strings.Contains(text, "Schubkraft"),
-		"has_uhrzeit": strings.Contains(text, "Uhrzeit"),
-		"has_länge": strings.Contains(text, "Länge"),
-		"has_m_min": strings.Contains(text, "m/min"),
-		"has_m_bracket": strings.Contains(text, "[m]"),
-		"has_bar_bracket": strings.Contains(text, "[bar]"),
-		"has_fremco": strings.Contains(text, "Fremco"),
+		"has_drehmoment":      strings.Contains(text, "Drehmoment"),
+		"has_schubkraft":      strings.Contains(text, "Schubkraft"),
+		"has_uhrzeit":         strings.Contains(text, "Uhrzeit"),
+		"has_länge":           strings.Contains(text, "Länge"),
+		"has_m_min":           strings.Contains(text, "m/min"),
+		"has_m_bracket":       strings.Contains(text, "[m]"),
+		"has_bar_bracket":     strings.Contains(text, "[bar]"),
+		"has_fremco":          strings.Contains(text, "Fremco"),
 	}
 }
 
-// analyzeFremcoIndicators provides detailed analysis of Fremco format indicators  
+// analyzeFremcoIndicators provides detailed analysis of Fremco format indicators
 func analyzeFremcoIndicators(text string) map[string]bool {
 	return map[string]bool{
-		"has_fremco": strings.Contains(text, "Fremco"),
-		"has_speednet": strings.Contains(text, "SpeedNet"),
-		"has_microflow": strings.Contains(text, "MicroFlow"),
-		"has_blowing_distance": strings.Contains(text, "Blowing distance"),
-		"has_blowing_time": strings.Contains(text, "Blowing time"),
+		"has_fremco":            strings.Contains(text, "Fremco"),
+		"has_speednet":          strings.Contains(text, "SpeedNet"),
+		"has_microflow":         strings.Contains(text, "MicroFlow"),
+		"has_blowing_distance":  strings.Contains(text, "Blowing distance"),
+		"has_blowing_time":      strings.Contains(text, "Blowing time"),
 		"has_streckenabschnitt": strings.Contains(text, "Streckenabschnitt"),
-		"has_equipment_serial": strings.Contains(text, "Equipment") && strings.Contains(text, "Serial"),
+		"has_equipment_serial":  strings.Contains(text, "Equipment") && strings.Contains(text, "Serial"),
 	}
 }
 
@@ -2069,12 +2191,12 @@ func analyzeFremcoIndicators(text string) map[string]bool {
 func analyzeFilenameHints(filename string) map[string]bool {
 	datePattern, _ := regexp.MatchString(`\d{2}\.\d{2}\.\d{4}`, filename)
 	timePattern, _ := regexp.MatchString(`\d{2} \d{2}`, filename)
-	
+
 	return map[string]bool{
-		"has_nvt": strings.Contains(filename, "NVT"),
-		"has_comma_separation": strings.Contains(filename, ","),
-		"has_date_pattern": datePattern,
-		"has_time_pattern": timePattern,
+		"has_nvt":                   strings.Contains(filename, "NVT"),
+		"has_comma_separation":      strings.Contains(filename, ","),
+		"has_date_pattern":          datePattern,
+		"has_time_pattern":          timePattern,
 		"probable_jetting_filename": strings.Contains(filename, "NVT") && strings.Contains(filename, ",") && datePattern,
 	}
 }
@@ -2088,7 +2210,7 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Error loading template: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		
+
 		claims := GetAuthClaims(r)
 		role := ""
 		if claims != nil {
@@ -2098,7 +2220,7 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 			"UserRole": role,
 			"IsAdmin":  strings.EqualFold(role, "admin"),
 		}
-		
+
 		err = tmpl.Execute(w, data)
 		if err != nil {
 			http.Error(w, "Error rendering template: "+err.Error(), http.StatusInternalServerError)
@@ -2106,7 +2228,7 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	
+
 	if r.Method == "POST" {
 		// Handle bulk file upload processing
 		err := r.ParseMultipartForm(100 << 20) // 100 MB max memory
@@ -2114,17 +2236,17 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Error parsing multipart form: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		
+
 		files := r.MultipartForm.File["pdfFiles"]
 		if len(files) == 0 {
 			http.Error(w, "No files provided", http.StatusBadRequest)
 			return
 		}
-		
+
 		// Get options
 		autoSave := r.FormValue("autoSave") == "true"
 		skipExisting := r.FormValue("skipExisting") == "true"
-		
+
 		results := make([]map[string]interface{}, 0)
 		// Determine owner from auth claims
 		var ownerID int64
@@ -2133,17 +2255,17 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		var mutex sync.Mutex
 		var wg sync.WaitGroup
-		
+
 		// Process files in parallel (limit concurrency to avoid overwhelming system)
 		semaphore := make(chan struct{}, 5) // Max 5 concurrent processing
-		
+
 		for _, fileHeader := range files {
 			wg.Add(1)
 			go func(fh *multipart.FileHeader) {
 				defer wg.Done()
-				semaphore <- struct{}{} // Acquire semaphore
+				semaphore <- struct{}{}        // Acquire semaphore
 				defer func() { <-semaphore }() // Release semaphore
-				
+
 				file, err := fh.Open()
 				if err != nil {
 					mutex.Lock()
@@ -2156,7 +2278,7 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				defer file.Close()
-				
+
 				// Dedupe je **globalni po imenu fajla** (kao i ranije), ali kad
 				// dokument već postoji red se NE duplira: ako ga je učitao neko
 				// drugi, uploader dobija pristup kroz `protocol_access`, a ako
@@ -2174,7 +2296,7 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 					mutex.Unlock()
 					return
 				}
-				
+
 				if skipExisting && db != nil {
 					if handled, message := handleExistingUpload(fh.Filename, ownerID, content); handled {
 						mutex.Lock()
@@ -2188,19 +2310,19 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 						return
 					}
 				}
-				
+
 				// Process the PDF
 				result := processBulkPDF(fh.Filename, content, autoSave, ownerID)
-				
+
 				mutex.Lock()
 				results = append(results, result)
 				mutex.Unlock()
-				
+
 			}(fileHeader)
 		}
-		
+
 		wg.Wait()
-		
+
 		// Return results as JSON
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -2209,7 +2331,7 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	
+
 	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 }
 
@@ -2219,27 +2341,27 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 		"filename": filename,
 		"success":  false,
 	}
-	
+
 	// Validate input
 	if len(content) == 0 {
 		result["error"] = "Empty file content"
 		log.Printf("Bulk upload error - %s: Empty file content", filename)
 		return result
 	}
-	
+
 	if len(content) < 100 {
 		result["error"] = "File too small (likely not a valid PDF)"
 		log.Printf("Bulk upload error - %s: File size %d bytes - too small", filename, len(content))
 		return result
 	}
-	
+
 	// Check PDF header
 	if !strings.HasPrefix(string(content[:4]), "%PDF") {
 		result["error"] = "Not a valid PDF file (missing PDF header)"
 		log.Printf("Bulk upload error - %s: Invalid PDF header", filename)
 		return result
 	}
-	
+
 	// Save to temporary file
 	tempFile, err := os.CreateTemp("", "bulk_*.pdf")
 	if err != nil {
@@ -2249,7 +2371,7 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 	}
 	defer os.Remove(tempFile.Name())
 	defer tempFile.Close()
-	
+
 	_, err = tempFile.Write(content)
 	if err != nil {
 		result["error"] = "Failed to write temporary file: " + err.Error()
@@ -2257,10 +2379,10 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 		return result
 	}
 	tempFile.Close()
-	
+
 	// Extract text: pdftotext -layout, plus OCR of page 1 when the header is an
 	// image (Jettlogger layout). OCR is serialized inside simulator.OCRPage.
-	rawText, err := extractPDFText(tempFile.Name())
+	rawText, textSource, err := extractPDFText(tempFile.Name())
 	extractMethod := "pdftotext+ocr"
 	if err != nil {
 		log.Printf("Bulk upload - %s: pdftotext failed, trying Go library - %v", filename, err)
@@ -2287,13 +2409,13 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 	}
 
 	log.Printf("Bulk upload - %s: Successfully extracted %d characters using %s", filename, len(rawText), extractMethod)
-	
+
 	// Detect format and parse (with filename hints)
 	isJetting := isJettingFormatWithFilename(rawText, filename)
 	isFremco := isFremcoFormat(rawText)
-	
+
 	log.Printf("Bulk upload - %s: Format detection - Jetting: %v, Fremco: %v", filename, isJetting, isFremco)
-	
+
 	if isJetting {
 		normalized := simulator.NormalizeJettingTxt(rawText)
 		protocol := simulator.ParseJettingProtocol(normalized)
@@ -2302,7 +2424,7 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 			log.Printf("Bulk upload error - %s: Jetting parsing failed. First 200 chars of normalized text: %q", filename, truncateString(normalized, 200))
 			return result
 		}
-		
+
 		// Parse filename for metadata (Jetting format: "29.10.2025, 11 09, Eiemarkt 14 NVT 1V2200.pdf")
 		baseName := strings.TrimSuffix(filename, filepath.Ext(filename))
 		var date, time, address, nvt string
@@ -2331,7 +2453,29 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 			}
 			log.Printf("Bulk upload - %s [Jetting] Parsed filename: Date: %s | Time: %s | Address: %s | NVT: %s", filename, date, time, address, nvt)
 		}
-		
+
+		// Vrednosti iz dokumenta, pre nego što ih ime fajla prepiše — trebaju
+		// za upozorenja o neslaganju.
+		pdfValues := map[string]string{
+			"date":    protocol.ProtocolInfo.Date,
+			"time":    protocol.ProtocolInfo.StartTime,
+			"section": protocol.ProtocolInfo.SectionNVT,
+			"company": protocol.ProtocolInfo.Company,
+		}
+		if protocol.ProtocolInfo.ProjectNumber != nil {
+			pdfValues["project"] = *protocol.ProtocolInfo.ProjectNumber
+		}
+		if protocol.ProtocolInfo.Operator != nil {
+			pdfValues["operator"] = *protocol.ProtocolInfo.Operator
+		}
+		sectionHint := ""
+		if address != "" && nvt != "" {
+			sectionHint = address + " / " + nvt
+		} else {
+			sectionHint = address
+		}
+		hints := map[string]string{"date": date, "time": time, "section": sectionHint}
+
 		// Fill in filename-based metadata
 		protocol.ExportMetadata.SourceFilename = filename
 		if date != "" {
@@ -2345,13 +2489,13 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 		} else if address != "" {
 			protocol.ProtocolInfo.SectionNVT = address
 		}
-		
+
 		result["format"] = "jetting"
 		measurementCount := len(protocol.Measurements.DataPoints)
 		result["measurements"] = measurementCount
-		
+
 		log.Printf("Bulk upload - %s: Jetting protocol parsed successfully - %d measurements", filename, measurementCount)
-		
+
 		if autoSave && db != nil {
 			sha, size, storeErr := prepareOriginal(context.Background(), content)
 			if storeErr != nil {
@@ -2366,6 +2510,10 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 				return result
 			}
 			linkOriginal(protocolID, sha, size)
+			saveParseTelemetry(db, protocolID, parseTelemetry{
+				Source:   textSource,
+				Warnings: buildWarnings(parseTelemetry{Source: textSource}, len(rawText), measurementCount, pdfValues, hints),
+			})
 			result["saved"] = true
 			log.Printf("Bulk upload - %s: Jetting protocol saved to database successfully", filename)
 		}
@@ -2377,7 +2525,7 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 			log.Printf("Bulk upload error - %s: Fremco parsing failed. First 200 chars of normalized text: %q", filename, truncateString(normalized, 200))
 			return result
 		}
-		
+
 		// Parse filename for metadata (Fremco format: "SM209214964_2025-10-22 10_51_Oldenburger Koppel_10_NVT1V3400.pdf")
 		baseName := strings.TrimSuffix(filename, filepath.Ext(filename))
 		var date, time, address, nvt, project string
@@ -2385,7 +2533,7 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 			parts := strings.Split(baseName, "_")
 			if len(parts) >= 4 {
 				project = parts[0]
-				
+
 				// Parse date and time from second part "2025-10-22 10"
 				dateTimePart := parts[1]
 				if strings.Contains(dateTimePart, " ") {
@@ -2402,7 +2550,7 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 						time = hour + ":" + minute
 					}
 				}
-				
+
 				// Find NVT part (starts with "NVT")
 				nvtIndex := -1
 				for i, part := range parts {
@@ -2412,7 +2560,7 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 						break
 					}
 				}
-				
+
 				// Address is everything between time part and NVT
 				if nvtIndex > 3 {
 					addressParts := parts[3:nvtIndex]
@@ -2421,7 +2569,24 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 			}
 			log.Printf("Bulk upload - %s [Fremco] Parsed filename: Project: %s | Date: %s | Time: %s | Address: %s | NVT: %s", filename, project, date, time, address, nvt)
 		}
-		
+
+		// Vrednosti iz dokumenta, pre nego što ih ime fajla prepiše.
+		pdfValues := map[string]string{
+			"date":     protocol.ProtocolInfo.Date,
+			"time":     protocol.ProtocolInfo.StartTime,
+			"section":  protocol.ProtocolInfo.SectionNVT,
+			"project":  protocol.ProtocolInfo.ProjectNumber,
+			"company":  protocol.ProtocolInfo.Company,
+			"operator": protocol.ProtocolInfo.Operator,
+		}
+		sectionHint := ""
+		if address != "" && nvt != "" {
+			sectionHint = address + " / " + nvt
+		} else {
+			sectionHint = address
+		}
+		hints := map[string]string{"date": date, "time": time, "section": sectionHint, "project": project}
+
 		// Fill in filename-based metadata
 		protocol.ExportMetadata.SourceFilename = filename
 		if date != "" {
@@ -2438,13 +2603,13 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 		} else if address != "" {
 			protocol.ProtocolInfo.SectionNVT = address
 		}
-		
+
 		result["format"] = "fremco"
 		measurementCount := len(protocol.Measurements.DataPoints)
 		result["measurements"] = measurementCount
-		
+
 		log.Printf("Bulk upload - %s: Fremco protocol parsed successfully - %d measurements", filename, measurementCount)
-		
+
 		if autoSave && db != nil {
 			sha, size, storeErr := prepareOriginal(context.Background(), content)
 			if storeErr != nil {
@@ -2459,6 +2624,10 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 				return result
 			}
 			linkOriginal(protocolID, sha, size)
+			saveParseTelemetry(db, protocolID, parseTelemetry{
+				Source:   textSource,
+				Warnings: buildWarnings(parseTelemetry{Source: textSource}, len(rawText), measurementCount, pdfValues, hints),
+			})
 			result["saved"] = true
 			log.Printf("Bulk upload - %s: Fremco protocol saved to database successfully", filename)
 		}
@@ -2467,20 +2636,20 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 		filenameHints := analyzeFilenameHints(filename)
 		if filenameHints["probable_jetting_filename"] {
 			log.Printf("Bulk upload - %s: Content detection failed but filename suggests Jetting, attempting Jetting parse", filename)
-			
+
 			normalized := simulator.NormalizeJettingTxt(rawText)
 			protocol := simulator.ParseJettingProtocol(normalized)
 			if protocol != nil {
 				// Filename-based detection succeeded
 				protocol.ExportMetadata.SourceFilename = filename
-				
+
 				result["format"] = "jetting"
 				measurementCount := len(protocol.Measurements.DataPoints)
 				result["measurements"] = measurementCount
 				result["filename_fallback"] = true
-				
+
 				log.Printf("Bulk upload - %s: Filename-based Jetting fallback successful - %d measurements", filename, measurementCount)
-				
+
 				if autoSave && db != nil {
 					sha, size, storeErr := prepareOriginal(context.Background(), content)
 					if storeErr != nil {
@@ -2509,7 +2678,7 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 			return result
 		}
 	}
-	
+
 	result["success"] = true
 	return result
 }
@@ -2646,4 +2815,16 @@ func JettingReportHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+}
+
+// parseWarningsList pretvara JSONB niz u []string za šablon.
+func parseWarningsList(raw string) []string {
+	if raw == "" || raw == "[]" {
+		return nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil
+	}
+	return out
 }

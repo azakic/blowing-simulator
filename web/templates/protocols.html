@@ -372,7 +372,7 @@
                     <td>{{if .Company.Valid}}{{.Company.String}}{{else}}<em>N/A</em>{{end}}</td>
                     <td>{{if .ServiceProvider.Valid}}{{.ServiceProvider.String}}{{else}}<em>N/A</em>{{end}}</td>
                     <td>{{if .ProjectNumber.Valid}}{{.ProjectNumber.String}}{{else}}<em>N/A</em>{{end}}</td>
-                    <td>{{if .SourceFilename.Valid}}<span class="filename">{{.SourceFilename.String}}</span>{{else}}<em>N/A</em>{{end}}</td>
+                    <td>{{if .SourceFilename.Valid}}<span class="filename">{{.SourceFilename.String}}</span>{{else}}<em>N/A</em>{{end}}{{if and .ParseWarnings.Valid (ne .ParseWarnings.String "[]")}} <span title="{{.ParseWarnings.String}}" style="color:#e0a800;cursor:help;">⚠</span>{{end}}</td>
                     <td>{{.CreatedAt}}</td>
                     {{if $.IsAdmin}}
                     <td>{{if .OwnerEmail.Valid}}{{.OwnerEmail.String}}{{else}}<em>N/A</em>{{end}}</td>

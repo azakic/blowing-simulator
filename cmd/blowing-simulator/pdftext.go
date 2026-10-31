@@ -12,7 +12,8 @@ import (
 	"blowing-simulator/internal/simulator"
 )
 
-// extractPDFText vraća tekst PDF-a za parsiranje.
+// extractPDFText vraća tekst PDF-a za parsiranje i izvor teksta
+// ("text", "ocr" ili "mixed").
 //
 // Primarni put je `pdftotext -layout`. Ako prva strana nema upotrebljiv text
 // layer (npr. „Jettlogger / Einblas-Protokoll" ima zaglavlje kao sliku), doda
@@ -21,27 +22,32 @@ import (
 //
 // OCR se može isključiti sa OCR_DISABLED=true; DPI i prag se menjaju sa
 // OCR_DPI / OCR_MIN_CHARS.
-func extractPDFText(pdfPath string) (string, error) {
+func extractPDFText(pdfPath string) (string, string, error) {
 	text, err := pdftotextStdout(pdfPath)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if ocrDisabled() {
-		return text, nil
+		return text, "text", nil
 	}
 
 	page1, pageErr := pdftotextPageStdout(pdfPath, 1)
 	if pageErr == nil && len(strings.TrimSpace(page1)) >= ocrMinChars() {
-		return text, nil
+		return text, "text", nil
 	}
 
 	ocrText, ocrErr := simulator.OCRPage(pdfPath, 1, ocrDPI())
 	if ocrErr != nil {
 		log.Printf("OCR strane 1 preskočen (%s): %v", pdfPath, ocrErr)
-		return text, nil
+		return text, "text", nil
 	}
 	log.Printf("OCR strane 1: %d znakova (text layer prve strane imao %d)", len(strings.TrimSpace(ocrText)), len(strings.TrimSpace(page1)))
-	return ocrText + "\n" + text, nil
+
+	source := "mixed"
+	if len(strings.TrimSpace(page1)) == 0 {
+		source = "ocr"
+	}
+	return ocrText + "\n" + text, source, nil
 }
 
 func pdftotextStdout(pdfPath string) (string, error) {

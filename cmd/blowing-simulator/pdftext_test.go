@@ -22,10 +22,11 @@ func TestHeaderOCRFromPDF(t *testing.T) {
 		}
 	}
 
-	text, err := extractPDFText(path)
+	text, source, err := extractPDFText(path)
 	if err != nil {
 		t.Fatalf("extractPDFText: %v", err)
 	}
+	t.Logf("izvor teksta: %s", source)
 	for _, want := range []string{"Bauvorhaben", "SM209214964", "Einbläser"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("u tekstu nema %q", want)

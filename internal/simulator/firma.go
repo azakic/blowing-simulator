@@ -25,7 +25,7 @@ type FirmaInfo struct {
 var (
 	firmaLabelRe = regexp.MustCompile(`(?i)^\s*Firma\b`)
 	// Oznake polja koja prekidaju višelinijski blok (Firma, Bemerkungen, ...).
-	fieldLabelRe = regexp.MustCompile(`(?i)^\s*(Firma|Bemerkungen|Bauvorhaben|Streckenabschnitt|Datum|Adresse|Auftrag|Kunde|Objekt|Rohrparameter|Kabel|Einblasgerät|Hersteller|Rohr|Zusammenfassung|Ort|Projekt|Anlage|Messwerte|Nr\.)\b`)
+	fieldLabelRe = regexp.MustCompile(`(?i)^\s*(Firma|Bemerkungen|Bauvorhaben|Streckenabschnitt|Datum|Adresse|Auftrag|Kunde|Objekt|Rohrparameter|Kabel|Einblasgerät|Hersteller|Rohr|Zusammenfassung|Ort|Projekt|Anlage|Messwerte|Nr\.|Streckenlänge|Länge|Lufttemperatur|Schubkraft|Einblasdruck|Geschwindigkeit|Zeit - Dauer|Rohr-Druck|Drehmoment|Uhrzeit)\b`)
 	einblaserRe  = regexp.MustCompile(`(?i)Einbl(?:ä|ae)ser\s*:\s*([^,;/]+)`)
 	// Pravne forme — koriste se da se prepozna gde se završava naziv firme.
 	orgSuffixRe = regexp.MustCompile(`(?i)\b(GmbH|KG|AG|UG|GbR|OHG|SE|e\.\s?K\.|Inc\.?|Ltd\.?|SARL|S\.\s?A\.)\b`)

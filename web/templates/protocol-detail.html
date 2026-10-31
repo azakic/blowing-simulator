@@ -211,6 +211,23 @@
             <p><strong>File:</strong> {{if .Protocol.SourceFilename.Valid}}<span class="filename">{{.Protocol.SourceFilename.String}}</span>{{else}}<em>Unknown</em>{{end}}</p>
             <p><strong>Imported:</strong> {{.Protocol.CreatedAt}}</p>
         </div>
+
+        {{if .ParseWarnings}}
+        <div class="info-section" style="border-left: 4px solid #e0a800; background: #fffbea;">
+            <h3 style="margin-top: 0;">⚠ Upozorenja pri parsiranju</h3>
+            <p style="margin: 0 0 6px; font-size: 13px; color: #6c757d;">
+                Izvor teksta: <strong>{{if .ParseSource}}{{.ParseSource}}{{else}}nepoznato{{end}}</strong>
+                {{if .ParsedAt}} · poslednje parsiranje: {{.ParsedAt}}{{end}}
+            </p>
+            <ul style="margin: 0; padding-left: 20px; font-size: 14px;">
+                {{range .ParseWarnings}}<li>{{.}}</li>{{end}}
+            </ul>
+        </div>
+        {{else if .ParseSource}}
+        <div class="info-section" style="font-size: 13px; color: #6c757d;">
+            Izvor teksta: <strong>{{.ParseSource}}</strong>{{if .ParsedAt}} · poslednje parsiranje: {{.ParsedAt}}{{end}} — bez upozorenja.
+        </div>
+        {{end}}
         
         <div class="info-grid">
             <!-- Protocol Information -->
@@ -351,6 +368,8 @@
                     <a href="/protocols" class="btn">← Back to List</a>
                     {{if .Protocol.Company.Valid}}<a href="/protocols?search={{.Protocol.Company.String}}" class="btn btn-success">View Company Protocols</a>{{end}}
                     {{if .SourceAvailable}}<a href="/protocols/source?id={{.Protocol.ID}}" class="btn btn-success">⬇ Original PDF</a>{{end}}
+            <a href="/protocols/render?id={{.Protocol.ID}}" class="btn btn-success">📄 Generiši dokument</a>
+                    <a href="/protocols/render?id={{.Protocol.ID}}" class="btn btn-success">📄 Generiši dokument</a>
                     <a href="/protocols/api/get?id={{.Protocol.ID}}" class="btn btn-success">Download JSON</a>
                 </div>
         </div>

@@ -383,7 +383,11 @@ func extractJettingProtocolInfo(lines []string) JettingProtocolInfo {
 		}
 
 		if strings.Contains(line, "M.A.X. Bauservice") && info.ServiceProvider == "" {
-			info.ServiceProvider = "M.A.X. Bauservice"
+			name := "M.A.X. Bauservice"
+			if strings.Contains(line, "GmbH") {
+				name += " GmbH"
+			}
+			info.ServiceProvider = name
 			log.Printf("extractJettingProtocolInfo: Found Service Provider - Line %d: '%s'", i, line)
 		}
 

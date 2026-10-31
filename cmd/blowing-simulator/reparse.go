@@ -138,7 +138,7 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 	}
 	tmp.Close()
 
-	text, err := extractPDFText(tmp.Name())
+	text, textSource, err := extractPDFText(tmp.Name())
 	if err != nil {
 		res.Error = "ekstrakcija teksta: " + err.Error()
 		return res
@@ -156,6 +156,7 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 
 	// Novi podaci iz PDF-a; prazna polja ne brišu postojeće vrednosti.
 	next := map[string]string{}
+	measurements := 0
 
 	switch format {
 	case simulator.FormatFremco:
@@ -175,6 +176,7 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 		next["operator"] = info.Operator
 		next["remarks"] = info.Remarks
 		next["parser_version"] = p.ExportMetadata.ParserVersion
+		measurements = len(p.Measurements.DataPoints)
 
 	case simulator.FormatJetting:
 		p := simulator.ParseJettingProtocol(simulator.NormalizeJettingTxt(text))
@@ -197,6 +199,7 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 		}
 		next["remarks"] = info.Remarks
 		next["parser_version"] = p.ExportMetadata.ParserVersion
+		measurements = len(p.Measurements.DataPoints)
 
 	default:
 		res.Error = "format nije prepoznat ni iz PDF-a ni iz baze"
@@ -238,6 +241,12 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 		}
 		res.Changed[field] = oldVal + " -> " + newVal
 	}
+
+	// Telemetrija se osvežava i kada nema izmena — opisuje poslednje parsiranje.
+	saveParseTelemetry(db, id, parseTelemetry{
+		Source:   textSource,
+		Warnings: buildWarnings(parseTelemetry{Source: textSource}, len(text), measurements, next, nil),
+	})
 
 	if len(res.Changed) == 0 {
 		res.Unchanged = true
