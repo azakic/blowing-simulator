@@ -2490,6 +2490,8 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 			protocol.ProtocolInfo.SectionNVT = address
 		}
 
+		bboxNote := applyBBoxMeasurements(tempFile.Name(), "jetting", &protocol.Measurements.DataPoints, simulator.JettingDataPointsFromRows)
+
 		result["format"] = "jetting"
 		measurementCount := len(protocol.Measurements.DataPoints)
 		result["measurements"] = measurementCount
@@ -2510,10 +2512,12 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 				return result
 			}
 			linkOriginal(protocolID, sha, size)
-			saveParseTelemetry(db, protocolID, parseTelemetry{
-				Source:   textSource,
-				Warnings: buildWarnings(parseTelemetry{Source: textSource}, len(rawText), measurementCount, pdfValues, hints),
-			})
+			tel := parseTelemetry{Source: textSource}
+			if bboxNote != "" {
+				tel.Warnings = append(tel.Warnings, bboxNote)
+			}
+			tel.Warnings = append(tel.Warnings, buildWarnings(tel, len(rawText), measurementCount, pdfValues, hints)...)
+			saveParseTelemetry(db, protocolID, tel)
 			result["saved"] = true
 			log.Printf("Bulk upload - %s: Jetting protocol saved to database successfully", filename)
 		}
@@ -2604,6 +2608,8 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 			protocol.ProtocolInfo.SectionNVT = address
 		}
 
+		bboxNote := applyBBoxMeasurements(tempFile.Name(), "fremco", &protocol.Measurements.DataPoints, simulator.FremcoDataPointsFromRows)
+
 		result["format"] = "fremco"
 		measurementCount := len(protocol.Measurements.DataPoints)
 		result["measurements"] = measurementCount
@@ -2624,10 +2630,12 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 				return result
 			}
 			linkOriginal(protocolID, sha, size)
-			saveParseTelemetry(db, protocolID, parseTelemetry{
-				Source:   textSource,
-				Warnings: buildWarnings(parseTelemetry{Source: textSource}, len(rawText), measurementCount, pdfValues, hints),
-			})
+			tel := parseTelemetry{Source: textSource}
+			if bboxNote != "" {
+				tel.Warnings = append(tel.Warnings, bboxNote)
+			}
+			tel.Warnings = append(tel.Warnings, buildWarnings(tel, len(rawText), measurementCount, pdfValues, hints)...)
+			saveParseTelemetry(db, protocolID, tel)
 			result["saved"] = true
 			log.Printf("Bulk upload - %s: Fremco protocol saved to database successfully", filename)
 		}

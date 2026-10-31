@@ -268,3 +268,34 @@ func CompareRenderModels(want, got RenderModel) []string {
 	}
 	return diffs
 }
+
+// FremcoDataPointsFromRows prevodi redove iz bbox parsera u data points.
+func FremcoDataPointsFromRows(rows []RenderRow) []FremcoDataPoint {
+	out := make([]FremcoDataPoint, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, FremcoDataPoint{
+			LengthM:       r.Length,
+			SpeedMMin:     r.Speed,
+			PressureBar:   r.Pressure,
+			TorquePercent: r.Torque,
+			Timestamp:     r.Time,
+		})
+	}
+	return out
+}
+
+// JettingDataPointsFromRows prevodi redove iz bbox parsera u data points.
+func JettingDataPointsFromRows(rows []RenderRow) []JettingDataPoint {
+	out := make([]JettingDataPoint, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, JettingDataPoint{
+			LengthM:      r.Length,
+			TemperatureC: r.Temperature,
+			ForceN:       r.Force,
+			PressureBar:  r.Pressure,
+			SpeedMMin:    r.Speed,
+			TimeDuration: r.Time,
+		})
+	}
+	return out
+}
