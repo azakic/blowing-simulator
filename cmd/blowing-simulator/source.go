@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -132,6 +133,22 @@ func (s *SourceStore) PutIfAbsent(ctx context.Context, sha string, data []byte) 
 	}
 
 	return nil
+}
+
+// Get preuzima original iz Object Storage po SHA-256 (za re-parse).
+func (s *SourceStore) Get(ctx context.Context, sha string) ([]byte, error) {
+	if !s.Enabled() {
+		return nil, fmt.Errorf("source storage nije konfigurisan")
+	}
+	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(s.objectKey(sha)),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("preuzimanje originala nije uspelo: %w", err)
+	}
+	defer out.Body.Close()
+	return io.ReadAll(out.Body)
 }
 
 // PresignGet pravi privremeni URL za preuzimanje originala.

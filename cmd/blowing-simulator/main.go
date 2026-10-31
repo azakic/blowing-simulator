@@ -768,6 +768,7 @@ func main() {
 	http.HandleFunc("/admin/users", requireAuth(AdminUsersHandler, "admin"))
 	// Admin utility: backfill ownership for existing protocols (NULL user_id)
 	http.HandleFunc("/admin/backfill-ownership", requireAuth(AdminBackfillOwnershipHandler, "admin"))
+	http.HandleFunc("/admin/reparse", requireAuth(AdminReparseHandler, "admin"))
 	// Bulk upload requires editor+ role
 	http.HandleFunc("/bulk-upload", requireAuth(BulkUploadHandler, "editor", "partner", "admin"))
 	http.HandleFunc("/debug-pdf", DebugPDFHandler)
