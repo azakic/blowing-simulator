@@ -204,6 +204,13 @@
                 <a href="#" class="btn btn-success">Export CSV</a>
             </div>
         </div>
+
+        <!-- Chart Section (aligned with PDF2Text implementation) -->
+        <div class="result" style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:20px;">
+            <h2 style="margin:0 0 10px 0;">Messwerte Chart</h2>
+            <canvas id="measurements-chart" height="300"></canvas>
+            <div id="no-chart" style="display:none;color:#b00;font-weight:bold;">No chart data available.</div>
+        </div>
         
         {{if .Measurements}}
         <div class="table-container">
@@ -274,5 +281,61 @@
             <a href="/protocols" class="btn">All Protocols</a>
         </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        (function(){
+            const isJetting = '{{.Protocol.ProtocolType}}' === 'jetting';
+            const length = [];
+            const speed = [];
+            const pressure = [];
+            const force = [];
+            const temperature = [];
+
+            {{range $i, $m := .AllMeasurements}}
+                length.push({{if $m.LengthM.Valid}}{{printf "%.3f" $m.LengthM.Float64}}{{else}}null{{end}});
+                speed.push({{if $m.SpeedMMin.Valid}}{{printf "%.3f" $m.SpeedMMin.Float64}}{{else}}null{{end}});
+                pressure.push({{if $m.PressureBar.Valid}}{{printf "%.3f" $m.PressureBar.Float64}}{{else}}null{{end}});
+                // Use Force for Jetting, Torque% for Fremco
+                {{if eq $.Protocol.ProtocolType "jetting"}}
+                    force.push({{if $m.ForceN.Valid}}{{printf "%.3f" $m.ForceN.Float64}}{{else}}null{{end}});
+                {{else}}
+                    force.push({{if $m.TorquePercent.Valid}}{{printf "%.3f" $m.TorquePercent.Float64}}{{else}}null{{end}});
+                {{end}}
+                temperature.push({{if $m.TemperatureC.Valid}}{{printf "%.3f" $m.TemperatureC.Float64}}{{else}}null{{end}});
+            {{end}}
+
+            const ctx = document.getElementById('measurements-chart').getContext('2d');
+            const datasets = isJetting ? [
+                { label: 'Geschwindigkeit [m/min]', data: speed, borderColor: 'green', yAxisID: 'y', fill: false },
+                { label: 'Einblasdruck [bar]', data: pressure, borderColor: 'blue', yAxisID: 'y1', fill: false },
+                { label: 'Schubkraft [N]', data: force, borderColor: 'red', yAxisID: 'y2', fill: false },
+                { label: 'Lufttemperatur [°C]', data: temperature, borderColor: 'orange', yAxisID: 'y3', fill: false },
+            ] : [
+                { label: 'Geschwindigkeit [m/min]', data: speed, borderColor: 'green', yAxisID: 'y', fill: false },
+                { label: 'Rohr-Druck [bar]', data: pressure, borderColor: 'blue', yAxisID: 'y1', fill: false },
+                { label: 'Drehmoment [%]', data: force, borderColor: 'red', yAxisID: 'y2', fill: false },
+            ];
+
+            if (length.length > 0) {
+                new Chart(ctx, {
+                    type: 'line',
+                    data: { labels: length, datasets },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            x: { title: { display: true, text: 'Länge [m]' }, ticks: { maxTicksLimit: 12 } },
+                            y: { type: 'linear', position: 'left', title: { display: true, text: 'Geschwindigkeit [m/min]' }, max: 90 },
+                            y1: { type: 'linear', position: 'right', title: { display: true, text: isJetting ? 'Einblasdruck [bar]' : 'Rohr-Druck [bar]' }, grid: { drawOnChartArea: false }, max: 25 },
+                            y2: { type: 'linear', position: 'right', title: { display: true, text: isJetting ? 'Schubkraft [N]' : 'Drehmoment [%]' }, grid: { drawOnChartArea: false } },
+                            y3: { type: 'linear', position: 'right', title: { display: true, text: 'Lufttemperatur [°C]' }, grid: { drawOnChartArea: false }, min: 10, max: 20 },
+                        },
+                    },
+                });
+                document.getElementById('no-chart').style.display = 'none';
+            } else {
+                document.getElementById('no-chart').style.display = 'block';
+            }
+        })();
+    </script>
 </body>
 </html>

@@ -357,6 +357,7 @@
                     <th onclick="sortTable('ProjectNumber')">Project #</th>
                     <th onclick="sortTable('SourceFilename')">Filename</th>
                     <th onclick="sortTable('CreatedAt')">Created</th>
+                    {{if .IsAdmin}}<th>Owner</th>{{end}}
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -365,14 +366,17 @@
                 <tr>
                     <td>{{.ID}}</td>
                     <td><span class="protocol-type {{.ProtocolType}}">{{.ProtocolType}}</span></td>
-                    <td>{{if .ProtocolDate.Valid}}{{.ProtocolDate.String}}{{else}}<em>N/A</em>{{end}}</td>
-                    <td>{{if .StartTime.Valid}}{{.StartTime.String}}{{else}}<em>N/A</em>{{end}}</td>
+                    <td>{{if .ProtocolDate.Valid}}{{dateOnly .ProtocolDate.String}}{{else}}<em>N/A</em>{{end}}</td>
+                    <td>{{if .StartTime.Valid}}{{timeOnly .StartTime.String}}{{else}}<em>N/A</em>{{end}}</td>
                     <td>{{if .SystemName.Valid}}{{.SystemName.String}}{{else}}<em>N/A</em>{{end}}</td>
                     <td>{{if .Company.Valid}}{{.Company.String}}{{else}}<em>N/A</em>{{end}}</td>
                     <td>{{if .ServiceProvider.Valid}}{{.ServiceProvider.String}}{{else}}<em>N/A</em>{{end}}</td>
                     <td>{{if .ProjectNumber.Valid}}{{.ProjectNumber.String}}{{else}}<em>N/A</em>{{end}}</td>
                     <td>{{if .SourceFilename.Valid}}<span class="filename">{{.SourceFilename.String}}</span>{{else}}<em>N/A</em>{{end}}</td>
                     <td>{{.CreatedAt}}</td>
+                    {{if $.IsAdmin}}
+                    <td>{{if .OwnerEmail.Valid}}{{.OwnerEmail.String}}{{else}}<em>N/A</em>{{end}}</td>
+                    {{end}}
                     <td>
                         <a href="/protocols/view?id={{.ID}}" class="view-btn">View Details</a>
                         <form method="POST" action="/protocols/delete" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this protocol?');">

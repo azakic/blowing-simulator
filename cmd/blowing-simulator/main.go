@@ -696,6 +696,7 @@ type Protocol struct {
 	SourceFilename  sql.NullString `db:"source_filename"`
 	CreatedAt       string         `db:"created_at"`
 	UserID          sql.NullInt64  `db:"user_id"`
+	OwnerEmail      sql.NullString `db:"owner_email"`
 }
 
 // NullTime represents a time.Time that may be null
@@ -782,12 +783,14 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 	dateTo := r.URL.Query().Get("date_to")
 	partnerIDStr := r.URL.Query().Get("partner_id")
 
-	// Base query
+	// Base query (include owner email for admin display)
 	query := `
-		SELECT id, protocol_type, system_name, protocol_date, start_time,
-			   project_number, company, service_provider, operator,
-			   source_filename, created_at::text
-		FROM protocols
+		SELECT p.id, p.protocol_type, p.system_name, p.protocol_date, p.start_time,
+			   p.project_number, p.company, p.service_provider, p.operator,
+			   p.source_filename, p.created_at::text, p.user_id,
+			   u.email AS owner_email
+		FROM protocols p
+		LEFT JOIN users u ON u.id = p.user_id
 		WHERE 1=1`
 	args := []interface{}{}
 	arg := 0
@@ -901,6 +904,16 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error fetching protocols: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Compute LastImport timestamp (formatted, no fractional seconds)
+	var lastImport sql.NullString
+	if haveSelectedPartner {
+		_ = db.Get(&lastImport, "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols WHERE user_id = $1", selectedPartnerID)
+	} else if showAll {
+		_ = db.Get(&lastImport, "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols")
+	} else if claims != nil {
+		_ = db.Get(&lastImport, "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols WHERE user_id = $1", claims.UserID)
+	}
 	totalPages := (totalCount + pageSize - 1) / pageSize
 	pageNumbers := []int{}
 	for i := 1; i <= totalPages; i++ { pageNumbers = append(pageNumbers, i) }
@@ -914,10 +927,40 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 	if dateFrom != "" { queryString += "&date_from=" + url.QueryEscape(dateFrom) }
 	if dateTo != "" { queryString += "&date_to=" + url.QueryEscape(dateTo) }
 
-	// Render template
+	// Render template with helpers for date/time formatting
 	tmpl := template.New("protocols.html").Funcs(template.FuncMap{
 		"add": func(a, b int) int { return a + b },
 		"sub": func(a, b int) int { return a - b },
+		"dateOnly": func(dateStr string) string {
+			if dateStr == "" { return "" }
+			if strings.Contains(dateStr, "T") {
+				dateStr = strings.Split(dateStr, "T")[0]
+			}
+			parts := strings.Split(dateStr, "-")
+			if len(parts) == 3 {
+				// Expecting YYYY-MM-DD -> DD.MM.YYYY
+				if len(parts[0]) == 4 {
+					return parts[2] + "." + parts[1] + "." + parts[0]
+				}
+			}
+			// Fallback: try to extract DD.MM.YYYY from any string
+			re := regexp.MustCompile(`(\d{2})[.\-/](\d{2})[.\-/](\d{4})`)
+			match := re.FindStringSubmatch(dateStr)
+			if len(match) == 4 {
+				return match[1] + "." + match[2] + "." + match[3]
+			}
+			return dateStr
+		},
+		"timeOnly": func(s string) string {
+			if s == "" { return "" }
+			// Extract HH:MM
+			re := regexp.MustCompile(`(\d{2}):(\d{2})`)
+			match := re.FindStringSubmatch(s)
+			if len(match) >= 3 {
+				return match[1] + ":" + match[2]
+			}
+			return s
+		},
 	})
 	tmpl, err := tmpl.ParseFiles("web/templates/protocols.html")
 	if err != nil {
@@ -945,6 +988,10 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		"IsAdmin":     isAdmin,
 		"Partners":    partners,
 		"SelectedPartnerID": func() int64 { if haveSelectedPartner { return selectedPartnerID }; return 0 }(),
+		"Company":     r.URL.Query().Get("company"),
+		"DateFrom":    dateFrom,
+		"DateTo":      dateTo,
+		"LastImport":  lastImport.String,
 	}
 	if err := tmpl.Execute(w, data); err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
@@ -1199,6 +1246,20 @@ func ProtocolMeasurementsHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error fetching measurements: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Fetch all measurements for full-chart rendering (no pagination)
+	var allMeasurements []ProtocolMeasurement
+	err = db.Select(&allMeasurements, `
+		SELECT id, sequence_number, length_m, timestamp_value, speed_m_min, 
+		       pressure_bar, torque_percent, temperature_c, force_n, 
+		       time_duration, created_at::text 
+		FROM protocol_measurements 
+		WHERE protocol_id = $1 
+		ORDER BY COALESCE(sequence_number, id) ASC`, id)
+	if err != nil {
+		// Do not fail the page; just leave chart empty
+		allMeasurements = nil
+	}
 	
 	// Get total measurement count
 	var totalCount int
@@ -1227,6 +1288,7 @@ func ProtocolMeasurementsHandler(w http.ResponseWriter, r *http.Request) {
 	data := map[string]interface{}{
 		"Protocol":     protocol,
 		"Measurements": measurements,
+		"AllMeasurements": allMeasurements,
 		"CurrentPage":  page,
 		"TotalPages":   totalPages,
 		"TotalCount":   totalCount,
@@ -1318,10 +1380,10 @@ func DashboardStatsHandler(w http.ResponseWriter, r *http.Request) {
 	var lastUpload sql.NullString
 	if isAdmin {
 		_ = db.Get(&totalProtocols, "SELECT COUNT(*) FROM protocols")
-		_ = db.Get(&lastUpload, "SELECT MAX(created_at)::text FROM protocols")
+		_ = db.Get(&lastUpload, "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols")
 	} else {
 		_ = db.Get(&totalProtocols, "SELECT COUNT(*) FROM protocols WHERE user_id = $1", claims.UserID)
-		_ = db.Get(&lastUpload, "SELECT MAX(created_at)::text FROM protocols WHERE user_id = $1", claims.UserID)
+		_ = db.Get(&lastUpload, "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols WHERE user_id = $1", claims.UserID)
 	}
 	resp := map[string]any{
 		"protocols": totalProtocols,
