@@ -230,6 +230,36 @@ When a PDF is uploaded, the system automatically:
 7. **Web Display**: Shows parsed data in user-friendly interface
 8. **Export Options**: Provides JSON/CSV downloads for external analysis
 
+## 🔬 Parsing Pipeline
+
+Redosled izvora podataka:
+
+1. **Text layer** — `pdftotext -layout` je primaran.
+2. **OCR** — ako strana 1 ima manje od `OCR_MIN_CHARS` teksta (npr. „Jettlogger"
+   layout ima zaglavlje kao sliku), radi se `pdftoppm -r 300` + `tesseract
+   -l deu+eng --psm 4`. OCR je serijalizovan (memorija), tekst ide **ispred**
+   text layera.
+3. **Koordinate (`-bbox`)** — `pdftotext -bbox-layout` daje reči sa `x/y`, pa se
+   redovi (isto `y`) i kolone (najbliži `x`) rekonstruišu tačno.
+   `MEASURE_SOURCE=auto` koristi ovaj parser kada daje više redova od tekstualnog.
+4. **Ime fajla** — datum/vreme/adresa/NVT/projekat kao fallback; razlika prema
+   dokumentu se beleži kao `mismatch:*` upozorenje.
+
+**Telemetrija** (po redu): `parse_source` (`text`/`ocr`/`mixed`),
+`parse_warnings` (JSONB) i `parsed_at`. Upozorenja: `ocr`, `short_text`,
+`no_measurements`, `mismatch:*`, `empty:*`, `bbox: N → M`.
+
+**Re-parse:** `POST /admin/reparse` skida original iz S3 po SHA-256, parsira ga
+i ažurira metapodatke (merenja se ne diraju).
+
+**Round-trip:** `internal/simulator/render.go` generiše dokument koji isti
+parser čita; CLI provera:
+
+```bash
+go run ./cmd/protocolctl -in protokol.pdf -verify   # parse → render → parse → diff
+go run ./cmd/protocolctl -dir ~/pdf-uzorci          # batch pregled
+```
+
 ## 🎯 Key Features
 
 ### Intelligent Format Detection
@@ -310,6 +340,20 @@ DB_NAME=blowing_simulator # Database name (default: blowing_simulator)
 
 # Application Configuration  
 PORT=8080                 # Web server port (default: 8080)
+
+# Object Storage (opciono; bez ovoga se originali ne čuvaju)
+S3_ENDPOINT=https://...   # OCI Object Storage S3 endpoint
+S3_BUCKET=app-storage
+S3_REGION=eu-frankfurt-1
+S3_ACCESS_KEY=...
+S3_SECRET_KEY=...
+S3_PREFIX=blowing/protocols/
+
+# Parsing (opciono)
+OCR_DISABLED=false        # true = bez OCR-a strane 1
+OCR_DPI=300               # 150–600
+OCR_MIN_CHARS=40          # prag text layera strane 1 za OCR
+MEASURE_SOURCE=auto       # auto | bbox | text (izvor merenja)
 ```
 
 ### Docker Compose Services
@@ -660,6 +704,16 @@ docker compose logs -f
 | `/protocols/view?id=X` | GET | Detailed protocol information and metadata |
 | `/protocols/measurements?id=X` | GET | Paginated measurement data viewer |
 | `/protocols/length-report` | GET | Length analysis report with date/format filtering |
+| `/protocols/source?id=X` | GET | Redirect na presigned URL originalnog PDF-a (15 min) |
+| `/protocols/render?id=X` | GET | Generiše PDF iz podataka u bazi (round-trip layout) |
+| `/protocols/api/get?id=X` | GET | Protokol kao JSON |
+
+### Administracija
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/admin/users` | GET/POST | Upravljanje korisnicima (samo `admin`) |
+| `/admin/reparse?id=X` | POST | Ponovo parsira sačuvani original (`confirm=yes`); batch `?all=1&limit=N` |
 
 ### Bulk Processing Routes
 
