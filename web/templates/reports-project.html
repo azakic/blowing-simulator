@@ -164,7 +164,7 @@
         {{end}}
 
         {{if .Shares}}
-        <h2 class="section">Share by organisation</h2>
+        <h2 class="section">Share by organisation (who performed the work)</h2>
         <table class="shares">
             <thead>
                 <tr>
@@ -194,9 +194,10 @@
             </tbody>
         </table>
         <p class="note">
-            The share comes from the account that uploaded the protocol (organisation), not from the
-            company printed in the PDF — so subcontractor uploads count even when the document does
-            not name them, and staff uploads count as internal work.
+            The share is credited to the subcontractor named in the document
+            (<code>service_provider</code>); when the document names no subcontractor — typical for
+            Jetting — the organisation of the uploading account is used instead. Uploads by internal
+            staff therefore still count for the partner whose firm performed the work.
         </p>
         {{end}}
 

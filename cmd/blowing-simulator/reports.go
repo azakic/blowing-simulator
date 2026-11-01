@@ -68,6 +68,7 @@ type protocolRow struct {
 	Original  bool
 	ParseInfo string
 	OwnerOrg  string
+	CreditOrg string
 
 	// sirove vrednosti za CSV/izvoz (nil = nema podatka)
 	DistanceM *float64
@@ -301,9 +302,14 @@ func loadProjectDetail(r *http.Request, project string, f reportFilter) ([]proto
 		       COALESCE(s.operator, ''), COALESCE(s.org, ''),
 		       s.distance, s.seconds, s.points, s.source_sha256 IS NOT NULL,
 		       COALESCE(s.parse_source, ''),
-		       COALESCE(o.name, '')
+		       COALESCE(owner.name, ''),
+		       COALESCE(credit.name, '')
 		FROM scoped s
-		LEFT JOIN orgs o ON o.id = s.owner_org_id
+		LEFT JOIN orgs owner ON owner.id = s.owner_org_id
+		LEFT JOIN orgs credit ON credit.id = COALESCE(
+			(SELECT sp.id FROM orgs sp
+			  WHERE sp.id = s.service_provider_org_id AND sp.kind <> 'internal'),
+			s.owner_org_id)
 		WHERE trim(s.project_number) = ` + projectArg + `
 		ORDER BY s.protocol_date, s.start_time, s.id`
 
@@ -327,7 +333,7 @@ func loadProjectDetail(r *http.Request, project string, f reportFilter) ([]proto
 
 		if err := rows.Scan(&p.ID, &p.Type, &p.Date, &p.Time, &p.Section, &p.Address,
 			&p.Operator, &p.Org, &distance, &seconds, &points, &original, &parseSource,
-			&p.OwnerOrg); err != nil {
+			&p.OwnerOrg, &p.CreditOrg); err != nil {
 			log.Printf("project detail scan: %v", err)
 			continue
 		}
@@ -372,7 +378,7 @@ func buildSharesFromProtocols(protocols []protocolRow) []orgShareRow {
 	var totalPoints int
 
 	for _, p := range protocols {
-		owner := p.OwnerOrg
+		owner := p.CreditOrg
 		if owner == "" {
 			owner = "(no organisation)"
 		}
@@ -589,7 +595,7 @@ func ProjectReportDetailCSVHandler(w http.ResponseWriter, r *http.Request) {
 
 	header := []string{
 		"ID", "Type", "Date", "Time", "Section", "Address", "Operator",
-		"Organisation", "Owner org", "Distance (m)", "Blowing time (h:mm:ss)",
+		"Organisation", "Owner org", "Credit org", "Distance (m)", "Blowing time (h:mm:ss)",
 		"Measurements", "Original", "Parse source",
 	}
 	rows := make([][]string, 0, len(protocols))
@@ -616,6 +622,7 @@ func ProjectReportDetailCSVHandler(w http.ResponseWriter, r *http.Request) {
 			csvSafe(p.Operator),
 			csvSafe(p.Org),
 			csvSafe(p.OwnerOrg),
+			csvSafe(p.CreditOrg),
 			distance,
 			seconds,
 			strconv.Itoa(p.Points),
