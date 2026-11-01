@@ -1,6 +1,9 @@
 package simulator
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValueUntilLabels(t *testing.T) {
 	cases := []struct {
@@ -77,5 +80,40 @@ func TestExtractFremcoEquipmentWrappedLine(t *testing.T) {
 	}
 	if e.Compressor.Model != "Kaiser m17a" {
 		t.Errorf("Compressor = %q", e.Compressor.Model)
+	}
+}
+
+// Noviji Fremco layout ima dve „Streckenabschnitt" linije: prva je sekcija
+// projekta, druga je adresa protokola (stvarni uzorak iz PDF-a).
+func TestExtractFremcoSectionTwoLines(t *testing.T) {
+	lines := []string{
+		"SpeedNet-System                                  Einblas - Protokoll",
+		"",
+		"Bauvorhaben Nr.                 SM209214964",
+		"",
+		"Streckenabschnitt / NVt         Oldenburger    Koppel /NVT1V3400",
+		"                                Haflinger Weg 9/NVT1V3400",
+		"",
+		"Firma                           Wolken-ASM    GmbH",
+	}
+
+	info := extractFremcoProtocolInfo(lines)
+	if info.SectionNVT != "Haflinger Weg 9/NVT1V3400" {
+		t.Fatalf("SectionNVT = %q, očekivano %q", info.SectionNVT, "Haflinger Weg 9/NVT1V3400")
+	}
+	if got := strings.TrimSpace(strings.SplitN(info.SectionNVT, "/", 2)[0]); got != "Haflinger Weg 9" {
+		t.Errorf("adresa = %q, očekivano %q", got, "Haflinger Weg 9")
+	}
+}
+
+func TestExtractFremcoSectionSingleLine(t *testing.T) {
+	lines := []string{
+		"Streckenabschnitt / NVt         Oldenburger Koppel 27/NVT1V3400",
+		"",
+	}
+
+	info := extractFremcoProtocolInfo(lines)
+	if info.SectionNVT != "Oldenburger Koppel 27/NVT1V3400" {
+		t.Fatalf("SectionNVT = %q", info.SectionNVT)
 	}
 }

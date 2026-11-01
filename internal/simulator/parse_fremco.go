@@ -250,15 +250,21 @@ func extractFremcoProtocolInfo(lines []string) FremcoProtocolInfo {
 
 		// Section/NVT
 		// Streckenabschnitt / NVt: vrednost je u istoj liniji (noviji layout),
-		// a kod starijeg u sledećoj.
+		// a kod starijeg u sledećoj. Noviji layout ima DVE linije — prva je
+		// sekcija projekta („Oldenburger    Koppel /NVT1V3400"), druga je
+		// stvarna adresa protokola („Haflinger Weg 9/NVT1V3400") — pa druga
+		// ima prednost.
 		if idx := strings.Index(line, "Streckenabschnitt"); idx == 0 || (idx > 0 && strings.TrimSpace(line[:idx]) == "") {
+			var section string
 			if nvt := strings.Index(line, "NVt"); nvt > 0 {
-				if same := strings.TrimSpace(line[nvt+len("NVt"):]); same != "" {
-					info.SectionNVT = same
-				} else if i+1 < len(lines) && !looksLikeLabel(lines[i+1]) {
-					info.SectionNVT = strings.TrimSpace(lines[i+1])
-				}
+				section = strings.TrimSpace(line[nvt+len("NVt"):])
 			}
+			if next := nextSectionLine(lines, i); next != "" {
+				section = next
+			} else if section == "" && i+1 < len(lines) && !looksLikeLabel(lines[i+1]) {
+				section = strings.TrimSpace(lines[i+1])
+			}
+			info.SectionNVT = normalizeSectionLine(section)
 		}
 
 		// Company - extract from same line after "Firma"
@@ -566,4 +572,28 @@ func extractFremcoMeasurements(lines []string) FremcoMeasurements {
 	}
 
 	return measurements
+}
+
+// sectionLineRe prepoznaje zapis „<adresa>/NVT<oznaka>" (i „... / NVt 1V2800").
+var sectionLineRe = regexp.MustCompile(`(?i)^(.*?)\s*/\s*(NVT\s*\S*)\s*$`)
+
+// nextSectionLine vraća sledeću liniju ako je i ona zapis „adresa/NVT". U
+// novijem Fremco layoutu prva linija je sekcija projekta, a druga adresa
+// protokola — adresa protokola je merodavna.
+func nextSectionLine(lines []string, i int) string {
+	if i+1 >= len(lines) {
+		return ""
+	}
+	next := strings.TrimSpace(lines[i+1])
+	if next == "" || looksLikeLabel(next) || !sectionLineRe.MatchString(next) {
+		return ""
+	}
+	return next
+}
+
+// normalizeSectionLine kolabuje višestruke razmake: u `pdftotext -layout`
+// izlazu razmaci poravnavaju kolone i nisu deo adrese
+// („Oldenburger    Koppel" -> „Oldenburger Koppel").
+func normalizeSectionLine(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
