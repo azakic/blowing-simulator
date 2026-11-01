@@ -78,8 +78,38 @@
                 margin-top: 4px;
             }
         </style>
+        <style>
+            /* Zajednička navigacija (ostatak strane namerno izgleda kao dokument). */
+            body { margin: 0; background: #f4f6f9; }
+            .topbar { background:#1976d2; color:#fff; padding:.6rem 1rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+            .topbar .brand { color:#fff; font-weight:700; text-decoration:none; white-space:nowrap; }
+            .topbar .nav { display:flex; align-items:center; gap:1.1rem; flex-wrap:wrap; font-size:.92rem; }
+            .topbar .nav a { color:#e8f1fb; text-decoration:none; padding-bottom:2px; }
+            .topbar .nav a:hover, .topbar .nav a.active { color:#fff; border-bottom:2px solid #fff; }
+            .topbar .nav .role { font-size:.78rem; opacity:.8; }
+            .doc { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+            .doc-back { display:inline-block; color:#1976d2; text-decoration:none; font-size:.88rem; margin-bottom:.6rem; }
+            .doc-back:hover { text-decoration: underline; }
+            @media (max-width: 760px) { .doc { padding: .75rem .5rem 2rem; } }
+        </style>
     </head>
     <body>
+    <header class="topbar">
+        <a class="brand" href="/">Wolken-ASM Reports</a>
+        <nav class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/protocols">Protocols</a>
+            <a href="/protocols/length-report">Length Report</a>
+            <a href="/reports/projects">Project Report</a>
+            <a href="/bulk-upload">Bulk Upload</a>
+            {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a>{{end}}
+            {{if .UserRole}}<span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+            {{else}}<a href="/login">Login</a>{{end}}
+        </nav>
+    </header>
+
+    <main class="doc">
+        <a class="doc-back" href="/">← Dashboard</a>
         <form method="post" action="/submit-jetting-report">
             <table>
                 <tr>
@@ -909,5 +939,6 @@
             // Initialize marker if input has value
             window.onload = setMarkerFromInput;
         </script>
+    </main>
     </body>
 </html>
