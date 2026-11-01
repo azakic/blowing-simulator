@@ -3,415 +3,145 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1976d2">
     <title>Protocols - Wolken-ASM Reports</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #2c3e50;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        .nav-buttons {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .nav-btn {
-            background: #6f42c1;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
-            text-decoration: none;
-            margin: 0 10px;
-            display: inline-block;
-            font-size: 14px;
-            font-weight: 500;
-        }
-        .nav-btn:hover {
-            background: #5a32a3;
-            text-decoration: none;
-            color: white;
-        }
-        .nav-btn.reports {
-            background: #fd7e14;
-        }
-        .nav-btn.reports:hover {
-            background: #e8690b;
-        }
-        .search-form {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 30px;
-            display: flex;
-            gap: 15px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        .search-form input, .search-form select {
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 14px;
-        }
-        .search-form input[type="text"] {
-            flex: 1;
-            min-width: 200px;
-        }
-        .search-form button {
-            background: #007bff;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        .search-form button:hover {
-            background: #0056b3;
-        }
-        .stats {
-            margin-bottom: 20px;
-            color: #6c757d;
-            font-size: 14px;
-        }
-        .protocols-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        .protocols-table th {
-            background: #343a40;
-            color: white;
-            padding: 12px;
-            text-align: left;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .protocols-table td {
-            padding: 12px;
-            border-bottom: 1px solid #dee2e6;
-        }
-        .protocols-table tr:hover {
-            background-color: #f8f9fa;
-        }
-        .protocol-type {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-        .protocol-type.fremco {
-            background: #d4edda;
-            color: #155724;
-        }
-        .protocol-type.jetting {
-            background: #cce7ff;
-            color: #004085;
-        }
-        .view-btn {
-            background: #28a745;
-            color: white;
-            text-decoration: none;
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-size: 12px;
-        }
-        .view-btn:hover {
-            background: #218838;
-            text-decoration: none;
-        }
-        .delete-btn {
-            background: #dc3545;
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-size: 12px;
-            cursor: pointer;
-            margin-left: 5px;
-        }
-        .delete-btn:hover {
-            background: #c82333;
-        }
-        .no-results {
-            text-align: center;
-            padding: 40px;
-            color: #6c757d;
-        }
-        .back-link {
-            display: inline-block;
-            margin-bottom: 20px;
-            color: #007bff;
-            text-decoration: none;
-        }
-        .back-link:hover {
-            text-decoration: underline;
-        }
-        .filename {
-            font-family: monospace;
-            background: #f8f9fa;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 11px;
-        }
-        .dashboard-stats {
-            display: flex;
-            justify-content: center;
-            gap: 2em;
-            margin-bottom: 2em;
-        }
-        .stat-tile {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 1em 2em;
-            text-align: center;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-        }
-        .stat-title {
-            color: #888;
-            font-size: 1em;
-            margin-bottom: 0.5em;
-        }
-        .stat-value {
-            font-size: 2em;
-            font-weight: bold;
-            color: #1976d2;
-        }
-        .navbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #1976d2;
-            padding: 0.7em 2em;
-            border-radius: 0 0 10px 10px;
-            margin-bottom: 2em;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-        }
-        .navbar-brand {
-            font-size: 1.3em;
-            font-weight: bold;
-        }
-        .navbar-logo {
-            color: #fff;
-            text-decoration: none;
-            font-weight: bold;
-            letter-spacing: 1px;
-        }
-        .navbar-links {
-            display: flex;
-            gap: 2em;
-        }
-        .navbar-link {
-            color: #fff;
-            text-decoration: none;
-            font-size: 1em;
-            font-weight: 500;
-            padding-bottom: 2px;
-            border-bottom: 2px solid transparent;
-            transition: border-color 0.2s;
-        }
-        .navbar-link:hover, .navbar-link.active {
-            border-bottom: 2px solid #fff;
-        }
-        .pagination-bar {
-            display: flex;
-            justify-content: center;
-            gap: 0.5em;
-            margin-bottom: 1em;
-        }
-        .page-btn {
-            background: #f8f9fa;
-            border: 1px solid #1976d2;
-            color: #1976d2;
-            padding: 6px 14px;
-            border-radius: 4px;
-            font-size: 1em;
-            cursor: pointer;
-            transition: background 0.2s, color 0.2s;
-        }
-        .page-btn.active, .page-btn:hover {
-            background: #1976d2;
-            color: #fff;
-        }
-        .page-btn:disabled {
-            background: #eee;
-            color: #aaa;
-            cursor: not-allowed;
-        }
-        @media (max-width: 700px) {
-            .dashboard-stats { flex-direction: column; gap: 1em; }
-            .protocols-table th, .protocols-table td { font-size: 12px; padding: 6px; }
-            .nav-buttons { flex-direction: column; gap: 0.5em; }
-            .navbar { flex-direction: column; gap: 1em; padding: 1em; }
-            .navbar-links { gap: 1em; }
-        }
-    </style>
+    <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-    <nav class="navbar">
-        <div class="navbar-brand">
-            <a href="/" class="navbar-logo">Wolken-ASM Reports</a>
+    <header class="topbar">
+        <a class="brand" href="/">Wolken-ASM Reports</a>
+        <nav class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/protocols" class="active">Protocols</a>
+            <a href="/protocols/length-report">Length Report</a>
+            <a href="/reports/projects">Project Report</a>
+            <a href="/bulk-upload">Bulk Upload</a>
+            {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a>{{end}}
+            {{if .UserRole}}<span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+            {{else}}<a href="/login">Login</a>{{end}}
+        </nav>
+    </header>
+
+    <main class="page">
+        <a class="back" href="/">← Dashboard</a>
+
+        <div class="head">
+            <div>
+                <h1>Protocols</h1>
+                <p class="sub">Searchable database of imported Fremco and Jetting protocols.</p>
+            </div>
+            <div class="actions">
+                <a class="btn btn-primary" href="/bulk-upload">⬆ Import protocols</a>
+            </div>
         </div>
-        <div class="navbar-links">
-            <a href="/" class="navbar-link">Dashboard</a>
-            <a href="/protocols" class="navbar-link active">Protocols</a>
-            <a href="/protocols/length-report" class="navbar-link">Length Report</a>
-            <a href="/reports/projects" class="navbar-link">Project Report</a>
-            <a href="/bulk-upload" class="navbar-link">Bulk Upload</a>
-            {{if .IsAdmin}}
-            <a href="/admin/users" class="navbar-link">Users</a>
-            {{end}}
-            {{if .UserRole}}
-            <span style="color:#fff;font-size:0.85em;opacity:0.85;padding-top:2px;">Role: {{.UserRole}}</span>
-            <a href="/logout" class="navbar-link" style="border-bottom:none;">Logout</a>
-            {{else}}
-            <a href="/login" class="navbar-link" style="border-bottom:none;">Login</a>
-            {{end}}
-        </div>
-    </nav>
-    <div class="container">
-        <a href="/" class="back-link">← Back to Home</a>
-        
-        <h1>Protocol Database</h1>
-        
-        <div class="nav-buttons">
-            <a href="/protocols" class="nav-btn">All Protocols</a>
-            <a href="/protocols/length-report" class="nav-btn reports">Length Report</a>
-            {{if eq .UserRole "admin"}}
-            <span style="margin-left:10px;color:#555;">Scope:</span>
-            <a href="/protocols?scope=my" class="nav-btn" style="background:#17a2b8;">My</a>
-            <a href="/protocols?scope=all" class="nav-btn" style="background:#6c757d;">All</a>
-            {{end}}
-        </div>
-        
-        <form class="search-form" method="GET">
-            <input type="text" name="search" placeholder="Search by company, service provider, filename, or project number..." value="{{.Search}}">
-            <select name="type">
-                <option value="all" {{if eq .Type "all"}}selected{{end}}>All Types</option>
-                <option value="fremco" {{if eq .Type "fremco"}}selected{{end}}>Fremco</option>
-                <option value="jetting" {{if eq .Type "jetting"}}selected{{end}}>Jetting</option>
-            </select>
+
+        <section class="kpis">
+            <div class="kpi"><div class="label">Total protocols</div><div class="value">{{.TotalCount}}</div></div>
+            <div class="kpi"><div class="label">Filtered</div><div class="value">{{.ResultCount}}</div></div>
+            <div class="kpi"><div class="label">Last import</div><div class="value" style="font-size:.95rem;">{{if .LastImport}}{{.LastImport}}{{else}}—{{end}}</div></div>
+        </section>
+
+        <form class="filters" method="GET" action="/protocols">
+            <label class="field" style="flex:2 1 260px;"><span>Search</span>
+                <input type="text" name="search" placeholder="Company, service provider, filename or project number" value="{{.Search}}">
+            </label>
+            <label class="field"><span>Type</span>
+                <select name="type">
+                    <option value="all" {{if eq .Type "all"}}selected{{end}}>All types</option>
+                    <option value="fremco" {{if eq .Type "fremco"}}selected{{end}}>Fremco</option>
+                    <option value="jetting" {{if eq .Type "jetting"}}selected{{end}}>Jetting</option>
+                </select>
+            </label>
             {{if .CanFilterUsers}}
-            <select name="partner_id">
-                <option value="">Svi korisnici</option>
-                {{range .Users}}
+            <label class="field"><span>Uploaded by</span>
+                <select name="partner_id">
+                    <option value="">All users</option>
+                    {{range .Users}}
                     <option value="{{.ID}}" {{if eq $.SelectedPartnerID .ID}}selected{{end}}>[{{.Role}}] {{.Email}}</option>
-                {{end}}
-            </select>
-            {{end}}
-            <input type="text" name="company" placeholder="Company..." value="{{.Company}}">
-            <input type="date" name="date_from" value="{{.DateFrom}}">
-            <span style="margin: 0 5px;">to</span>
-            <input type="date" name="date_to" value="{{.DateTo}}">
-            <button type="submit">Search</button>
-            {{if or .Search (ne .Type "")}}
-                <a href="/protocols" style="color: #6c757d; text-decoration: none; font-size: 14px;">Clear</a>
-            {{end}}
-        </form>
-        
-        <div class="dashboard-stats">
-            <div class="stat-tile">
-                <div class="stat-title">Total Protocols</div>
-                <div class="stat-value">{{.TotalCount}}</div>
-            </div>
-            <div class="stat-tile">
-                <div class="stat-title">Filtered</div>
-                <div class="stat-value">{{.ResultCount}}</div>
-            </div>
-            <div class="stat-tile">
-                <div class="stat-title">Last Import</div>
-                <div class="stat-value">{{.LastImport}}</div>
-            </div>
-        </div>
-        
-        <div class="stats">
-            Showing {{.ResultCount}} of {{.TotalCount}} protocols
-            {{if .Search}}(filtered by "{{.Search}}"){{end}}
-            {{if and (ne .Type "") (ne .Type "all")}}({{.Type}} only){{end}}
-        </div>
-        
-        {{if .Protocols}}
-        <table class="protocols-table">
-            <thead>
-                <tr>
-                    <th onclick="sortTable('ID')">ID</th>
-                    <th onclick="sortTable('ProtocolType')">Type</th>
-                    <th onclick="sortTable('ProtocolDate')">Date</th>
-                    <th onclick="sortTable('StartTime')">Time</th>
-                    <th onclick="sortTable('SystemName')">System</th>
-                    <th onclick="sortTable('Company')">Company</th>
-                    <th onclick="sortTable('ServiceProvider')">Service Provider</th>
-                    <th onclick="sortTable('ProjectNumber')">Project #</th>
-                    <th onclick="sortTable('SourceFilename')">Filename</th>
-                    <th onclick="sortTable('CreatedAt')">Created</th>
-                    {{if .IsAdmin}}<th>Owner</th>{{end}}
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {{range .Protocols}}
-                <tr>
-                    <td>{{.ID}}</td>
-                    <td><span class="protocol-type {{.ProtocolType}}">{{.ProtocolType}}</span></td>
-                    <td>{{if .ProtocolDate.Valid}}{{dateOnly .ProtocolDate.String}}{{else}}<em>N/A</em>{{end}}</td>
-                    <td>{{if .StartTime.Valid}}{{timeOnly .StartTime.String}}{{else}}<em>N/A</em>{{end}}</td>
-                    <td>{{if .SystemName.Valid}}{{.SystemName.String}}{{else}}<em>N/A</em>{{end}}</td>
-                    <td>{{if .Company.Valid}}{{.Company.String}}{{else}}<em>N/A</em>{{end}}</td>
-                    <td>{{if .ServiceProvider.Valid}}{{.ServiceProvider.String}}{{else}}<em>N/A</em>{{end}}</td>
-                    <td>{{if .ProjectNumber.Valid}}{{.ProjectNumber.String}}{{else}}<em>N/A</em>{{end}}</td>
-                    <td>{{if .SourceFilename.Valid}}<span class="filename">{{.SourceFilename.String}}</span>{{else}}<em>N/A</em>{{end}}{{if and .ParseWarnings.Valid (ne .ParseWarnings.String "[]")}} <span title="{{.ParseWarnings.String}}" style="color:#e0a800;cursor:help;">⚠</span>{{end}}{{if .OrgReview}} <span title="Uploaded by a partner account, but the document credits a different company — review the organisation" style="color:#c62828;cursor:help;">⚑</span>{{end}}</td>
-                    <td>{{.CreatedAt}}</td>
-                    {{if $.IsAdmin}}
-                    <td>{{if .OwnerEmail.Valid}}{{.OwnerEmail.String}}{{else}}<em>N/A</em>{{end}}</td>
                     {{end}}
-                    <td>
-                        <a href="/protocols/view?id={{.ID}}" class="view-btn">View Details</a>
-                        {{if or $.CanDeleteAny (and .UserID.Valid (eq .UserID.Int64 $.CurrentUserID))}}
-                        <form method="POST" action="/protocols/delete" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this protocol?');">
-                            <input type="hidden" name="id" value="{{.ID}}" />
-                            <button type="submit" class="delete-btn">Delete</button>
-                        </form>
+                </select>
+            </label>
+            {{end}}
+            <label class="field"><span>Document company</span>
+                <input type="text" name="company" placeholder="Company…" value="{{.Company}}">
+            </label>
+            <label class="field"><span>From</span><input type="date" name="date_from" value="{{.DateFrom}}"></label>
+            <label class="field"><span>To</span><input type="date" name="date_to" value="{{.DateTo}}"></label>
+            <button class="btn btn-primary" type="submit">Search</button>
+            {{if or .Search (ne .Type "")}}<a class="btn btn-ghost" href="/protocols">Clear</a>{{end}}
+        </form>
+
+        <div class="table-wrap">
+            {{if .Protocols}}
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" onclick="sortTable('ID')">ID</th>
+                            <th class="sortable" onclick="sortTable('ProtocolType')">Type</th>
+                            <th class="sortable" onclick="sortTable('ProtocolDate')">Date</th>
+                            <th class="sortable" onclick="sortTable('StartTime')">Time</th>
+                            <th class="sortable" onclick="sortTable('SystemName')">System</th>
+                            <th class="sortable" onclick="sortTable('Company')">Company</th>
+                            <th class="sortable" onclick="sortTable('ServiceProvider')">Service provider</th>
+                            <th class="sortable" onclick="sortTable('ProjectNumber')">Project #</th>
+                            <th class="sortable" onclick="sortTable('SourceFilename')">Filename</th>
+                            <th class="sortable" onclick="sortTable('CreatedAt')">Created</th>
+                            {{if .IsAdmin}}<th>Owner</th>{{end}}
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Protocols}}
+                        <tr>
+                            <td data-label="ID">{{.ID}}</td>
+                            <td data-label="Type"><span class="pill {{.ProtocolType}}">{{.ProtocolType}}</span></td>
+                            <td data-label="Date">{{if .ProtocolDate.Valid}}{{dateOnly .ProtocolDate.String}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Time">{{if .StartTime.Valid}}{{timeOnly .StartTime.String}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="System">{{if .SystemName.Valid}}{{.SystemName.String}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Company">{{if .Company.Valid}}{{.Company.String}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Service provider">{{if .ServiceProvider.Valid}}{{.ServiceProvider.String}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Project #">{{if .ProjectNumber.Valid}}{{.ProjectNumber.String}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Filename">
+                                {{if .SourceFilename.Valid}}<span title="{{.SourceFilename.String}}">{{.SourceFilename.String}}</span>{{else}}<span class="muted">—</span>{{end}}
+                                {{if and .ParseWarnings.Valid (ne .ParseWarnings.String "[]")}}<span title="{{.ParseWarnings.String}}" style="color:#e0a800;cursor:help;">⚠</span>{{end}}
+                                {{if .OrgReview}}<span title="Uploaded by a partner account, but the document credits a different company — review the organisation" style="color:#c62828;cursor:help;">⚑</span>{{end}}
+                            </td>
+                            <td data-label="Created">{{.CreatedAt}}</td>
+                            {{if $.IsAdmin}}
+                            <td data-label="Owner">{{if .OwnerEmail.Valid}}{{.OwnerEmail.String}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            {{end}}
+                            <td data-label="Actions">
+                                <a class="btn btn-ghost btn-small" href="/protocols/view?id={{.ID}}">View</a>
+                                {{if or $.CanDeleteAny (and .UserID.Valid (eq .UserID.Int64 $.CurrentUserID))}}
+                                <form method="POST" action="/protocols/delete" style="display:inline;" onsubmit="return confirm('Delete this protocol? This cannot be undone.');">
+                                    <input type="hidden" name="id" value="{{.ID}}" />
+                                    <button type="submit" class="btn btn-danger btn-small">Delete</button>
+                                </form>
+                                {{end}}
+                            </td>
+                        </tr>
                         {{end}}
-                    </td>
-                </tr>
-                {{end}}
-            </tbody>
-        </table>
-        
-        <!-- Pagination Controls -->
-        <div class="pagination-bar">
+                    </tbody>
+                </table>
+            </div>
+            {{else}}
+            <p class="empty">{{if or .Search (ne .Type "")}}No protocols match these filters.{{else}}No protocols yet — import a PDF to get started.{{end}}</p>
+            {{end}}
+
             {{if gt .TotalPages 1}}
-                <button class="page-btn" {{if eq .Page 1}}disabled{{end}} onclick="window.location='?page={{sub .Page 1}}{{.QueryString}}'">&laquo; Prev</button>
+            <nav class="pager">
+                <a class="{{if eq .Page 1}}disabled{{end}}" href="?page={{sub .Page 1}}{{.QueryString}}">‹ Prev</a>
                 {{range $i := .PageNumbers}}
-                    <button class="page-btn {{if eq $.Page $i}}active{{end}}" onclick="window.location='?page={{$i}}{{$.QueryString}}'">{{$i}}</button>
+                <a class="{{if eq $.Page $i}}current{{end}}" href="?page={{$i}}{{$.QueryString}}">{{$i}}</a>
                 {{end}}
-                <button class="page-btn" {{if eq .Page .TotalPages}}disabled{{end}} onclick="window.location='?page={{add .Page 1}}{{.QueryString}}'">Next &raquo;</button>
+                <a class="{{if eq .Page .TotalPages}}disabled{{end}}" href="?page={{add .Page 1}}{{.QueryString}}">Next ›</a>
+            </nav>
             {{end}}
         </div>
-        {{else}}
-        <div class="no-results">
-            <h3>No protocols found</h3>
-            <p>{{if or .Search (ne .Type "all")}}Try adjusting your search criteria{{else}}No protocols have been imported yet{{end}}</p>
-            <p><a href="/pdf2text">Upload a PDF</a> to get started</p>
-        </div>
-        {{end}}
-    </div>
+    </main>
+
     <script>
-        // Simple client-side sorting (for demo; backend sorting recommended for large datasets)
         function sortTable(column) {
             const params = new URLSearchParams(window.location.search);
             params.set('sort', column);

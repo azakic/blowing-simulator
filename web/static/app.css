@@ -1,0 +1,253 @@
+/* Wolken-ASM Reports — zajednički stil (design system)
+ * Jedan fajl za sve stranice: tokeni, topbar, kartice, filteri, tabele.
+ * Tabele se ispod 760px pretvaraju u kartice preko data-label atributa.
+ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+    --blue: #1976d2;
+    --blue-dark: #145ea8;
+    --ink: #22313f;
+    --muted: #6b7a89;
+    --line: #e6ebf1;
+    --bg: #f4f6f9;
+    --surface: #fff;
+    --green: #2e7d32;
+    --red: #c62828;
+    --amber: #e65100;
+    --radius: 12px;
+}
+
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-text-size-adjust: 100%;
+}
+
+/* ---------- top bar ---------- */
+.topbar {
+    background: var(--blue);
+    color: #fff;
+    padding: .6rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.brand { color: #fff; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.nav { display: flex; align-items: center; gap: 1.1rem; flex-wrap: wrap; font-size: .92rem; }
+.nav a { color: #e8f1fb; text-decoration: none; padding-bottom: 2px; }
+.nav a:hover, .nav a.active { color: #fff; border-bottom: 2px solid #fff; }
+.nav .role { font-size: .78rem; opacity: .8; }
+
+/* ---------- page ---------- */
+.page { max-width: 1240px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+.back { display: inline-flex; align-items: center; gap: .35rem; color: var(--blue); text-decoration: none; font-size: .88rem; margin-bottom: .6rem; }
+.back:hover { text-decoration: underline; }
+.head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.1rem; }
+.head h1 { margin: 0; font-size: 1.5rem; line-height: 1.2; }
+.head .sub { margin: .25rem 0 0; color: var(--muted); font-size: .88rem; max-width: 62ch; }
+
+/* ---------- KPI kartice ---------- */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; margin-bottom: 1.1rem; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--blue); border-radius: 10px; padding: .7rem .9rem; }
+.kpi .label { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.kpi .value { font-size: 1.35rem; font-weight: 700; margin-top: .15rem; font-variant-numeric: tabular-nums; }
+
+/* ---------- filteri / forme ---------- */
+.filters {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: .85rem 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    align-items: flex-end;
+    margin-bottom: 1.1rem;
+}
+.field { display: flex; flex-direction: column; gap: .25rem; min-width: 0; flex: 1 1 160px; }
+.field > span, .field > label { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.filters select, .filters input, .field input, .field select {
+    width: 100%;
+    font: inherit;
+    font-size: .88rem;
+    color: var(--ink);
+    padding: .5rem .6rem;
+    border: 1px solid #cfd8e3;
+    border-radius: 8px;
+    background: #fff;
+}
+.filters select:focus, .filters input:focus, .field input:focus, .field select:focus {
+    outline: 2px solid var(--blue);
+    outline-offset: 1px;
+    border-color: var(--blue);
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .4rem;
+    font: inherit;
+    font-size: .88rem;
+    font-weight: 600;
+    padding: .55rem 1rem;
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.btn-primary { background: var(--blue); color: #fff; }
+.btn-primary:hover { background: var(--blue-dark); }
+.btn-ghost { background: #eef1f5; color: var(--ink); }
+.btn-ghost:hover { background: #e3e8ee; }
+.btn-export { background: var(--green); color: #fff; }
+.btn-export:hover { background: #256428; }
+.btn-danger { background: var(--red); color: #fff; }
+.btn-danger:hover { background: #a51f1f; }
+.btn-small { padding: .35rem .65rem; font-size: .78rem; }
+.actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+
+/* ---------- panel ---------- */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 1.1rem; overflow: hidden; }
+.panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; flex-wrap: wrap; padding: .85rem 1rem; border-bottom: 1px solid var(--line); }
+.panel-head h2 { margin: 0; font-size: 1rem; }
+.panel-head .hint { color: var(--muted); font-size: .8rem; }
+.panel-body { padding: 1rem; }
+
+/* ---------- tabele ---------- */
+.table-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-bottom: 1.1rem; }
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+thead th {
+    position: sticky; top: 0; z-index: 1;
+    background: #f7f9fc;
+    color: var(--muted);
+    text-align: left;
+    font-size: .66rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    padding: .7rem .75rem;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+thead th.sortable { cursor: pointer; user-select: none; }
+thead th.sortable:hover { color: var(--ink); background: #eef3f9; }
+tbody td { padding: .7rem .75rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: #f9fbfd; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.muted { color: var(--muted); }
+
+.link { color: var(--blue); font-weight: 650; text-decoration: none; }
+.link:hover { text-decoration: underline; }
+.project-link { color: var(--blue); font-weight: 650; text-decoration: none; }
+.project-link:hover { text-decoration: underline; }
+.id-link { color: var(--blue); font-weight: 650; text-decoration: none; white-space: nowrap; }
+.id-link:hover { text-decoration: underline; }
+
+/* ---------- oznake ---------- */
+.pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .7rem; font-weight: 700; letter-spacing: .02em; }
+.pill.fremco { background: #e3f2fd; color: #1565c0; }
+.pill.jetting { background: #f3e5f5; color: #6a1b9a; }
+.pill.parse { background: #fff3e0; color: var(--amber); }
+.pill.ok { background: #e8f5e9; color: var(--green); }
+.pill.pending { background: #fff3e0; color: var(--amber); }
+.pill.active { background: #e8f5e9; color: var(--green); }
+.pill.role-admin { background: #ffebee; color: var(--red); }
+.pill.role-editor { background: #fff3e0; color: var(--amber); }
+.pill.role-partner { background: #e8eaf6; color: #283593; }
+.pill.role-viewer { background: #eceff1; color: #455a64; }
+.chip { background: #eef2f7; color: #34495e; border-radius: 999px; padding: 3px 10px; font-size: .78rem; }
+.chips { display: flex; flex-wrap: wrap; gap: .35rem; padding: .75rem 1rem 0; }
+
+/* ---------- poruke / napomene ---------- */
+.empty { text-align: center; padding: 2.5rem 1rem; color: var(--muted); }
+.note { margin: 1rem 0; color: var(--muted); font-size: .8rem; line-height: 1.5; }
+.msg { padding: .7rem .9rem; border-radius: 8px; font-size: .85rem; background: #e8f5e9; border-left: 4px solid var(--green); margin-bottom: 1rem; }
+.msg.error { background: #fdecea; border-left-color: var(--red); }
+.warn { color: var(--red); }
+
+.code {
+    display: inline-block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: #eef2f6;
+    border: 1px solid #d7dfe7;
+    border-radius: 6px;
+    padding: 2px 8px;
+    letter-spacing: .08em;
+    font-size: .78rem;
+}
+
+/* ---------- paginacija ---------- */
+.pager { display: flex; align-items: center; justify-content: center; gap: .35rem; flex-wrap: wrap; padding: .9rem 1rem; border-top: 1px solid var(--line); }
+.pager a, .pager span {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 2.1rem; height: 2.1rem; padding: 0 .6rem;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: #fff; color: var(--ink); font-size: .85rem; text-decoration: none;
+}
+.pager a:hover { background: #eef3f9; }
+.pager .current { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+.pager .disabled { color: #b0bcc8; pointer-events: none; }
+
+/* ---------- mobilno: tabele postaju kartice ---------- */
+@media (max-width: 760px) {
+    .page { padding: .9rem .75rem 2.5rem; }
+    .head { align-items: flex-start; }
+    .head h1 { font-size: 1.25rem; }
+    .head .actions { width: 100%; }
+    .head .actions .btn { flex: 1; }
+
+    .kpis { grid-template-columns: repeat(2, 1fr); gap: .5rem; }
+    .kpi { padding: .6rem .7rem; }
+    .kpi .value { font-size: 1.1rem; }
+
+    .filters { padding: .75rem; gap: .6rem; }
+    .field { flex: 1 1 100%; }
+    .filters .btn { flex: 1 1 100%; }
+
+    .table-wrap, .panel { background: transparent; border: 0; border-radius: 0; overflow: visible; margin-bottom: .5rem; }
+    .panel-head { padding: .5rem .25rem; border-bottom: 0; }
+    .table-scroll { overflow: visible; }
+
+    table, thead, tbody, tr, td { display: block; width: 100%; }
+    thead { display: none; }
+    tbody tr {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        margin-bottom: .6rem;
+        padding: .35rem .8rem;
+    }
+    tbody tr:hover td { background: transparent; }
+    tbody td {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: .75rem;
+        padding: .3rem 0;
+        border-bottom: 1px dashed #eef1f5;
+        text-align: right;
+    }
+    tbody td:last-child { border-bottom: 0; }
+    tbody td::before {
+        content: attr(data-label);
+        flex: 0 0 auto;
+        text-align: left;
+        font-size: .66rem;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: var(--muted);
+    }
+    tbody td:not([data-label])::before { content: ''; }
+    .num { text-align: right; }
+    .chips { padding: .25rem .25rem .75rem; }
+    .pager { padding: .75rem .25rem; }
+}
