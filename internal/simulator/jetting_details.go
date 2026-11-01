@@ -62,7 +62,7 @@ var (
 	reKompressor    = regexp.MustCompile(`(?i)Kompressor\b`)
 
 	reZeitDauer   = regexp.MustCompile(`(?i)Zeit\s*-?\s*Dauer`)
-	reStreckenl   = regexp.MustCompile(`(?i)Streckenl(?:ä|ae)nge\b`)
+	reStreckenl   = regexp.MustCompile(`(?i)Streckenl\w{1,3}nge`)
 	reStart       = regexp.MustCompile(`(?i)Start\b`)
 	reEnde        = regexp.MustCompile(`(?i)Ende\b`)
 	reUmgebung    = regexp.MustCompile(`(?i)Umgebungsluft\s*temp`)
@@ -362,12 +362,9 @@ func cleanOCRValue(s string) string {
 	if len(fields) > 1 && len(fields[0]) == 1 && strings.ContainsAny(fields[0], "Il|!1") {
 		fields = fields[1:]
 	}
-	// Završni jednoslovni šum: „glatt gerieft D", „… U)".
-	if len(fields) > 1 {
-		last := fields[len(fields)-1]
-		if len(last) == 1 && strings.ContainsAny(last, "DIUOQ[]()|") {
-			fields = fields[:len(fields)-1]
-		}
+	// Završni šum (checkbox/linija): „glatt gerieft D", „… U)", „… [J".
+	for len(fields) > 1 && isCheckboxNoise(fields[len(fields)-1]) {
+		fields = fields[:len(fields)-1]
 	}
 	return strings.Join(fields, " ")
 }
@@ -399,8 +396,21 @@ func cleanColors(colors []string) []string {
 
 // cleanDrumNo ispravlja najčešću OCR zamenu kod broja koluta (£ → E).
 func cleanDrumNo(s string) string {
-	s = strings.TrimSpace(s)
-	s = strings.TrimPrefix(s, "| ")
+	s = cleanOCRValue(s)
 	s = strings.ReplaceAll(s, "£", "E")
 	return s
+}
+
+// isCheckboxNoise prepoznaje kratke tokene koji su ostaci checkbox-a ili linija
+// u OCR izlazu (npr. "U)", "[J", "[]", "D").
+func isCheckboxNoise(tok string) bool {
+	if len(tok) == 0 || len(tok) > 3 {
+		return false
+	}
+	for _, r := range tok {
+		if !strings.ContainsRune("DIUOQ[]()|!J", r) {
+			return false
+		}
+	}
+	return true
 }
