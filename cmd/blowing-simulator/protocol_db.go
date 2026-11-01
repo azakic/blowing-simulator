@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -541,16 +542,38 @@ func parseTime(timeStr string) *time.Time {
 	return nil
 }
 
+// parseDuration prihvata "1h30m" (Go format) i "HH:MM:SS" / "MM:SS".
+//
+// Ranije je koristio samo time.ParseDuration, pa "00:18:25" nije prolazio i
+// `protocol_summary.blowing_time` je uvek bio NULL.
 func parseDuration(durationStr string) *time.Duration {
-	if durationStr == "" {
+	s := strings.TrimSpace(durationStr)
+	if s == "" {
 		return nil
 	}
-
-	// Parse duration in format "hh:mm:ss"
-	if d, err := time.ParseDuration(durationStr); err == nil {
+	if d, err := time.ParseDuration(s); err == nil {
 		return &d
 	}
-	return nil
+	parts := strings.Split(s, ":")
+	if len(parts) < 2 || len(parts) > 3 {
+		return nil
+	}
+	nums := make([]int, 0, len(parts))
+	for _, part := range parts {
+		n, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil {
+			return nil
+		}
+		nums = append(nums, n)
+	}
+	var h, m, sec int
+	if len(nums) == 3 {
+		h, m, sec = nums[0], nums[1], nums[2]
+	} else {
+		m, sec = nums[0], nums[1]
+	}
+	d := time.Duration(h)*time.Hour + time.Duration(m)*time.Minute + time.Duration(sec)*time.Second
+	return &d
 }
 
 func parseTimestamp(timestampStr string) *time.Time {

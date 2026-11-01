@@ -314,6 +314,22 @@ func extractFremcoProtocolInfo(lines []string) FremcoProtocolInfo {
 	return info
 }
 
+// valueUntilLabels vraća deo linije posle `rest` do prve od oznaka.
+//
+// U -layout izlazu više polja deli istu liniju:
+// "Rohrverband: SNRVe 22x7x1,5 Bezeichnung: A-D 2Y 1x6", pa se vrednost mora
+// seći na sledećoj oznaci, a ne na prvom razmaku.
+func valueUntilLabels(rest string, labels ...string) string {
+	cut := len(rest)
+	lower := strings.ToLower(rest)
+	for _, label := range labels {
+		if idx := strings.Index(lower, strings.ToLower(label)); idx >= 0 && idx < cut {
+			cut = idx
+		}
+	}
+	return strings.TrimSpace(rest[:cut])
+}
+
 // extractFremcoEquipment parses equipment specifications
 func extractFremcoEquipment(lines []string) FremcoEquipment {
 	equipment := FremcoEquipment{}
@@ -350,24 +366,26 @@ func extractFremcoEquipment(lines []string) FremcoEquipment {
 		}
 
 		if strings.Contains(line, "Rohrverband:") {
-			bundleMatch := regexp.MustCompile(`Rohrverband:\s*(.+?)(?:\s|$)`).FindStringSubmatch(line)
+			bundleMatch := regexp.MustCompile(`Rohrverband:\s*(.+)`).FindStringSubmatch(line)
 			if len(bundleMatch) > 1 {
-				equipment.Pipe.PipeBundle = strings.TrimSpace(bundleMatch[1])
+				equipment.Pipe.PipeBundle = valueUntilLabels(bundleMatch[1], "Bezeichnung:")
 			}
 		}
 
 		if strings.Contains(line, "Rohr:") {
-			pipeMatch := regexp.MustCompile(`Rohr:\s*(.+?)(?:\s|$)`).FindStringSubmatch(line)
+			pipeMatch := regexp.MustCompile(`Rohr:\s*(.+)`).FindStringSubmatch(line)
 			if len(pipeMatch) > 1 {
-				equipment.Pipe.PipeType = strings.TrimSpace(pipeMatch[1])
+				equipment.Pipe.PipeType = valueUntilLabels(pipeMatch[1], "Faserzahl:", "Gleitmittel:")
 			}
 		}
 
 		if strings.Contains(line, "Farbe-Kennung:") {
 			colorMatch := regexp.MustCompile(`Farbe-Kennung:\s*(.+)`).FindStringSubmatch(line)
 			if len(colorMatch) > 1 {
-				colors := strings.Fields(colorMatch[1])
-				equipment.Pipe.ColorCoding = colors
+				value := valueUntilLabels(colorMatch[1], "Kabel-Durchmesser:", "Kompressor:", "Gleitmittel:")
+				if value != "" {
+					equipment.Pipe.ColorCoding = strings.Fields(value)
+				}
 			}
 		}
 
@@ -399,9 +417,14 @@ func extractFremcoEquipment(lines []string) FremcoEquipment {
 			}
 		}
 
-		if strings.Contains(line, "Kabel-Durchmesser:") && i+1 < len(lines) {
-			diameterStr := strings.TrimSpace(lines[i+1])
-			if diameter, err := strconv.ParseFloat(diameterStr, 64); err == nil {
+		// Vrednost je u ISTOJ liniji (noviji layout), a kod starijeg u sledećoj.
+		if idx := strings.Index(line, "Kabel-Durchmesser:"); idx >= 0 {
+			value := valueUntilLabels(line[idx+len("Kabel-Durchmesser:"):],
+				"Kompressor:", "Gleitmittel:", "Ölabscheider", "Nachkühler")
+			if value == "" && i+1 < len(lines) {
+				value = strings.TrimSpace(lines[i+1])
+			}
+			if diameter, err := strconv.ParseFloat(strings.Fields(value + " x")[0], 64); err == nil {
 				equipment.Cable.Diameter = diameter
 			}
 		}
