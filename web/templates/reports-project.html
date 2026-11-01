@@ -83,6 +83,12 @@
                     {{range .OrgOptions}}<option value="{{.}}"{{if eq . $.Filter.Org}} selected{{end}}>{{.}}</option>{{end}}
                 </select>
             </label>
+            <label>Organisation
+                <select name="org_id">
+                    <option value="">All</option>
+                    {{range .OrgList}}<option value="{{.ID}}"{{if eq .ID $.Filter.OrgID}} selected{{end}}>{{.Name}}</option>{{end}}
+                </select>
+            </label>
             <label>Worker
                 <select name="worker">
                     <option value="">All</option>

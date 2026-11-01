@@ -82,10 +82,12 @@ type reportFilter struct {
 	Worker string
 	From   string
 	To     string
+	// OrgID filtrira po **kreditu** (podizvođač iz dokumenta, inače uploader).
+	OrgID int64
 }
 
 func (f reportFilter) HasAny() bool {
-	return f.Org != "" || f.Worker != "" || f.From != "" || f.To != ""
+	return f.Org != "" || f.Worker != "" || f.From != "" || f.To != "" || f.OrgID != 0
 }
 
 // Values vraća aktivne filtere kao URL parametre.
@@ -102,6 +104,9 @@ func (f reportFilter) Values() url.Values {
 	}
 	if f.To != "" {
 		v.Set("to", f.To)
+	}
+	if f.OrgID != 0 {
+		v.Set("org_id", strconv.FormatInt(f.OrgID, 10))
 	}
 	return v
 }
@@ -130,11 +135,13 @@ const maxFilterValueLen = 200
 
 func parseReportFilter(r *http.Request) reportFilter {
 	q := r.URL.Query()
+	orgID, _ := strconv.ParseInt(strings.TrimSpace(q.Get("org_id")), 10, 64)
 	return reportFilter{
 		Org:    cleanFilterValue(q.Get("org")),
 		Worker: cleanFilterValue(q.Get("worker")),
 		From:   cleanFilterDate(q.Get("from")),
 		To:     cleanFilterDate(q.Get("to")),
+		OrgID:  orgID,
 	}
 }
 
@@ -215,6 +222,13 @@ func buildScopedQuery(r *http.Request, f reportFilter) (string, []interface{}) {
 	}
 	if f.To != "" {
 		where += " AND p.protocol_date <= " + b.add(f.To) + "::date"
+	}
+	if f.OrgID != 0 {
+		// Kredit = podizvođač iz dokumenta (ako nije interna firma), inače
+		// organizacija naloga koja je uploadovala.
+		where += ` AND COALESCE(
+			(SELECT sp.id FROM orgs sp WHERE sp.id = p.service_provider_org_id AND sp.kind <> 'internal'),
+			p.owner_org_id) = ` + b.add(f.OrgID)
 	}
 
 	return fmt.Sprintf(projectBaseQuery, where), b.args
@@ -487,6 +501,7 @@ func ProjectReportHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	orgList, _ := listOrgs()
 
 	renderTemplate(w, "reports-projects.html", map[string]interface{}{
 		"Projects":       projects,
@@ -496,6 +511,7 @@ func ProjectReportHandler(w http.ResponseWriter, r *http.Request) {
 		"TotalDuration":  formatSeconds(totalSeconds),
 		"OrgOptions":     orgOptions,
 		"WorkerOptions":  workerOptions,
+		"OrgList":        orgList,
 		"Filter":         f,
 		"QueryString":    f.QueryString(),
 		"ExportURL":      exportURL("/reports/projects.csv", f, nil),
@@ -556,6 +572,7 @@ func ProjectReportDetailHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	orgList, _ := listOrgs()
 
 	data := map[string]interface{}{
 		"Project":       project,
@@ -568,6 +585,7 @@ func ProjectReportDetailHandler(w http.ResponseWriter, r *http.Request) {
 		"Shares":        buildSharesFromProtocols(protocols),
 		"OrgOptions":    orgOptions,
 		"WorkerOptions": workerOptions,
+		"OrgList":       orgList,
 		"Filter":        f,
 		"QueryString":   f.QueryString(),
 		"ExportURL":     exportURL("/reports/project.csv", f, url.Values{"project": {project}}),

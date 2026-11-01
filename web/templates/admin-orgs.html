@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Organisations - Wolken-ASM Reports</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; margin:0; background:#f5f7fa; }
+    .navbar { display:flex; justify-content:space-between; align-items:center; background:#1976d2; padding:0.7em 2em; color:white; }
+    .navbar a { color:#fff; text-decoration:none; margin-right:1.2em; font-weight:500; }
+    .navbar-links { display:flex; align-items:center; }
+    .container { max-width:1200px; margin:2rem auto; background:#fff; padding:2rem 2.5rem; border-radius:12px; box-shadow:0 4px 20px rgba(0,0,0,.06); }
+    h1 { margin-top:0; font-size:1.6rem; }
+    h2 { font-size:1rem; margin:0 0 .75rem; }
+    table { width:100%; border-collapse:collapse; margin-top:1rem; }
+    th, td { padding:.6rem .7rem; border-bottom:1px solid #e2e8f0; text-align:left; font-size:.85rem; vertical-align:top; }
+    th { background:#eff3f9; font-weight:600; font-size:.72rem; letter-spacing:.05em; text-transform:uppercase; }
+    .num { text-align:right; }
+    .kind { display:inline-block; padding:2px 8px; border-radius:14px; font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+    .kind-internal { background:#e3f2fd; color:#1565c0; }
+    .kind-subcontractor { background:#f3e5f5; color:#6a1b9a; }
+    .kind-client { background:#e8f5e9; color:#2e7d32; }
+    .grid { display:grid; gap:1.5rem; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); margin-top:1.5rem; }
+    .panel { background:#fafbfc; border:1px solid #e2e8f0; border-radius:10px; padding:1.25rem; }
+    label { display:block; font-size:.7rem; font-weight:600; text-transform:uppercase; letter-spacing:.05em; margin:.6rem 0 .25rem; color:#546e7a; }
+    input, select { width:100%; padding:.5rem .6rem; border:1px solid #cfd8dc; border-radius:6px; font-size:.85rem; background:#fff; }
+    .row { display:flex; gap:.6rem; }
+    .row > * { flex:1; }
+    .btn { background:#1976d2; color:#fff; border:none; padding:.5rem .85rem; font-size:.8rem; font-weight:600; border-radius:6px; cursor:pointer; }
+    .btn:hover { background:#145ea8; }
+    .btn-small { padding:.32rem .6rem; font-size:.72rem; }
+    .alias { display:inline-block; background:#eceff1; color:#37474f; border-radius:10px; padding:1px 7px; font-size:.7rem; margin:0 .25rem .25rem 0; font-family:ui-monospace,monospace; }
+    .msg { background:#e8f5e9; border-left:4px solid #2e7d32; padding:.7rem 1rem; border-radius:6px; margin-bottom:1rem; font-size:.85rem; }
+    .note { color:#607d8b; font-size:.8rem; margin-top:.5rem; }
+    .warn { color:#c62828; }
+    @media (max-width:760px){ .navbar { flex-direction:column; align-items:flex-start; } .row { flex-direction:column; } }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand"><a href="/">Wolken-ASM Reports</a></div>
+    <div class="navbar-links">
+      <a href="/protocols">Protocols</a>
+      <a href="/reports/projects">Project Report</a>
+      <a href="/admin/users">Users</a>
+      <a href="/admin/orgs" style="border-bottom:2px solid #fff;">Organisations</a>
+      <a href="/logout">Logout</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <h1>Organisations</h1>
+    <p class="note">
+      Visibility and the partner's share are driven by the organisation of the account that uploads a
+      protocol — not by the company printed in the PDF. A partner account may always upload Fremco and
+      Jetting reports.
+    </p>
+    {{if .Message}}<div class="msg">{{.Message}}</div>{{end}}
+
+    <table>
+      <thead>
+        <tr>
+          <th>Organisation</th>
+          <th>Kind</th>
+          <th class="num">Owned<br><span style="font-weight:400;text-transform:none;">(uploaded by)</span></th>
+          <th class="num">Credited<br><span style="font-weight:400;text-transform:none;">(share)</span></th>
+          <th class="num">As company</th>
+          <th>Aliases</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Orgs}}
+        <tr>
+          <td><strong>{{.Name}}</strong></td>
+          <td><span class="kind kind-{{.Kind}}">{{.Kind}}</span></td>
+          <td class="num">{{.Owned}}</td>
+          <td class="num">{{.Credited}}</td>
+          <td class="num">{{.Company}}</td>
+          <td>
+            {{range .Aliases}}<span class="alias">{{.}}</span>{{end}}
+            <form method="POST" action="/admin/orgs" style="margin-top:.4rem;display:flex;gap:.4rem;">
+              <input type="hidden" name="action" value="add-alias" />
+              <input type="hidden" name="org_id" value="{{.ID}}" />
+              <input name="alias" placeholder="new alias, e.g. M.A.X. Bauservice" />
+              <button class="btn btn-small" type="submit">Add alias</button>
+            </form>
+          </td>
+          <td>
+            <form method="POST" action="/admin/orgs">
+              <input type="hidden" name="action" value="set-kind" />
+              <input type="hidden" name="org_id" value="{{.ID}}" />
+              <select name="kind">
+                <option value="internal" {{if eq .Kind "internal"}}selected{{end}}>internal</option>
+                <option value="subcontractor" {{if eq .Kind "subcontractor"}}selected{{end}}>subcontractor</option>
+                <option value="client" {{if eq .Kind "client"}}selected{{end}}>client</option>
+              </select>
+              <button class="btn btn-small" type="submit" style="margin-top:.35rem;">Save</button>
+            </form>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+
+    <div class="grid">
+      <div class="panel">
+        <h2>New organisation</h2>
+        <form method="POST" action="/admin/orgs">
+          <input type="hidden" name="action" value="create" />
+          <label for="name">Name</label>
+          <input id="name" name="name" placeholder="e.g. M.A.X. Bauservice GmbH" required />
+          <label for="kind">Kind</label>
+          <select id="kind" name="kind">
+            <option value="subcontractor">subcontractor (partner)</option>
+            <option value="internal">internal (us)</option>
+            <option value="client">client</option>
+          </select>
+          <button class="btn" type="submit" style="margin-top:.75rem;">Create</button>
+          <div class="note">The name is stored as an alias too, so the next PDF with that name is matched automatically.</div>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h2>Assign organisation to protocols</h2>
+        <form method="POST" action="/admin/orgs">
+          <input type="hidden" name="action" value="bulk-assign" />
+          <label for="bulk_org">Organisation</label>
+          <select id="bulk_org" name="org_id">
+            {{range .Orgs}}<option value="{{.ID}}">{{.Name}} ({{.Kind}})</option>{{end}}
+          </select>
+          <label for="bulk_field">Column</label>
+          <select id="bulk_field" name="field">
+            <option value="owner">owner (who uploaded → visibility + share fallback)</option>
+            <option value="provider">credited (subcontractor in the document → share)</option>
+            <option value="company">company (us, reporting only)</option>
+          </select>
+          <div class="row">
+            <div>
+              <label for="bulk_type">Type</label>
+              <select id="bulk_type" name="type">
+                <option value="all">all</option>
+                <option value="fremco">Fremco</option>
+                <option value="jetting">Jetting</option>
+              </select>
+            </div>
+            <div>
+              <label for="bulk_from">From</label>
+              <input id="bulk_from" name="from" type="date" />
+            </div>
+            <div>
+              <label for="bulk_to">To</label>
+              <input id="bulk_to" name="to" type="date" />
+            </div>
+          </div>
+          <label style="display:flex;align-items:center;gap:.5rem;text-transform:none;font-size:.8rem;margin-top:.8rem;">
+            <input type="checkbox" name="only_missing" value="1" checked style="width:auto;" />
+            only rows where this column is empty
+          </label>
+          <button class="btn" type="submit" style="margin-top:.75rem;">Assign</button>
+          <div class="note">
+            Missing organisation: owner <span class="warn">{{.MissingOwner}}</span>,
+            credited <span class="warn">{{.MissingProvider}}</span>,
+            company <span class="warn">{{.MissingCompany}}</span> protocols.
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

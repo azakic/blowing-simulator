@@ -789,6 +789,7 @@ func main() {
 	http.HandleFunc("/reports/project.csv", requireAuth(ProjectReportDetailCSVHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/api/get", requireAuth(ProtocolGetAPIHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/admin/users", requireAuth(AdminUsersHandler, "admin"))
+	http.HandleFunc("/admin/orgs", requireAuth(AdminOrgsHandler, "admin"))
 	// Admin utility: backfill ownership for existing protocols (NULL user_id)
 	http.HandleFunc("/admin/backfill-ownership", requireAuth(AdminBackfillOwnershipHandler, "admin"))
 	http.HandleFunc("/admin/reparse", requireAuth(AdminReparseHandler, "admin"))
@@ -827,6 +828,7 @@ type Protocol struct {
 	ParseSource     sql.NullString `db:"parse_source"`
 	ParseWarnings   sql.NullString `db:"parse_warnings"`
 	ParsedAt        sql.NullString `db:"parsed_at"`
+	OrgReview       bool           `db:"org_review"`
 }
 
 // NullTime represents a time.Time that may be null
@@ -922,7 +924,8 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 			   p.project_number, p.company, p.service_provider, p.operator,
 			   p.source_filename, p.created_at::text, p.user_id,
 			   u.email AS owner_email,
-			   coalesce(p.parse_warnings::text, '') AS parse_warnings
+			   coalesce(p.parse_warnings::text, '') AS parse_warnings,
+			   p.org_review
 		FROM protocols p
 		LEFT JOIN users u ON u.id = p.user_id
 		WHERE 1=1`

@@ -163,7 +163,7 @@ func orgKindOf(orgID int64) string {
 
 // Org je red za admin UI.
 type Org struct {
-	ID   int    `db:"id"`
+	ID   int64  `db:"id"`
 	Name string `db:"name"`
 	Kind string `db:"kind"`
 }
