@@ -1,189 +1,121 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <title>Create Fremco Report</title>
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                margin: 2em;
-                background: #f9f9f9;
-            }
-            .center {
-                max-width: 900px;
-                margin: 2em auto;
-                background: #fff;
-                padding: 2em;
-                border-radius: 10px;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
-            }
-            h1 {
-                color: #333;
-                margin-bottom: 1em;
-                text-align: center;
-            }
-            label {
-                display: block;
-                margin-top: 1em;
-                font-weight: bold;
-            }
-            input,
-            select,
-            textarea {
-                width: 100%;
-                padding: 0.5em;
-                margin-top: 0.3em;
-                border-radius: 4px;
-                border: 1px solid #ccc;
-            }
-            table {
-                border-collapse: collapse;
-                width: 100%;
-                margin-top: 2em;
-            }
-            th,
-            td {
-                border: 1px solid #aaa;
-                padding: 6px 10px;
-                text-align: center;
-            }
-            th {
-                background: #eee;
-            }
-            .actions {
-                text-align: center;
-                margin-top: 2em;
-            }
-            button {
-                padding: 0.7em 2em;
-                font-size: 1em;
-                background: #007bff;
-                color: #fff;
-                border: none;
-                border-radius: 6px;
-                cursor: pointer;
-            }
-            button:hover {
-                background: #0056b3;
-            }
-            .back {
-                margin-top: 2em;
-                display: block;
-                text-align: center;
-            }
-        </style>
-        <script>
-            function addRow() {
-                const table = document.getElementById("measurements");
-                const row = table.insertRow(-1);
-                for (let i = 0; i < 5; i++) {
-                    const cell = row.insertCell(i);
-                    cell.innerHTML =
-                        '<input type="text" name="measurement_' +
-                        i +
-                        "_" +
-                        (table.rows.length - 2) +
-                        '" />';
-                }
-            }
-            function removeRow() {
-                const table = document.getElementById("measurements");
-                if (table.rows.length > 2) table.deleteRow(-1);
-            }
-        </script>
-    </head>
-    <body>
-        <div class="center">
-            <h1>Create Fremco Report</h1>
-            <form method="post" action="/submit-fremco">
-                <label>Bauvorhaben Nr.</label>
-                <input type="text" name="bauvorhaben" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1976d2">
+    <title>New Fremco protocol - Wolken-ASM Reports</title>
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="/">Wolken-ASM Reports</a>
+        <nav class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/protocols">Protocols</a>
+            <a href="/bulk-upload">Bulk Upload</a>
+        </nav>
+    </header>
 
-                <label>Datum, Startzeit</label>
-                <input type="text" name="datum_startzeit" />
-
-                <label>Streckenabschnitt / NVt</label>
-                <input type="text" name="streckenabschnitt" />
-
-                <label>Firma</label>
-                <input type="text" name="firma" />
-
-                <label>Einbläser</label>
-                <input type="text" name="einblaeser" />
-
-                <label>Bemerkungen</label>
-                <textarea name="bemerkungen"></textarea>
-
-                <label>Rohrparameter</label>
-                <input
-                    type="text"
-                    name="rohrparameter"
-                    placeholder="Hersteller, Rohrverband, Rohr, Farbe-Kennung, Rohrinnenwand, SNR-Temperatur"
-                />
-
-                <label>Kabel</label>
-                <input
-                    type="text"
-                    name="kabel"
-                    placeholder="Hersteller, Bezeichnung, Faserzahl, Kabel-Durchmesser, Meterzahlen, Kabel-Temperatur, Kabel-Einblaskappe"
-                />
-
-                <label>Einblasgerät / Kompressor</label>
-                <input
-                    type="text"
-                    name="einblasgeraet"
-                    placeholder="Einblasgerät, Controller S/N, Lubricator, Crashtest, Gleitmittel, Kompressor, Ölabscheider, Nachkühler"
-                />
-
-                <label>Zusammenfassung</label>
-                <input
-                    type="text"
-                    name="zusammenfassung"
-                    placeholder="Strecke, Einblaszeit, Wetter, Ort/GPS"
-                />
-
-                <h2>Messwerte Tabelle</h2>
-                <table id="measurements">
-                    <thead>
-                        <tr>
-                            <th>Streckenlänge [m]</th>
-                            <th>Geschwindigkeit [m/min]</th>
-                            <th>Rohr-Druck [bar]</th>
-                            <th>Drehmoment [%]</th>
-                            <th>Uhrzeit [hh:mm:ss]</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>
-                                <input type="text" name="measurement_0_0" />
-                            </td>
-                            <td>
-                                <input type="text" name="measurement_1_0" />
-                            </td>
-                            <td>
-                                <input type="text" name="measurement_2_0" />
-                            </td>
-                            <td>
-                                <input type="text" name="measurement_3_0" />
-                            </td>
-                            <td>
-                                <input type="text" name="measurement_4_0" />
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div class="actions">
-                    <button type="button" onclick="addRow()">Add Row</button>
-                    <button type="button" onclick="removeRow()">
-                        Remove Row
-                    </button>
-                </div>
-                <div class="actions">
-                    <button type="submit">Submit Report</button>
-                </div>
-            </form>
-            <a href="/" class="back">&larr; Back to Home</a>
+    <main class="page">
+        <a class="back" href="/">← Dashboard</a>
+        <div class="head">
+            <div>
+                <h1>New Fremco protocol</h1>
+                <p class="sub">Create a protocol by hand. Enter the header fields and the measurement table; the document can be generated afterwards.</p>
+            </div>
         </div>
-    </body>
+
+        <form method="post" action="/submit-fremco">
+            <section class="panel">
+                <div class="panel-head"><h2>Header</h2></div>
+                <div class="panel-body">
+                    <div class="form-grid">
+                        <label class="field"><span>Bauvorhaben Nr.</span><input type="text" name="bauvorhaben" /></label>
+                        <label class="field"><span>Datum, Startzeit</span><input type="text" name="datum_startzeit" placeholder="2025-10-22 10:51" /></label>
+                        <label class="field"><span>Streckenabschnitt / NVt</span><input type="text" name="streckenabschnitt" /></label>
+                        <label class="field"><span>Firma</span><input type="text" name="firma" /></label>
+                        <label class="field"><span>Einbläser</span><input type="text" name="einblaeser" /></label>
+                        <label class="field wide"><span>Bemerkungen</span><textarea name="bemerkungen"></textarea></label>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-head"><h2>Equipment</h2></div>
+                <div class="panel-body">
+                    <div class="form-grid">
+                        <label class="field wide"><span>Rohrparameter</span>
+                            <input type="text" name="rohrparameter" placeholder="Hersteller, Rohrverband, Rohr, Farbe-Kennung, Rohrinnenwand, SNR-Temperatur" />
+                        </label>
+                        <label class="field wide"><span>Kabel</span>
+                            <input type="text" name="kabel" placeholder="Hersteller, Bezeichnung, Faserzahl, Kabel-Durchmesser, Meterzahlen, Kabel-Temperatur, Kabel-Einblaskappe" />
+                        </label>
+                        <label class="field wide"><span>Einblasgerät / Kompressor</span>
+                            <input type="text" name="einblasgeraet" placeholder="Einblasgerät, Controller S/N, Lubricator, Crashtest, Gleitmittel, Kompressor, Ölabscheider, Nachkühler" />
+                        </label>
+                        <label class="field wide"><span>Zusammenfassung</span>
+                            <input type="text" name="zusammenfassung" placeholder="Strecke, Einblaszeit, Wetter, Ort/GPS" />
+                        </label>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-head"><h2>Messwerte</h2><span class="hint">one row per measurement point</span></div>
+                <div class="table-scroll">
+                    <table id="measurements">
+                        <thead>
+                            <tr>
+                                <th>Streckenlänge [m]</th>
+                                <th>Geschwindigkeit [m/min]</th>
+                                <th>Rohr-Druck [bar]</th>
+                                <th>Drehmoment [%]</th>
+                                <th>Uhrzeit [hh:mm:ss]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><input class="table-input" type="text" name="measurement_0_0" /></td>
+                                <td><input class="table-input" type="text" name="measurement_1_0" /></td>
+                                <td><input class="table-input" type="text" name="measurement_2_0" /></td>
+                                <td><input class="table-input" type="text" name="measurement_3_0" /></td>
+                                <td><input class="table-input" type="text" name="measurement_4_0" /></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="panel-body actions" style="border-top:1px solid var(--line);">
+                    <button class="btn btn-ghost" type="button" onclick="addRow()">+ Add row</button>
+                    <button class="btn btn-ghost" type="button" onclick="removeRow()">− Remove row</button>
+                </div>
+            </section>
+
+            <div class="actions">
+                <button class="btn btn-primary" type="submit">Submit report</button>
+                <a class="btn btn-ghost" href="/">Cancel</a>
+            </div>
+        </form>
+    </main>
+
+    <script>
+        function addRow() {
+            const table = document.getElementById("measurements");
+            const row = table.insertRow(-1);
+            for (let i = 0; i < 5; i++) {
+                const cell = row.insertCell(i);
+                cell.innerHTML =
+                    '<input class="table-input" type="text" name="measurement_' +
+                    i +
+                    "_" +
+                    (table.rows.length - 2) +
+                    '" />';
+            }
+        }
+        function removeRow() {
+            const table = document.getElementById("measurements");
+            if (table.rows.length > 2) table.deleteRow(-1);
+        }
+    </script>
+</body>
 </html>

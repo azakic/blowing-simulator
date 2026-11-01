@@ -1,138 +1,132 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <title>PDF to Text Converter</title>
-        <link rel="stylesheet" href="/static/style.css" />
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                margin: 2em;
-                background: #f9f9f9;
-            }
-            h1 {
-                color: #333;
-            }
-            form {
-                background: #fff;
-                padding: 1.5em;
-                border-radius: 8px;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-                max-width: 500px;
-                margin-bottom: 2em;
-            }
-            label {
-                display: block;
-                margin-top: 1em;
-            }
-            input[type="file"],
-            select,
-            button {
-                margin-top: 0.5em;
-            }
-            button {
-                padding: 0.5em 1.5em;
-                background: #007bff;
-                color: #fff;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-            }
-            button:hover {
-                background: #0056b3;
-            }
-            pre {
-                background: #222;
-                color: #eee;
-                padding: 1em;
-                border-radius: 8px;
-                overflow-x: auto;
-            }
-            .result {
-                margin-top: 2em;
-            }
-            table {
-                border-collapse: collapse;
-                width: 100%;
-                margin-bottom: 2em;
-            }
-            th,
-            td {
-                border: 1px solid #333;
-                padding: 6px 12px;
-                text-align: center;
-            }
-            th {
-                background: #eee;
-            }
-        </style>
-    </head>
-    <body>
-        <h1>PDF to Text Converter</h1>
-        <div class="result">
-            <h2>Report Info</h2>
-            <table>
-                <tr><th>Project Number</th><td>{{ .Project }}</td></tr>
-                <tr><th>Filename</th><td>{{ .Filename }}</td></tr>
-                <tr><th>Date</th><td>{{ .Date }}</td></tr>
-                <tr><th>Time (hh.mm)</th><td>{{ formatTime .Time }}</td></tr>
-                <tr><th>Address</th><td>{{ .Address }}</td></tr>
-                <tr><th>NVT</th><td>{{ .NVT }}</td></tr>
-            </table>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1976d2">
+    <title>Upload protocol - Wolken-ASM Reports</title>
+    <link rel="stylesheet" href="/static/app.css">
+    <style>
+        .chart-wrap { position: relative; width: 100%; overflow-x: auto; }
+        pre { background: #0f172a; color: #e6edf3; padding: .9rem 1rem; border-radius: 10px; overflow: auto; font-size: .78rem; line-height: 1.5; max-height: 22rem; }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="/">Wolken-ASM Reports</a>
+        <nav class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/protocols">Protocols</a>
+            <a href="/protocols/length-report">Length Report</a>
+            <a href="/reports/projects">Project Report</a>
+            <a href="/bulk-upload">Bulk Upload</a>
+            {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a>{{end}}
+            {{if .UserRole}}<span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+            {{else}}<a href="/login">Login</a>{{end}}
+        </nav>
+    </header>
+
+    <main class="page">
+        <a class="back" href="/">← Dashboard</a>
+        <div class="head">
+            <div>
+                <h1>Upload protocol</h1>
+                <p class="sub">Single PDF: parse it, inspect the result and download the JSON. For many files use <a href="/bulk-upload">bulk upload</a>.</p>
+            </div>
+            <div class="actions">
+                <a class="btn btn-ghost" href="/bulk-upload">Bulk upload →</a>
+            </div>
         </div>
-        {{ if .FremcoMeta }}
-        <div class="result">
-            <h2>Fremco Metadata</h2>
-            <table>
-                <tbody>
-                {{ range $key, $val := .FremcoMeta }}
-                    <tr><th>{{ $key }}</th><td>{{ $val }}</td></tr>
-                {{ end }}
-                </tbody>
-            </table>
+
+        <section class="panel">
+            <div class="panel-head"><h2>PDF file</h2><span class="hint">max 32 MB</span></div>
+            <div class="panel-body">
+                <form action="/pdf2text" method="post" enctype="multipart/form-data" class="filters" style="margin:0;border:0;padding:0;background:transparent;">
+                    <label class="field" style="flex:3 1 280px;"><span>Select PDF</span>
+                        <input type="file" id="pdfFile" name="pdfFile" accept="application/pdf" required />
+                    </label>
+                    <button class="btn btn-primary" type="submit">Convert to text</button>
+                </form>
+            </div>
+        </section>
+
+        <div class="kv-grid">
+            <section class="panel" style="margin:0;">
+                <div class="panel-head"><h2>Report info</h2></div>
+                <div class="panel-body">
+                    <div class="kv"><span class="k">Project number</span><span class="v">{{ .Project }}</span></div>
+                    <div class="kv"><span class="k">Filename</span><span class="v">{{ .Filename }}</span></div>
+                    <div class="kv"><span class="k">Date</span><span class="v">{{ .Date }}</span></div>
+                    <div class="kv"><span class="k">Time</span><span class="v">{{ formatTime .Time }}</span></div>
+                    <div class="kv"><span class="k">Address</span><span class="v">{{ .Address }}</span></div>
+                    <div class="kv"><span class="k">NVT</span><span class="v">{{ .NVT }}</span></div>
+                </div>
+            </section>
+
+            {{ if .FremcoMeta }}
+            <section class="panel" style="margin:0;">
+                <div class="panel-head"><h2>Fremco metadata</h2></div>
+                <div class="panel-body">
+                    {{ range $key, $val := .FremcoMeta }}
+                    <div class="kv"><span class="k">{{ $key }}</span><span class="v">{{ $val }}</span></div>
+                    {{ end }}
+                </div>
+            </section>
+            {{ end }}
         </div>
-        {{ end }}
-        <form action="/pdf2text" method="post" enctype="multipart/form-data">
-            <label for="pdfFile">Select PDF file:</label>
-            <input
-                type="file"
-                id="pdfFile"
-                name="pdfFile"
-                accept="application/pdf"
-                required
-            />
-            <button type="submit">Convert to Text</button>
-        </form>
-        <div class="result">
-            <h2>Messwerte Tabelle</h2>
-            <table id="measurements-table">
-                <thead>
-                    <tr>
-                        <th>Länge[m]</th>
-                        <th>Lufttemperatur[°C]</th>
-                        <th>Schubkraft[N]</th>
-                        <th>Einblasdruck[bar]</th>
-                        <th>Geschwindigkeit[m/min]</th>
-                        <th>Zeit - Dauer[hh:mm:ss]</th>
-                    </tr>
-                </thead>
-                <tbody id="measurements-tbody"></tbody>
-            </table>
-            <div id="no-measurements" style="display:none;color:#b00;font-weight:bold;display:none;">No measurement data found.</div>
-        </div>
-        <div class="result">
-            <h2>Messwerte Chart</h2>
-            <canvas id="measurements-chart" width="800" height="300"></canvas>
-            <div id="no-chart" style="display:none;color:#b00;font-weight:bold;">No chart data available.</div>
-        </div>
-        <div class="result">
-            <h2>JSON Report</h2>
-            <pre id="json-output">{{ .JSON }}</pre>
-            <button onclick="downloadJSON()">Download JSON</button>
-            <div id="no-json" style="display:none;color:#b00;font-weight:bold;">No JSON data available.</div>
-        </div>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <script>
+
+        <section class="panel">
+            <div class="panel-head"><h2>Messwerte</h2><span class="hint">parsed measurement table</span></div>
+            <div class="table-scroll">
+                <table id="measurements-table">
+                    <thead>
+                        <tr>
+                            <th>Länge (m)</th>
+                            <th>Lufttemperatur (°C)</th>
+                            <th>Schubkraft (N)</th>
+                            <th>Einblasdruck (bar)</th>
+                            <th>Geschwindigkeit (m/min)</th>
+                            <th>Zeit - Dauer (hh:mm:ss)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="measurements-tbody"></tbody>
+                </table>
+            </div>
+            <div id="no-measurements" style="display:none;color:var(--red);font-weight:600;padding:0 1rem 1rem;">No measurement data found.</div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-head"><h2>Messwerte chart</h2></div>
+            <div class="panel-body">
+                <div class="chart-wrap"><canvas id="measurements-chart" width="800" height="300"></canvas></div>
+                <div id="no-chart" style="display:none;color:var(--red);font-weight:600;">No chart data available.</div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-head">
+                <h2>JSON report</h2>
+                <span class="actions"><button class="btn btn-ghost btn-small" type="button" onclick="downloadJSON()">⬇ Download JSON</button></span>
+            </div>
+            <div class="panel-body">
+                <pre id="json-output">{{ .JSON }}</pre>
+                <div id="no-json" style="display:none;color:var(--red);font-weight:600;">No JSON data available.</div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-head"><h2>Extracted text (raw)</h2></div>
+            <div class="panel-body"><pre>{{ .Text }}</pre></div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-head"><h2>Normalized text</h2><span class="hint">input for the Jetting parser</span></div>
+            <div class="panel-body"><pre>{{ .Normalized }}</pre></div>
+        </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
         function downloadJSON() {
             var data = document.getElementById("json-output").textContent;
             var blob = new Blob([data], { type: "application/json" });
@@ -314,14 +308,5 @@
             document.getElementById("no-json").style.display = "none";
         }
         </script>
-
-        <div class="result">
-            <h2>Extracted Text (Raw)</h2>
-            <pre>{{ .Text }}</pre>
-        </div>
-        <div class="result">
-            <h2>Normalized Text (for Jetting parser)</h2>
-            <pre>{{ .Normalized }}</pre>
-        </div>
-    </body>
+</body>
 </html>
