@@ -13,6 +13,26 @@ import (
 	"time"
 )
 
+// orgShare je privremeni agregat po organizaciji (udeo u projektu).
+type orgShare struct {
+	protocols int
+	distance  float64
+	seconds   float64
+	points    int
+}
+
+// orgShareRow je red tabele „Udeo po organizaciji".
+type orgShareRow struct {
+	Name        string
+	Protocols   int
+	Distance    string
+	DistancePct string
+	Duration    string
+	DurationPct string
+	Points      int
+	PointsPct   string
+}
+
 // projectRow je jedan red u izveštaju „po projektu" (spaja Fremco i Jetting).
 type projectRow struct {
 	Project   string
@@ -47,6 +67,7 @@ type protocolRow struct {
 	Points    int
 	Original  bool
 	ParseInfo string
+	OwnerOrg  string
 
 	// sirove vrednosti za CSV/izvoz (nil = nema podatka)
 	DistanceM *float64
@@ -150,7 +171,7 @@ const projectBaseQuery = `
 	WITH scoped AS (
 		SELECT p.id, p.protocol_type, p.project_number, p.protocol_date, p.start_time,
 		       p.section_nvt, p.address, p.operator, p.company, p.service_provider,
-		       p.source_sha256, p.parse_source,
+		       p.source_sha256, p.parse_source, p.owner_org_id,
 		       COALESCE(s.total_distance,
 		                (SELECT max(m.length_m) FROM protocol_measurements m WHERE m.protocol_id = p.id)) AS distance,
 		       COALESCE(EXTRACT(EPOCH FROM s.blowing_time),
@@ -173,8 +194,14 @@ func buildScopedQuery(r *http.Request, f reportFilter) (string, []interface{}) {
 
 	if claims := GetAuthClaims(r); claims != nil && !seesAllProtocols(claims.Role) {
 		uid := b.add(claims.UserID)
-		where += fmt.Sprintf(` AND (p.user_id = %[1]s OR EXISTS (
-			SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = %[1]s))`, uid)
+		cond := fmt.Sprintf(`(p.user_id = %[1]s OR EXISTS (
+			SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = %[1]s)`, uid)
+		// Ista organizacija (vidi OWNERSHIP.md).
+		if orgID := userOrgID(claims.UserID); orgID != 0 {
+			org := b.add(orgID)
+			cond += fmt.Sprintf(" OR p.owner_org_id = %[1]s OR p.service_provider_org_id = %[1]s", org)
+		}
+		where += " AND " + cond + ")"
 	}
 	if f.Org != "" {
 		where += " AND " + orgExpr + " = " + b.add(f.Org)
@@ -267,16 +294,18 @@ func loadProjectDetail(r *http.Request, project string, f reportFilter) ([]proto
 	projectArg := b.add(project)
 
 	query := scoped + `
-		SELECT id, protocol_type,
-		       COALESCE(to_char(protocol_date, 'YYYY-MM-DD'), '') AS date,
-		       COALESCE(to_char(start_time, 'HH24:MI'), '') AS time,
-		       COALESCE(section_nvt, ''), COALESCE(address, ''),
-		       COALESCE(operator, ''), COALESCE(org, ''),
-		       distance, seconds, points, source_sha256 IS NOT NULL,
-		       COALESCE(parse_source, '')
-		FROM scoped
-		WHERE trim(project_number) = ` + projectArg + `
-		ORDER BY protocol_date, start_time, id`
+		SELECT s.id, s.protocol_type,
+		       COALESCE(to_char(s.protocol_date), '') AS date,
+		       COALESCE(to_char(s.start_time, 'HH24:MI'), '') AS time,
+		       COALESCE(s.section_nvt, ''), COALESCE(s.address, ''),
+		       COALESCE(s.operator, ''), COALESCE(s.org, ''),
+		       s.distance, s.seconds, s.points, s.source_sha256 IS NOT NULL,
+		       COALESCE(s.parse_source, ''),
+		       COALESCE(o.name, '')
+		FROM scoped s
+		LEFT JOIN orgs o ON o.id = s.owner_org_id
+		WHERE trim(s.project_number) = ` + projectArg + `
+		ORDER BY s.protocol_date, s.start_time, s.id`
 
 	rows, err := db.Queryx(query, b.args...)
 	if err != nil {
@@ -297,7 +326,8 @@ func loadProjectDetail(r *http.Request, project string, f reportFilter) ([]proto
 		var parseSource string
 
 		if err := rows.Scan(&p.ID, &p.Type, &p.Date, &p.Time, &p.Section, &p.Address,
-			&p.Operator, &p.Org, &distance, &seconds, &points, &original, &parseSource); err != nil {
+			&p.Operator, &p.Org, &distance, &seconds, &points, &original, &parseSource,
+			&p.OwnerOrg); err != nil {
 			log.Printf("project detail scan: %v", err)
 			continue
 		}
@@ -332,6 +362,69 @@ func loadProjectDetail(r *http.Request, project string, f reportFilter) ([]proto
 		return nil, 0, 0, nil, nil, err
 	}
 	return protocols, totalDistance, totalSeconds, sortedKeys(workers), sortedKeys(orgs), nil
+}
+
+// buildSharesFromProtocols agregira redove projekta po organizaciji koja nosi
+// udeo (`owner_org_id`, tj. nalog koji je uvezao protokol) i računa procente.
+func buildSharesFromProtocols(protocols []protocolRow) []orgShareRow {
+	shares := map[string]*orgShare{}
+	var totalDistance, totalSeconds float64
+	var totalPoints int
+
+	for _, p := range protocols {
+		owner := p.OwnerOrg
+		if owner == "" {
+			owner = "(no organisation)"
+		}
+		sh, ok := shares[owner]
+		if !ok {
+			sh = &orgShare{}
+			shares[owner] = sh
+		}
+		sh.protocols++
+		sh.points += p.Points
+		totalPoints += p.Points
+		if p.DistanceM != nil {
+			sh.distance += *p.DistanceM
+			totalDistance += *p.DistanceM
+		}
+		if p.Seconds != nil {
+			sh.seconds += *p.Seconds
+			totalSeconds += *p.Seconds
+		}
+	}
+	return buildShares(shares, totalDistance, totalSeconds, totalPoints)
+}
+
+// buildShares pretvara agregat po organizaciji u redove za prikaz sa udelima.
+func buildShares(shares map[string]*orgShare, totalDistance, totalSeconds float64, totalPoints int) []orgShareRow {
+	out := make([]orgShareRow, 0, len(shares))
+	for name, sh := range shares {
+		out = append(out, orgShareRow{
+			Name:        name,
+			Protocols:   sh.protocols,
+			Distance:    formatMeters(sh.distance),
+			DistancePct: formatPct(sh.distance, totalDistance),
+			Duration:    formatSeconds(sh.seconds),
+			DurationPct: formatPct(sh.seconds, totalSeconds),
+			Points:      sh.points,
+			PointsPct:   formatPct(float64(sh.points), float64(totalPoints)),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Points != out[j].Points {
+			return out[i].Points > out[j].Points
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+func formatPct(part, total float64) string {
+	if total <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%.0f%%", part*100/total)
 }
 
 // loadFilterOptions vraća sve organizacije i radnike vidljive korisniku
@@ -466,6 +559,7 @@ func ProjectReportDetailHandler(w http.ResponseWriter, r *http.Request) {
 		"TotalDuration": formatSeconds(totalSeconds),
 		"Workers":       workers,
 		"Orgs":          orgs,
+		"Shares":        buildSharesFromProtocols(protocols),
 		"OrgOptions":    orgOptions,
 		"WorkerOptions": workerOptions,
 		"Filter":        f,
@@ -495,8 +589,8 @@ func ProjectReportDetailCSVHandler(w http.ResponseWriter, r *http.Request) {
 
 	header := []string{
 		"ID", "Type", "Date", "Time", "Section", "Address", "Operator",
-		"Organisation", "Distance (m)", "Blowing time (h:mm:ss)", "Measurements",
-		"Original", "Parse source",
+		"Organisation", "Owner org", "Distance (m)", "Blowing time (h:mm:ss)",
+		"Measurements", "Original", "Parse source",
 	}
 	rows := make([][]string, 0, len(protocols))
 	for _, p := range protocols {
@@ -521,6 +615,7 @@ func ProjectReportDetailCSVHandler(w http.ResponseWriter, r *http.Request) {
 			csvSafe(p.Address),
 			csvSafe(p.Operator),
 			csvSafe(p.Org),
+			csvSafe(p.OwnerOrg),
 			distance,
 			seconds,
 			strconv.Itoa(p.Points),

@@ -48,7 +48,25 @@ func hasProtocolAccess(db *sqlx.DB, role string, userID int64, owner sql.NullInt
 		log.Printf("protocol_access: provera za protokol %d nije uspela: %v", protocolID, err)
 		return false
 	}
-	return ok
+	if ok {
+		return true
+	}
+
+	// Ista organizacija: protokol pripada firmi korisnika — ili ga je uvezao
+	// neko iz firme (owner_org_id), ili ga dokument pripisuje firmi kao
+	// podizvođaču (service_provider_org_id). Vidi OWNERSHIP.md.
+	if orgID := userOrgID(userID); orgID != 0 {
+		var sameOrg bool
+		if err := db.Get(&sameOrg, `SELECT EXISTS (
+			SELECT 1 FROM protocols p WHERE p.id = $1
+			  AND (p.owner_org_id = $2 OR p.service_provider_org_id = $2))`,
+			protocolID, orgID); err != nil {
+			log.Printf("org access: provera za protokol %d nije uspela: %v", protocolID, err)
+			return false
+		}
+		return sameOrg
+	}
+	return false
 }
 
 // grantProtocolAccess dodaje pristup (idempotentno).

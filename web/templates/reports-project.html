@@ -48,6 +48,9 @@
         .tag.parse { background: #fff3e0; color: #e65100; }
         .ok { color: #2e7d32; font-weight: 700; }
         .empty { text-align: center; padding: 30px; color: #6c757d; }
+        h2.section { margin: 34px 0 10px; font-size: 18px; color: #2c3e50; }
+        table.shares { margin-top: 4px; }
+        table.shares td:first-child { font-weight: 600; }
         .note { margin-top: 20px; font-size: 13px; color: #6c757d; }
     </style>
 </head>
@@ -158,6 +161,43 @@
         </table>
         {{else}}
         <p class="empty">{{if .HasFilter}}No protocols match these filters.{{else}}No protocols visible for this project.{{end}}</p>
+        {{end}}
+
+        {{if .Shares}}
+        <h2 class="section">Share by organisation</h2>
+        <table class="shares">
+            <thead>
+                <tr>
+                    <th>Organisation</th>
+                    <th class="num">Protocols</th>
+                    <th class="num">Distance</th>
+                    <th class="num">% distance</th>
+                    <th class="num">Blowing time</th>
+                    <th class="num">% time</th>
+                    <th class="num">Measurements</th>
+                    <th class="num">% measurements</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Shares}}
+                <tr>
+                    <td>{{.Name}}</td>
+                    <td class="num">{{.Protocols}}</td>
+                    <td class="num">{{.Distance}}</td>
+                    <td class="num">{{.DistancePct}}</td>
+                    <td class="num">{{.Duration}}</td>
+                    <td class="num">{{.DurationPct}}</td>
+                    <td class="num">{{.Points}}</td>
+                    <td class="num">{{.PointsPct}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        <p class="note">
+            The share comes from the account that uploaded the protocol (organisation), not from the
+            company printed in the PDF — so subcontractor uploads count even when the document does
+            not name them, and staff uploads count as internal work.
+        </p>
         {{end}}
 
         <p class="note">

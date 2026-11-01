@@ -947,12 +947,19 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		query += fmt.Sprintf(" AND user_id = $%d", arg)
 		args = append(args, selectedPartnerID)
 	} else if !showAll && claims != nil {
-		// Partner vidi svoje + protokole koje su mu dodeljeni kroz
-		// `protocol_access` (isti dokument je uvezao neko drugi).
+		// Partner vidi: svoje, eksplicitno dodeljeno i sve protokole svoje
+		// organizacije — bilo koji nalog te firme ih je uploadovao, ili ih
+		// dokument pripisuje njoj kao podizvođaču (OWNERSHIP.md).
 		arg++
-		query += fmt.Sprintf(` AND (p.user_id = $%[1]d OR EXISTS (
-			SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $%[1]d))`, arg)
 		args = append(args, claims.UserID)
+		cond := fmt.Sprintf(`(p.user_id = $%[1]d OR EXISTS (
+			SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $%[1]d)`, arg)
+		if orgID := userOrgID(claims.UserID); orgID != 0 {
+			arg++
+			args = append(args, orgID)
+			cond += fmt.Sprintf(" OR p.owner_org_id = $%[1]d OR p.service_provider_org_id = $%[1]d", arg)
+		}
+		query += " AND " + cond + ")"
 	}
 
 	if search != "" {
@@ -986,9 +993,15 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		countArgs = append(countArgs, selectedPartnerID)
 	} else if !showAll && claims != nil {
 		cArg++
-		countQuery += fmt.Sprintf(` AND (protocols.user_id = $%[1]d OR EXISTS (
-			SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = protocols.id AND pa.user_id = $%[1]d))`, cArg)
 		countArgs = append(countArgs, claims.UserID)
+		cond := fmt.Sprintf(`(protocols.user_id = $%[1]d OR EXISTS (
+			SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = protocols.id AND pa.user_id = $%[1]d)`, cArg)
+		if orgID := userOrgID(claims.UserID); orgID != 0 {
+			cArg++
+			countArgs = append(countArgs, orgID)
+			cond += fmt.Sprintf(" OR protocols.owner_org_id = $%[1]d OR protocols.service_provider_org_id = $%[1]d", cArg)
+		}
+		countQuery += " AND " + cond + ")"
 	}
 	if search != "" {
 		cArg++
@@ -1046,8 +1059,14 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 	} else if showAll {
 		_ = db.Get(&lastImport, "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols")
 	} else if claims != nil {
-		_ = db.Get(&lastImport, `SELECT to_char(MAX(p.created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols p
-			WHERE p.user_id = $1 OR EXISTS (SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $1)`, claims.UserID)
+		lq := `SELECT to_char(MAX(p.created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols p
+			WHERE (p.user_id = $1 OR EXISTS (SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $1)`
+		largs := []interface{}{claims.UserID}
+		if orgID := userOrgID(claims.UserID); orgID != 0 {
+			lq += " OR p.owner_org_id = $2 OR p.service_provider_org_id = $2"
+			largs = append(largs, orgID)
+		}
+		_ = db.Get(&lastImport, lq+")", largs...)
 	}
 	totalPages := (totalCount + pageSize - 1) / pageSize
 	pageNumbers := []int{}
@@ -1578,10 +1597,16 @@ func DashboardStatsHandler(w http.ResponseWriter, r *http.Request) {
 		_ = db.Get(&totalProtocols, "SELECT COUNT(*) FROM protocols")
 		_ = db.Get(&lastUpload, "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols")
 	} else {
-		_ = db.Get(&totalProtocols, `SELECT COUNT(*) FROM protocols p
-			WHERE p.user_id = $1 OR EXISTS (SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $1)`, claims.UserID)
-		_ = db.Get(&lastUpload, `SELECT to_char(MAX(p.created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols p
-			WHERE p.user_id = $1 OR EXISTS (SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $1)`, claims.UserID)
+		where := `WHERE (p.user_id = $1 OR EXISTS (
+			SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $1)`
+		dargs := []interface{}{claims.UserID}
+		if orgID := userOrgID(claims.UserID); orgID != 0 {
+			where += " OR p.owner_org_id = $2 OR p.service_provider_org_id = $2"
+			dargs = append(dargs, orgID)
+		}
+		where += ")"
+		_ = db.Get(&totalProtocols, `SELECT COUNT(*) FROM protocols p `+where, dargs...)
+		_ = db.Get(&lastUpload, `SELECT to_char(MAX(p.created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols p `+where, dargs...)
 	}
 	resp := map[string]any{
 		"protocols": totalProtocols,
@@ -1708,9 +1733,15 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 		args = append(args, selectedPartnerID)
 	} else if !showAll && claims != nil {
 		argCount++
-		query += fmt.Sprintf(` AND (p.user_id = $%[1]d OR EXISTS (
-			SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $%[1]d))`, argCount)
 		args = append(args, claims.UserID)
+		cond := fmt.Sprintf(`(p.user_id = $%[1]d OR EXISTS (
+			SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $%[1]d)`, argCount)
+		if orgID := userOrgID(claims.UserID); orgID != 0 {
+			argCount++
+			args = append(args, orgID)
+			cond += fmt.Sprintf(" OR p.owner_org_id = $%[1]d OR p.service_provider_org_id = $%[1]d", argCount)
+		}
+		query += " AND " + cond + ")"
 	}
 
 	query += `
