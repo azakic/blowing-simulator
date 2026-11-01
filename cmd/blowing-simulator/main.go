@@ -775,7 +775,8 @@ func main() {
 		log.Fatal("Failed to backfill org attribution:", err)
 	}
 
-	http.HandleFunc("/", IndexHandler)
+	// Javna strana, ali meni i tile-ovi zavise od role → claims ako ih ima.
+	http.HandleFunc("/", withOptionalAuth(IndexHandler))
 	http.HandleFunc("/login", LoginHandler)
 	http.HandleFunc("/register", RegisterHandler)
 	http.HandleFunc("/logout", LogoutHandler)

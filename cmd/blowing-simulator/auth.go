@@ -186,6 +186,21 @@ func requireAuth(handler http.HandlerFunc, allowedRoles ...string) http.HandlerF
 	}
 }
 
+// withOptionalAuth dodaje claims u kontekst kada je kolačić ispravan, ali ne
+// zahteva prijavu. Koristi se za javne strane (npr. dashboard) koje ipak
+// prikazuju meni prema roli.
+func withOptionalAuth(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if c, err := r.Cookie("auth_token"); err == nil && c.Value != "" {
+			if claims, err := parseJWT(c.Value); err == nil {
+				ctx := context.WithValue(r.Context(), authClaimsContextKey{}, claims)
+				r = r.WithContext(ctx)
+			}
+		}
+		handler.ServeHTTP(w, r)
+	}
+}
+
 // context key type to avoid collisions
 type authClaimsContextKey struct{}
 
