@@ -295,18 +295,33 @@ only role restricted to its own data is **partner**.
 
 | | `admin` | `editor` | `partner` | `viewer` |
 |---|---|---|---|---|
-| Sees protocols | all | all | **only own** | all |
+| Sees protocols | all | all | **own + own organisation** | all |
 | Upload single PDF (`/pdf2text`) | ✅ | ✅ | ✅ | ❌ |
 | Bulk upload (`/bulk-upload`) | ✅ | ✅ | ✅ | ❌ |
 | Delete protocol | any | any | **only own** | ❌ |
 | Export CSV (`/export-csv`) | ✅ | ✅ | own only | ✅ |
 | Manage users (`/admin/users`) | ✅ | ❌ | ❌ | ❌ |
+| Manage organisations (`/admin/orgs`) | ✅ | ❌ | ❌ | ❌ |
+| Manage projects (`/admin/projects`) | ✅ | ❌ | ❌ | ❌ |
 
-**Partner (izvođač radova)** is the contractor account: it uploads its own
-protocols (PDF), which are parsed and stored with `protocols.user_id` = that
-user. Everything partner sees is filtered by `user_id` — protocols, details,
-measurements, length report, API and CSV export. Admins can still browse all
-data and filter per partner (`?partner_id=<user id>`).
+**Partner (izvođač radova)** is the contractor account. Visibility is:
+
+1. `protocols.user_id` = the account that uploaded it,
+2. `protocols.owner_org_id` = the account's organisation (any colleague in the
+   same firm),
+3. `protocols.service_provider_org_id` = the subcontractor named in the
+   document,
+4. explicit shares in `protocol_access`.
+
+So two accounts of the same company share everything, and a partner sees what
+internal staff uploaded for their firm — but never another firm's work. The
+same rule applies to details, measurements, length report, project report,
+API and CSV export. Assignment to a project (`project_orgs`, `project_users`)
+is **context only** and does not widen access (see
+`apps/blowing-simulator/PROJECTS.md` in kube-infra).
+
+New accounts register at **`/register`** with an organisation invite code and
+stay `pending` until an admin approves them (`/admin/users`).
 
 **Internal filtering.** `admin`, `editor` and `viewer` also get a user filter
 on `/protocols` and `/protocols/length-report`: the dropdown lists **all**
@@ -712,14 +727,19 @@ docker compose logs -f
 
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/reports/projects` | GET | All projects grouped by `project_number` (Fremco + Jetting merged) with distance, blowing time, orgs, workers |
-| `/reports/project?project=X` | GET | All protocols of one project, chronological, with original/parse-status flags |
+| `/reports/projects` | GET | All projects grouped by `project_number` (Fremco + Jetting merged) with distance, blowing time, orgs, workers; filters `org_id`, `worker`, `org`, `from`, `to` |
+| `/reports/project?project=X` | GET | All protocols of one project, chronological, with original/parse-status flags and the share per organisation |
+| `/reports/projects.csv` | GET | Same list as CSV (UTF-8 BOM, `;`) with the active filters |
+| `/reports/project.csv?project=X` | GET | Same detail as CSV, incl. `Owner org` and `Credit org` |
 
 ### Administracija
 
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/admin/users` | GET/POST | Upravljanje korisnicima (samo `admin`) |
+| `/register` | GET/POST | Javna registracija sa kodom organizacije; nalog je `pending` |
+| `/admin/users` | GET/POST | Korisnici: odobrenje, role, organizacija (samo `admin`) |
+| `/admin/orgs` | GET/POST | Organizacije: kodovi, aliasi, bulk dodela kolone (samo `admin`) |
+| `/admin/projects` | GET/POST | Projekti: kreiranje, dodela firmi i ljudi (samo `admin`) |
 | `/admin/reparse?id=X` | POST | Ponovo parsira sačuvani original (`confirm=yes`); batch `?all=1&limit=N` |
 
 ### Bulk Processing Routes
