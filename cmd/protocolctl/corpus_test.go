@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -306,4 +307,28 @@ func fmtNumInt(v *int) string {
 		return "—"
 	}
 	return strconv.Itoa(*v)
+}
+
+// TestJettingDetailsFromTSV pušta parser nad sačuvanim tesseract TSV izlazom
+// (npr. iz produkcijskog poda). Korisno jer se OCR verzije razlikuju.
+func TestJettingDetailsFromTSV(t *testing.T) {
+	path := os.Getenv("OCR_TSV_FILE")
+	if path == "" {
+		t.Skip("OCR_TSV_FILE nije postavljen")
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer f.Close()
+	words := simulator.ParseTSV(bufio.NewScanner(f))
+	d := simulator.ExtractJettingDetails(words)
+	t.Logf("pipe=%q type=%q colors=%v in/out=%v/%v temp=%v wall=%q laying=%q\n  cable=%q desig=%q dia=%v fibers=%v drum=%q temp=%v\n  device=%q lub=%q comp=%q\n  time=%q dist=%v meters=%v/%v weather=%v/%v gps=%v/%v",
+		d.PipeManufacturer, d.PipeType, d.PipeColors, fmtNum(d.PipeInnerDia), fmtNum(d.PipeOuterDia),
+		fmtNum(d.PipeTemp), d.PipeInnerWall, d.PipeLayingType,
+		d.CableManufacturer, d.CableDesignation, fmtNum(d.CableDiameter), fmtNumInt(d.CableFiberCount),
+		d.CableDrumNo, fmtNum(d.CableTemp),
+		d.DeviceModel, d.Lubricant, d.CompressorModel,
+		d.BlowingTime, fmtNumInt(d.Distance), fmtNumInt(d.MeterStart), fmtNumInt(d.MeterEnd),
+		fmtNum(d.WeatherTemp), fmtNum(d.WeatherHumid), fmtNum(d.GPSLat), fmtNum(d.GPSLon))
 }

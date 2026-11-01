@@ -45,14 +45,14 @@ var (
 	reHersteller    = regexp.MustCompile(`(?i)Hersteller\b`)
 	reRohrtyp       = regexp.MustCompile(`(?i)Rohrtyp\b`)
 	reFarbe         = regexp.MustCompile(`(?i)Farbe\s*[/\\]\s*Kennung\b`)
-	reVerlegung     = regexp.MustCompile(`(?i)Verlegungsart\b`)
+	reVerlegung     = regexp.MustCompile(`(?i)Verlegungsart(?:\s+des\s+Rohres)?`)
 	reRohrInnenDia  = regexp.MustCompile(`(?i)Rohrinnendurchmesser\b`)
-	reRohrAussenDia = regexp.MustCompile(`(?i)Rohrau(?:ß|ss)endurchmesser\b`)
+	reRohrAussenDia = regexp.MustCompile(`(?i)Rohrau\w{0,4}endurchmesser`)
 	reRohrTemp      = regexp.MustCompile(`(?i)Rohrtemperatur\b`)
 	reRohrInnenWand = regexp.MustCompile(`(?i)Rohrinnenwand\b`)
 
 	reKabeltyp     = regexp.MustCompile(`(?i)Kabeltyp\b`)
-	reKabelDia     = regexp.MustCompile(`(?i)Kabel-?\s*[Ø®O0oQ]`)
+	reKabelDia     = regexp.MustCompile(`(?i)Kabel-?\s*[Ø®©@O0oQ]`)
 	reFaseranzahl  = regexp.MustCompile(`(?i)Faseranzahl\b`)
 	reKabeltrommel = regexp.MustCompile(`(?i)Kabeltrommel-?\s*Nr\.?\b`)
 	reKabelTemp    = regexp.MustCompile(`(?i)Kabeltemperatur\b`)
@@ -61,7 +61,7 @@ var (
 	reGleitmittel   = regexp.MustCompile(`(?i)Gleitmittel\b`)
 	reKompressor    = regexp.MustCompile(`(?i)Kompressor\b`)
 
-	reZeitDauer   = regexp.MustCompile(`(?i)Zeit\s*-\s*Dauer`)
+	reZeitDauer   = regexp.MustCompile(`(?i)Zeit\s*-?\s*Dauer`)
 	reStreckenl   = regexp.MustCompile(`(?i)Streckenl(?:ä|ae)nge\b`)
 	reStart       = regexp.MustCompile(`(?i)Start\b`)
 	reEnde        = regexp.MustCompile(`(?i)Ende\b`)
@@ -105,7 +105,7 @@ func ExtractJettingDetails(words []OCRWord) JettingDetails {
 
 	// Cev
 	d.PipeManufacturer = cleanOCRValue(labelValue(pipe, reHersteller))
-	d.PipeType = cleanOCRValue(labelValue(pipe, reRohrtyp))
+	d.PipeType = normalizePipeType(cleanOCRValue(labelValue(pipe, reRohrtyp)))
 	if c := cleanOCRValue(labelValue(pipe, reFarbe)); c != "" {
 		d.PipeColors = cleanColors(strings.Fields(c))
 	}
@@ -357,8 +357,25 @@ func cleanOCRValue(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
 	s = strings.ReplaceAll(s, " | ", " ")
 	s = strings.TrimSpace(strings.TrimSuffix(s, " |"))
-	for _, suffix := range []string{" U)", " U", " ()", " []", " O", " Q"} {
-		s = strings.TrimSpace(strings.TrimSuffix(s, suffix))
+	fields := strings.Fields(s)
+	// Vodeći jednoslovni šum iz OCR-a: "I Gabocom", "l E9/125".
+	if len(fields) > 1 && len(fields[0]) == 1 && strings.ContainsAny(fields[0], "Il|!1") {
+		fields = fields[1:]
+	}
+	// Završni jednoslovni šum: „glatt gerieft D", „… U)".
+	if len(fields) > 1 {
+		last := fields[len(fields)-1]
+		if len(last) == 1 && strings.ContainsAny(last, "DIUOQ[]()|") {
+			fields = fields[:len(fields)-1]
+		}
+	}
+	return strings.Join(fields, " ")
+}
+
+// normalizePipeType skida OCR šum ispred broja ("l7x1,5" → "7x1,5").
+func normalizePipeType(s string) string {
+	if len(s) > 1 && strings.ContainsAny(s[:1], "lI|") && s[1] >= '0' && s[1] <= '9' {
+		return s[1:]
 	}
 	return s
 }
@@ -370,7 +387,7 @@ func cleanColors(colors []string) []string {
 		switch strings.ToLower(c) {
 		case "weis", "weiss":
 			c = "Weiß"
-		case "gruen":
+		case "gruen", "grun", "grin", "grOn":
 			c = "Grün"
 		}
 		if c != "" {
