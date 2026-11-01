@@ -103,6 +103,19 @@ func GetReportJobStatusHandler(w http.ResponseWriter, r *http.Request) {
 
 // Index page handler (unchanged, but you may want to update frontend to use AJAX and poll job status)
 
+// navContext vraća polja koja šabloni koriste za navigaciju (rola + admin),
+// da bi meni bio isti na svakoj strani.
+func navContext(r *http.Request) map[string]interface{} {
+	role := ""
+	if c := GetAuthClaims(r); c != nil {
+		role = c.Role
+	}
+	return map[string]interface{}{
+		"UserRole": role,
+		"IsAdmin":  strings.EqualFold(role, RoleAdmin),
+	}
+}
+
 // Create Report page handler
 func CreateReportHandler(w http.ResponseWriter, r *http.Request) {
 	tmpl, err := template.ParseFiles("web/templates/create-report.html")
@@ -110,7 +123,7 @@ func CreateReportHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	tmpl.Execute(w, nil)
+	tmpl.Execute(w, navContext(r))
 }
 
 // Edit Report page handler
@@ -120,7 +133,7 @@ func EditReportHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	tmpl.Execute(w, nil)
+	tmpl.Execute(w, navContext(r))
 }
 
 // Create Fremco Report page handler

@@ -10,15 +10,14 @@
 <body>
     <header class="topbar">
         <a class="brand" href="/">Wolken-ASM Reports</a>
+        <input type="checkbox" id="nav-toggle" class="nav-toggle">
+        <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
         <nav class="nav">
             <a href="/" class="active">Dashboard</a>
             <a href="/protocols">Protocols</a>
             <a href="/protocols/length-report">Length Report</a>
             <a href="/reports/projects">Project Report</a>
-            {{if or .IsAdmin (eq .UserRole "editor") (eq .UserRole "partner")}}
-            <a href="/pdf2text">Upload</a>
             <a href="/bulk-upload">Bulk Upload</a>
-            {{end}}
             {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a>{{end}}
             {{if .UserRole}}<span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
             {{else}}<a href="/login">Login</a>{{end}}
