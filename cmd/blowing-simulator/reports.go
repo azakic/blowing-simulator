@@ -172,7 +172,7 @@ const projectBaseQuery = `
 	WITH scoped AS (
 		SELECT p.id, p.protocol_type, p.project_number, p.protocol_date, p.start_time,
 		       p.section_nvt, p.address, p.operator, p.company, p.service_provider,
-		       p.source_sha256, p.parse_source, p.owner_org_id,
+		       p.source_sha256, p.parse_source, p.owner_org_id, p.service_provider_org_id,
 		       COALESCE(s.total_distance,
 		                (SELECT max(m.length_m) FROM protocol_measurements m WHERE m.protocol_id = p.id)) AS distance,
 		       COALESCE(EXTRACT(EPOCH FROM s.blowing_time),
