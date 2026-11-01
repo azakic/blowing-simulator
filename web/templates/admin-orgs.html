@@ -84,17 +84,17 @@
           <td class="num">{{.Credited}}</td>
           <td class="num">{{.Company}}</td>
           <td>
-            {{if .InviteCode.Valid}}
-            <code class="code">{{.InviteCode.String}}</code>
+            {{if .InviteCode.Valid}}<code class="code">{{.InviteCode.String}}</code>{{else}}<span class="warn">—</span>{{end}}
             <div style="margin-top:.35rem;display:flex;gap:.35rem;">
+              {{if .InviteCode.Valid}}
               <button class="btn btn-small" type="button" onclick="navigator.clipboard.writeText('{{.InviteCode.String}}')">Copy</button>
+              {{end}}
               <form method="POST" action="/admin/orgs" onsubmit="return confirm('Generate a new code? The old one stops working.');">
                 <input type="hidden" name="action" value="regenerate-code" />
                 <input type="hidden" name="org_id" value="{{.ID}}" />
-                <button class="btn btn-small btn-danger" type="submit">New code</button>
+                <button class="btn btn-small btn-danger" type="submit">{{if .InviteCode.Valid}}New code{{else}}Generate code{{end}}</button>
               </form>
             </div>
-            {{else}}<span class="warn">—</span>{{end}}
           </td>
           <td>
             {{range .Aliases}}<span class="alias">{{.}}</span>{{end}}

@@ -43,6 +43,12 @@ func AdminOrgsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Organizacija može biti napravljena i van ove forme (SQL, druga grana);
+	// kod se dodeljuje i ovde, da nikad ne ostane bez njega.
+	if err := ensureInviteCodes(db); err != nil {
+		log.Printf("orgs: invite codes: %v", err)
+	}
+
 	orgs, err := orgStats()
 	if err != nil {
 		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
@@ -92,7 +98,12 @@ func handleOrgAction(r *http.Request) string {
 			_, _ = db.Exec(`INSERT INTO org_aliases (alias_normalized, org_id) VALUES ($1,$2)
 				ON CONFLICT (alias_normalized) DO UPDATE SET org_id = EXCLUDED.org_id`, key, id)
 		}
-		return "Organizacija sačuvana: " + name
+		// Registracioni kod odmah, da nova organizacija ne čeka restart.
+		code, err := regenerateInviteCode(int64(id))
+		if err != nil {
+			return "Organizacija sačuvana: " + name + " (kod nije dodeljen: " + err.Error() + ")"
+		}
+		return "Organizacija sačuvana: " + name + " — registracioni kod " + code
 
 	case "add-alias":
 		orgID, _ := strconv.ParseInt(r.FormValue("org_id"), 10, 64)
