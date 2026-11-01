@@ -3,215 +3,269 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1976d2">
     <title>{{.Project}} - Project Report - Wolken-ASM Reports</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
-        .container { max-width: 1400px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.1); }
-        h1 { color: #2c3e50; margin: 0 0 6px; text-align: center; }
-        .subtitle { text-align: center; color: #6c757d; margin: 0 0 20px; font-size: 14px; }
-        .back-link { display: inline-block; margin-bottom: 20px; color: #007bff; text-decoration: none; }
-        .back-link:hover { text-decoration: underline; }
-        .navbar { display: flex; justify-content: space-between; align-items: center; background: #1976d2; padding: .7em 2em; border-radius: 0 0 10px 10px; margin: -20px -20px 20px; }
-        .navbar-brand a { color: #fff; font-weight: 700; text-decoration: none; font-size: 1.05em; }
-        .navbar-links { display: flex; gap: 2em; align-items: center; }
-        .navbar-link { color: #fff; text-decoration: none; font-size: 1em; font-weight: 500; padding-bottom: 2px; }
-        .navbar-link:hover, .navbar-link.active { border-bottom: 2px solid #fff; }
-        .cards { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 25px; }
-        .card { flex: 1 1 180px; background: #f8f9fa; border-left: 4px solid #1976d2; border-radius: 6px; padding: 12px 16px; }
-        .card .label { font-size: 12px; text-transform: uppercase; color: #6c757d; letter-spacing: .04em; }
-        .card .value { font-size: 22px; font-weight: 700; color: #2c3e50; margin-top: 4px; }
-        .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 22px; }
-        .chips .title { font-size: 12px; text-transform: uppercase; color: #6c757d; letter-spacing: .04em; align-self: center; margin-right: 4px; }
-        .chip { background: #eef2f6; color: #34495e; border-radius: 12px; padding: 3px 10px; font-size: 13px; }
-        .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: center; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 14px 16px; margin: 0 0 18px; }
-        .filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; text-transform: uppercase; color: #6c757d; letter-spacing: .04em; }
-        .filters select, .filters input[type="date"] { font: inherit; font-size: 14px; text-transform: none; letter-spacing: 0; color: #2c3e50; padding: 6px 8px; border: 1px solid #ced4da; border-radius: 6px; background: #fff; min-width: 180px; }
-        .filters input[type="date"] { min-width: 150px; }
-        .filters button { font: inherit; font-size: 14px; font-weight: 600; color: #fff; background: #1976d2; border: 0; border-radius: 6px; padding: 8px 18px; cursor: pointer; }
-        .filters button:hover { background: #1565c0; }
-        .filters .clear { font-size: 13px; color: #c62828; text-decoration: none; padding: 8px 4px; }
-        .filters .clear:hover { text-decoration: underline; }
-        .toolbar { display: flex; justify-content: center; margin: 0 0 20px; }
-        .btn-export { display: inline-block; background: #2e7d32; color: #fff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 8px 16px; border-radius: 6px; }
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --blue: #1976d2; --blue-dark: #145ea8; --ink: #22313f; --muted: #6b7a89;
+            --line: #e6ebf1; --bg: #f4f6f9; --surface: #fff; --green: #2e7d32;
+        }
+        body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--ink); -webkit-text-size-adjust: 100%; }
+
+        .topbar { background: var(--blue); color: #fff; padding: .6rem 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+        .brand { color: #fff; font-weight: 700; text-decoration: none; white-space: nowrap; }
+        .nav { display: flex; align-items: center; gap: 1.1rem; flex-wrap: wrap; font-size: .92rem; }
+        .nav a { color: #e8f1fb; text-decoration: none; padding-bottom: 2px; }
+        .nav a:hover, .nav a.active { color: #fff; border-bottom: 2px solid #fff; }
+        .role { font-size: .78rem; opacity: .8; }
+
+        .page { max-width: 1240px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+
+        .back { display: inline-flex; align-items: center; gap: .35rem; color: var(--blue); text-decoration: none; font-size: .88rem; margin-bottom: .6rem; }
+        .back:hover { text-decoration: underline; }
+        .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.1rem; }
+        .head h1 { margin: 0; font-size: 1.5rem; line-height: 1.2; }
+        .head .sub { margin: .25rem 0 0; color: var(--muted); font-size: .88rem; max-width: 60ch; }
+
+        .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; margin-bottom: 1.1rem; }
+        .kpi { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--blue); border-radius: 10px; padding: .7rem .9rem; }
+        .kpi .label { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+        .kpi .value { font-size: 1.35rem; font-weight: 700; margin-top: .15rem; font-variant-numeric: tabular-nums; }
+
+        .filters { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: .85rem 1rem; display: flex; flex-wrap: wrap; gap: .75rem; align-items: flex-end; margin-bottom: 1.1rem; }
+        .field { display: flex; flex-direction: column; gap: .25rem; min-width: 0; flex: 1 1 160px; }
+        .field > span { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+        .filters select, .filters input[type="date"] { width: 100%; font: inherit; font-size: .88rem; color: var(--ink); padding: .5rem .6rem; border: 1px solid #cfd8e3; border-radius: 8px; background: #fff; }
+        .filters select:focus, .filters input:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: var(--blue); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; font: inherit; font-size: .88rem; font-weight: 600; padding: .55rem 1rem; border: 0; border-radius: 8px; cursor: pointer; text-decoration: none; }
+        .btn-primary { background: var(--blue); color: #fff; }
+        .btn-primary:hover { background: var(--blue-dark); }
+        .btn-ghost { background: #eef1f5; color: var(--ink); }
+        .btn-ghost:hover { background: #e3e8ee; }
+        .btn-export { background: var(--green); color: #fff; }
         .btn-export:hover { background: #256428; }
-        table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        th { background: #2c3e50; color: #fff; text-align: left; padding: 10px 8px; font-weight: 600; white-space: nowrap; }
-        td { padding: 9px 8px; border-bottom: 1px solid #e9ecef; }
-        tr:hover td { background: #f8f9fa; }
-        .id-link { color: #1976d2; font-weight: 600; text-decoration: none; }
+        .actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+
+        .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 1.1rem; overflow: hidden; }
+        .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; flex-wrap: wrap; padding: .85rem 1rem; border-bottom: 1px solid var(--line); }
+        .panel-head h2 { margin: 0; font-size: 1rem; }
+        .panel-head .hint { color: var(--muted); font-size: .8rem; }
+
+        .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+        thead th { position: sticky; top: 0; background: #f7f9fc; color: var(--muted); text-align: left; font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; padding: .7rem .75rem; border-bottom: 1px solid var(--line); white-space: nowrap; z-index: 1; }
+        tbody td { padding: .7rem .75rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
+        tbody tr:last-child td { border-bottom: 0; }
+        tbody tr:hover td { background: #f9fbfd; }
+        .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .muted { color: var(--muted); }
+        .id-link { color: var(--blue); font-weight: 650; text-decoration: none; white-space: nowrap; }
         .id-link:hover { text-decoration: underline; }
-        .muted { color: #6c757d; }
-        .num { text-align: right; white-space: nowrap; }
-        .tag { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 12px; font-weight: 600; }
-        .tag.fremco { background: #e3f2fd; color: #1565c0; }
-        .tag.jetting { background: #f3e5f5; color: #6a1b9a; }
-        .tag.parse { background: #fff3e0; color: #e65100; }
-        .ok { color: #2e7d32; font-weight: 700; }
-        .empty { text-align: center; padding: 30px; color: #6c757d; }
-        h2.section { margin: 34px 0 10px; font-size: 18px; color: #2c3e50; }
-        table.shares { margin-top: 4px; }
-        table.shares td:first-child { font-weight: 600; }
-        .note { margin-top: 20px; font-size: 13px; color: #6c757d; }
+        .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .7rem; font-weight: 700; letter-spacing: .02em; }
+        .pill.fremco { background: #e3f2fd; color: #1565c0; }
+        .pill.jetting { background: #f3e5f5; color: #6a1b9a; }
+        .pill.parse { background: #fff3e0; color: #e65100; }
+        .pill.ok { background: #e8f5e9; color: #2e7d32; }
+        .chips { display: flex; flex-wrap: wrap; gap: .35rem; padding: .75rem 1rem 0; }
+        .chip { background: #eef2f7; color: #34495e; border-radius: 999px; padding: 3px 10px; font-size: .78rem; }
+        .empty { text-align: center; padding: 2.5rem 1rem; color: var(--muted); }
+        .note { margin: 0 0 1rem; color: var(--muted); font-size: .8rem; line-height: 1.5; }
+
+        /* ---- mobile: tabele → kartice ---- */
+        @media (max-width: 760px) {
+            .page { padding: .9rem .75rem 2.5rem; }
+            .head h1 { font-size: 1.25rem; }
+            .head { align-items: flex-start; }
+            .head .actions { width: 100%; }
+            .head .actions .btn { flex: 1; }
+            .kpis { grid-template-columns: repeat(2, 1fr); gap: .5rem; }
+            .kpi { padding: .6rem .7rem; }
+            .kpi .value { font-size: 1.1rem; }
+            .filters { padding: .75rem; gap: .6rem; }
+            .field { flex: 1 1 100%; }
+            .filters .btn { flex: 1 1 100%; }
+
+            .panel { background: transparent; border: 0; border-radius: 0; overflow: visible; margin-bottom: .5rem; }
+            .panel-head { padding: .5rem .25rem; border-bottom: 0; }
+            .table-scroll { overflow: visible; }
+            table, thead, tbody, tr, td { display: block; width: 100%; }
+            thead { display: none; }
+            tbody tr { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; margin-bottom: .6rem; padding: .35rem .8rem; }
+            tbody tr:hover td { background: transparent; }
+            tbody td { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; padding: .3rem 0; border-bottom: 1px dashed #eef1f5; text-align: right; }
+            tbody td:last-child { border-bottom: 0; }
+            tbody td::before { content: attr(data-label); flex: 0 0 auto; text-align: left; font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+            .num { text-align: right; }
+            .chips { padding: .25rem .25rem .75rem; }
+        }
     </style>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="navbar-brand"><a href="/">Wolken-ASM Reports</a></div>
-        <div class="navbar-links">
-            <a href="/" class="navbar-link">Dashboard</a>
-            <a href="/protocols" class="navbar-link">Protocols</a>
-            <a href="/protocols/length-report" class="navbar-link">Length Report</a>
-            <a href="/bulk-upload" class="navbar-link">Bulk Upload</a>
-            <a href="/reports/projects" class="navbar-link active">Project Report</a>
-            {{if .IsAdmin}}<a href="/admin/users" class="navbar-link">Users</a>{{end}}
-            {{if .UserRole}}<span style="color:#fff;font-size:.85em;opacity:.85;">Role: {{.UserRole}}</span>
-            <a href="/logout" class="navbar-link" style="border-bottom:none;">Logout</a>
-            {{else}}<a href="/login" class="navbar-link" style="border-bottom:none;">Login</a>{{end}}
-        </div>
-    </nav>
+    <header class="topbar">
+        <a class="brand" href="/">Wolken-ASM Reports</a>
+        <nav class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/protocols">Protocols</a>
+            <a href="/protocols/length-report">Length Report</a>
+            <a href="/bulk-upload">Bulk Upload</a>
+            <a href="/reports/projects" class="active">Project Report</a>
+            {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a>{{end}}
+            {{if .UserRole}}<span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+            {{else}}<a href="/login">Login</a>{{end}}
+        </nav>
+    </header>
 
-    <div class="container">
-        <a href="/reports/projects" class="back-link">← Back to Project Report</a>
-        <h1>{{.Project}}</h1>
-        <p class="subtitle">All protocols of this project, newest data aggregated across Fremco and Jetting documents.</p>
+    <main class="page">
+        <a class="back" href="/reports/projects">← All projects</a>
+
+        <div class="head">
+            <div>
+                <h1>{{.Project}}</h1>
+                <p class="sub">Every protocol of this project, Fremco and Jetting merged, with the share of each organisation.</p>
+            </div>
+            <div class="actions">
+                <a class="btn btn-export" href="{{.ExportURL}}">⬇ Export CSV</a>
+            </div>
+        </div>
+
+        <section class="kpis">
+            <div class="kpi"><div class="label">Protocols</div><div class="value">{{.Count}}</div></div>
+            <div class="kpi"><div class="label">Distance</div><div class="value">{{.TotalDistance}}</div></div>
+            <div class="kpi"><div class="label">Blowing time</div><div class="value">{{.TotalDuration}}</div></div>
+            <div class="kpi"><div class="label">Organisations</div><div class="value">{{len .Orgs}}</div></div>
+            <div class="kpi"><div class="label">Workers</div><div class="value">{{len .Workers}}</div></div>
+        </section>
 
         <form class="filters" method="get" action="/reports/project">
             <input type="hidden" name="project" value="{{.Project}}">
-            <label>Organisation
-                <select name="org">
-                    <option value="">All</option>
-                    {{range .OrgOptions}}<option value="{{.}}"{{if eq . $.Filter.Org}} selected{{end}}>{{.}}</option>{{end}}
-                </select>
-            </label>
-            <label>Organisation
+            <label class="field"><span>Organisation</span>
                 <select name="org_id">
                     <option value="">All</option>
                     {{range .OrgList}}<option value="{{.ID}}"{{if eq .ID $.Filter.OrgID}} selected{{end}}>{{.Name}}</option>{{end}}
                 </select>
             </label>
-            <label>Worker
+            <label class="field"><span>Worker</span>
                 <select name="worker">
                     <option value="">All</option>
                     {{range .WorkerOptions}}<option value="{{.}}"{{if eq . $.Filter.Worker}} selected{{end}}>{{.}}</option>{{end}}
                 </select>
             </label>
-            <label>From <input type="date" name="from" value="{{.Filter.From}}"></label>
-            <label>To <input type="date" name="to" value="{{.Filter.To}}"></label>
-            <button type="submit">Filter</button>
-            {{if .HasFilter}}<a class="clear" href="/reports/project?project={{.Project}}">Clear</a>{{end}}
+            <label class="field"><span>Document company</span>
+                <select name="org">
+                    <option value="">All</option>
+                    {{range .OrgOptions}}<option value="{{.}}"{{if eq . $.Filter.Org}} selected{{end}}>{{.}}</option>{{end}}
+                </select>
+            </label>
+            <label class="field"><span>From</span> <input type="date" name="from" value="{{.Filter.From}}"></label>
+            <label class="field"><span>To</span> <input type="date" name="to" value="{{.Filter.To}}"></label>
+            <button class="btn btn-primary" type="submit">Filter</button>
+            {{if .HasFilter}}<a class="btn btn-ghost" href="/reports/project?project={{.Project}}">Clear</a>{{end}}
         </form>
-
-        <div class="toolbar">
-            <a class="btn-export" href="{{.ExportURL}}">⬇ Export CSV</a>
-        </div>
-
-        <div class="cards">
-            <div class="card"><div class="label">Protocols</div><div class="value">{{.Count}}</div></div>
-            <div class="card"><div class="label">Distance</div><div class="value">{{.TotalDistance}}</div></div>
-            <div class="card"><div class="label">Blowing time</div><div class="value">{{.TotalDuration}}</div></div>
-            <div class="card"><div class="label">Organisations</div><div class="value">{{len .Orgs}}</div></div>
-            <div class="card"><div class="label">Workers</div><div class="value">{{len .Workers}}</div></div>
-        </div>
 
         {{if .Orgs}}
         <div class="chips">
-            <span class="title">Organisations</span>
             {{range .Orgs}}<span class="chip">{{.}}</span>{{end}}
-        </div>
-        {{end}}
-        {{if .Workers}}
-        <div class="chips">
-            <span class="title">Workers</span>
             {{range .Workers}}<span class="chip">{{.}}</span>{{end}}
         </div>
         {{end}}
 
-        {{if .Protocols}}
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Type</th>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Section</th>
-                    <th>Address</th>
-                    <th>Operator</th>
-                    <th>Organisation</th>
-                    <th class="num">Distance</th>
-                    <th class="num">Blowing time</th>
-                    <th class="num">Points</th>
-                    <th>Original</th>
-                    <th>Parse</th>
-                </tr>
-            </thead>
-            <tbody>
-                {{range .Protocols}}
-                <tr>
-                    <td><a class="id-link" href="/protocols/view?id={{.ID}}">#{{.ID}}</a></td>
-                    <td><span class="tag {{.Type}}">{{.Type}}</span></td>
-                    <td>{{if .Date}}{{.Date}}{{else}}<span class="muted">—</span>{{end}}</td>
-                    <td>{{if .Time}}{{.Time}}{{else}}<span class="muted">—</span>{{end}}</td>
-                    <td>{{if .Section}}{{.Section}}{{else}}<span class="muted">—</span>{{end}}</td>
-                    <td>{{if .Address}}{{.Address}}{{else}}<span class="muted">—</span>{{end}}</td>
-                    <td>{{if .Operator}}{{.Operator}}{{else}}<span class="muted">—</span>{{end}}</td>
-                    <td>{{if .Org}}{{.Org}}{{else}}<span class="muted">—</span>{{end}}</td>
-                    <td class="num">{{.Distance}}</td>
-                    <td class="num">{{.Duration}}</td>
-                    <td class="num">{{.Points}}</td>
-                    <td>{{if .Original}}<span class="ok">✓</span>{{else}}<span class="muted">—</span>{{end}}</td>
-                    <td>{{if and .ParseInfo (ne .ParseInfo "text")}}<span class="tag parse">{{.ParseInfo}}</span>{{else}}<span class="muted">{{if .ParseInfo}}{{.ParseInfo}}{{else}}—{{end}}</span>{{end}}</td>
-                </tr>
-                {{end}}
-            </tbody>
-        </table>
-        {{else}}
-        <p class="empty">{{if .HasFilter}}No protocols match these filters.{{else}}No protocols visible for this project.{{end}}</p>
-        {{end}}
+        <section class="panel">
+            <div class="panel-head">
+                <h2>Protocols</h2>
+                <span class="hint">{{.Count}} in this project</span>
+            </div>
+            {{if .Protocols}}
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">ID</th>
+                            <th scope="col">Type</th>
+                            <th scope="col">Date</th>
+                            <th scope="col">Time</th>
+                            <th scope="col">Section / NVT</th>
+                            <th scope="col">Address</th>
+                            <th scope="col">Operator</th>
+                            <th scope="col">Organisation</th>
+                            <th scope="col" class="num">Distance</th>
+                            <th scope="col" class="num">Blowing time</th>
+                            <th scope="col" class="num">Points</th>
+                            <th scope="col">Original</th>
+                            <th scope="col">Parse</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Protocols}}
+                        <tr>
+                            <td data-label="ID"><a class="id-link" href="/protocols/view?id={{.ID}}">#{{.ID}}</a></td>
+                            <td data-label="Type"><span class="pill {{.Type}}">{{.Type}}</span></td>
+                            <td data-label="Date">{{if .Date}}{{.Date}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Time">{{if .Time}}{{.Time}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Section">{{if .Section}}{{.Section}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Address">{{if .Address}}{{.Address}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Operator">{{if .Operator}}{{.Operator}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Organisation">{{if .Org}}{{.Org}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Distance" class="num">{{.Distance}}</td>
+                            <td data-label="Blowing time" class="num">{{.Duration}}</td>
+                            <td data-label="Points" class="num">{{.Points}}</td>
+                            <td data-label="Original">{{if .Original}}<span class="pill ok">✓</span>{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Parse">{{if and .ParseInfo (ne .ParseInfo "text")}}<span class="pill parse">{{.ParseInfo}}</span>{{else}}<span class="muted">{{if .ParseInfo}}{{.ParseInfo}}{{else}}—{{end}}</span>{{end}}</td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            {{else}}
+            <p class="empty">{{if .HasFilter}}No protocols match these filters.{{else}}No protocols visible for this project.{{end}}</p>
+            {{end}}
+        </section>
 
         {{if .Shares}}
-        <h2 class="section">Share by organisation (who performed the work)</h2>
-        <table class="shares">
-            <thead>
-                <tr>
-                    <th>Organisation</th>
-                    <th class="num">Protocols</th>
-                    <th class="num">Distance</th>
-                    <th class="num">% distance</th>
-                    <th class="num">Blowing time</th>
-                    <th class="num">% time</th>
-                    <th class="num">Measurements</th>
-                    <th class="num">% measurements</th>
-                </tr>
-            </thead>
-            <tbody>
-                {{range .Shares}}
-                <tr>
-                    <td>{{.Name}}</td>
-                    <td class="num">{{.Protocols}}</td>
-                    <td class="num">{{.Distance}}</td>
-                    <td class="num">{{.DistancePct}}</td>
-                    <td class="num">{{.Duration}}</td>
-                    <td class="num">{{.DurationPct}}</td>
-                    <td class="num">{{.Points}}</td>
-                    <td class="num">{{.PointsPct}}</td>
-                </tr>
-                {{end}}
-            </tbody>
-        </table>
+        <section class="panel">
+            <div class="panel-head">
+                <h2>Share by organisation</h2>
+                <span class="hint">who performed the work</span>
+            </div>
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Organisation</th>
+                            <th scope="col" class="num">Protocols</th>
+                            <th scope="col" class="num">Distance</th>
+                            <th scope="col" class="num">% distance</th>
+                            <th scope="col" class="num">Blowing time</th>
+                            <th scope="col" class="num">% time</th>
+                            <th scope="col" class="num">Measurements</th>
+                            <th scope="col" class="num">% measurements</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Shares}}
+                        <tr>
+                            <td data-label="Organisation"><strong>{{.Name}}</strong></td>
+                            <td data-label="Protocols" class="num">{{.Protocols}}</td>
+                            <td data-label="Distance" class="num">{{.Distance}}</td>
+                            <td data-label="% distance" class="num">{{.DistancePct}}</td>
+                            <td data-label="Blowing time" class="num">{{.Duration}}</td>
+                            <td data-label="% time" class="num">{{.DurationPct}}</td>
+                            <td data-label="Measurements" class="num">{{.Points}}</td>
+                            <td data-label="% measurements" class="num">{{.PointsPct}}</td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        {{end}}
+
         <p class="note">
             The share is credited to the subcontractor named in the document
             (<code>service_provider</code>); when the document names no subcontractor — typical for
-            Jetting — the organisation of the uploading account is used instead. Uploads by internal
-            staff therefore still count for the partner whose firm performed the work.
+            Jetting — the organisation of the uploading account is used instead. Distance and blowing
+            time fall back to the largest measurement when a document has no summary block.
         </p>
-        {{end}}
-
-        <p class="note">
-            Distance and blowing time fall back to the largest measurement when a document has no
-            summary block. <span class="tag parse">ocr</span> / <span class="tag parse">bbox</span>
-            marks rows whose values were read from the PDF image layer, not the text layer.
-        </p>
-    </div>
+    </main>
 </body>
 </html>
