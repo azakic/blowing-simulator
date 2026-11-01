@@ -45,3 +45,24 @@ func TestParseDuration(t *testing.T) {
 		}
 	}
 }
+
+func TestDurationForDB(t *testing.T) {
+	cases := map[string]string{
+		"00:18:25": "00:18:25",
+		"05:30":    "00:05:30",
+		"1h30m":    "01:30:00",
+	}
+	for in, want := range cases {
+		got, ok := durationForDB(in).(string)
+		if !ok {
+			t.Errorf("durationForDB(%q) = %v, očekivan string", in, durationForDB(in))
+			continue
+		}
+		if got != want {
+			t.Errorf("durationForDB(%q) = %q, očekivano %q", in, got, want)
+		}
+	}
+	if got := durationForDB(""); got != nil {
+		t.Errorf("durationForDB(\"\") = %v, očekivano nil", got)
+	}
+}

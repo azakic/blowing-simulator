@@ -96,7 +96,7 @@ func updateFremcoDetails(id int, p *simulator.FremcoProtocol) {
 		intOrNil(m.MeterReadings.Start),
 		intOrNil(m.MeterReadings.End),
 		intOrNil(m.Summary.Distance),
-		parseDuration(m.Summary.BlowingTime),
+		durationForDB(m.Summary.BlowingTime),
 		floatOrNil(&m.Summary.Weather.Temperature),
 		floatOrNil(&m.Summary.Weather.Humidity),
 		floatOrNil(&m.Summary.GPSLocation.Latitude),

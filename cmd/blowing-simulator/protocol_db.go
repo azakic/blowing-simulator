@@ -100,7 +100,7 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID
 		protocol.Measurements.MeterReadings.Start,
 		protocol.Measurements.MeterReadings.End,
 		protocol.Measurements.Summary.Distance,
-		parseDuration(protocol.Measurements.Summary.BlowingTime),
+		durationForDB(protocol.Measurements.Summary.BlowingTime),
 		protocol.Measurements.Summary.Weather.Temperature,
 		protocol.Measurements.Summary.Weather.Humidity,
 		protocol.Measurements.Summary.GPSLocation.Latitude,
@@ -225,7 +225,7 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol, owner
 			dataPoint.ForceN,
 			dataPoint.PressureBar,
 			dataPoint.SpeedMMin,
-			parseDuration(dataPoint.TimeDuration),
+			durationForDB(dataPoint.TimeDuration),
 			i+1,
 		)
 
@@ -574,6 +574,20 @@ func parseDuration(durationStr string) *time.Duration {
 	}
 	d := time.Duration(h)*time.Hour + time.Duration(m)*time.Minute + time.Duration(sec)*time.Second
 	return &d
+}
+
+// durationForDB vraća vrednost koju PostgreSQL može da kastuje u `interval`.
+//
+// `time.Duration` se ne sme poslati direktno: pq šalje int64, a Postgres ga u
+// `interval` tumači kao **sekunde**, pa "00:18:25" postane 306944444:26:40.
+// Zato šaljemo "HH:MM:SS".
+func durationForDB(durationStr string) interface{} {
+	d := parseDuration(durationStr)
+	if d == nil {
+		return nil
+	}
+	total := int64(*d / time.Second)
+	return fmt.Sprintf("%02d:%02d:%02d", total/3600, (total%3600)/60, total%60)
 }
 
 func parseTimestamp(timestampStr string) *time.Time {
