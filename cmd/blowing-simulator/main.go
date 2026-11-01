@@ -747,6 +747,18 @@ func main() {
 		log.Fatal("Failed to ensure protocol_access schema:", err)
 	}
 
+	// Vlasništvo po organizaciji (OWNERSHIP.md): prava i udeo se računaju iz
+	// naloga, dokument je samo opis. Seed + backfill su idempotentni.
+	if err := ensureOrgSchema(db); err != nil {
+		log.Fatal("Failed to ensure org schema:", err)
+	}
+	if err := seedOrgs(db); err != nil {
+		log.Fatal("Failed to seed orgs:", err)
+	}
+	if err := backfillOrgAttribution(db); err != nil {
+		log.Fatal("Failed to backfill org attribution:", err)
+	}
+
 	http.HandleFunc("/", IndexHandler)
 	http.HandleFunc("/login", LoginHandler)
 	http.HandleFunc("/logout", LogoutHandler)

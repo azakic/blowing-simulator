@@ -21,14 +21,21 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID
 	}
 	defer tx.Rollback()
 
+	// Atribucija po organizaciji: vlasnik je organizacija naloga koji
+	// uploaduje (nikad se ne blokira zbog sadržaja PDF-a), a `company` /
+	// `service_provider` se prevode u organizacije preko aliasa.
+	attrib := attributionFor(ownerID, protocol.ProtocolInfo.Company, protocol.ProtocolInfo.ServiceProvider)
+
 	// Insert main protocol record
 	var protocolID int
 	err = tx.QueryRow(`
 		INSERT INTO protocols (
 			protocol_type, system_name, document_type, protocol_date, start_time,
 			project_number, section_nvt, company, service_provider, operator,
-			remarks, source_filename, parser_version, address, user_id
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			remarks, source_filename, parser_version, address, user_id,
+			owner_org_id, company_org_id, service_provider_org_id, org_review
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+			$16, $17, $18, $19)
 		RETURNING id`,
 		"fremco",
 		protocol.ProtocolInfo.System,
@@ -45,6 +52,10 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID
 		protocol.ExportMetadata.ParserVersion,
 		extractAddressFromSectionNVT(protocol.ProtocolInfo.SectionNVT),
 		sql.NullInt64{Int64: ownerID, Valid: ownerID != 0},
+		attrib.Owner,
+		attrib.Company,
+		attrib.Provider,
+		attrib.Review,
 	).Scan(&protocolID)
 
 	if err != nil {
@@ -161,14 +172,21 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol, owner
 	}
 	defer tx.Rollback()
 
+	// Atribucija po organizaciji: vlasnik je organizacija naloga koji
+	// uploaduje (nikad se ne blokira zbog sadržaja PDF-a), a `company` /
+	// `service_provider` se prevode u organizacije preko aliasa.
+	attrib := attributionFor(ownerID, protocol.ProtocolInfo.Company, protocol.ProtocolInfo.ServiceProvider)
+
 	// Insert main protocol record
 	var protocolID int
 	err = tx.QueryRow(`
 		INSERT INTO protocols (
 			protocol_type, system_name, document_type, protocol_date, start_time,
 			project_number, section_nvt, company, service_provider, operator,
-			remarks, source_filename, parser_version, address, user_id
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			remarks, source_filename, parser_version, address, user_id,
+			owner_org_id, company_org_id, service_provider_org_id, org_review
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+			$16, $17, $18, $19)
 		RETURNING id`,
 		"jetting",
 		protocol.ProtocolInfo.System,
@@ -185,6 +203,10 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol, owner
 		protocol.ExportMetadata.ParserVersion,
 		extractAddressFromSectionNVT(protocol.ProtocolInfo.SectionNVT),
 		sql.NullInt64{Int64: ownerID, Valid: ownerID != 0},
+		attrib.Owner,
+		attrib.Company,
+		attrib.Provider,
+		attrib.Review,
 	).Scan(&protocolID)
 
 	if err != nil {

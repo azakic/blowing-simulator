@@ -1,26 +1,28 @@
 package main
 
 import (
+	"database/sql"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 	"text/template"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
 // AdminUser represents a user row for admin listing
 type AdminUser struct {
-	ID        int64     `db:"id"`
-	Email     string    `db:"email"`
-	Role      string    `db:"role"`
-	CreatedAt time.Time `db:"created_at"`
+	ID        int64         `db:"id"`
+	Email     string        `db:"email"`
+	Role      string        `db:"role"`
+	OrgID     sql.NullInt64 `db:"org_id"`
+	CreatedAt time.Time     `db:"created_at"`
 }
 
 func listAllUsers() ([]AdminUser, error) {
 	var users []AdminUser
-	err := db.Select(&users, "SELECT id, email, role, created_at FROM users ORDER BY id ASC")
+	err := db.Select(&users, "SELECT id, email, role, org_id, created_at FROM users ORDER BY id ASC")
 	return users, err
 }
 
@@ -76,11 +78,17 @@ func AdminUsersHandler(w http.ResponseWriter, r *http.Request) {
 			if id, err := strconv.ParseInt(r.FormValue("id"), 10, 64); err == nil {
 				_ = resetUserPassword(id, r.FormValue("new_password"))
 			}
+		case "set-org":
+			if id, err := strconv.ParseInt(r.FormValue("id"), 10, 64); err == nil {
+				orgID, _ := strconv.ParseInt(strings.TrimSpace(r.FormValue("org_id")), 10, 64)
+				_ = setUserOrg(id, orgID)
+			}
 		}
 		http.Redirect(w, r, "/admin/users", http.StatusFound)
 		return
 	}
 	users, _ := listAllUsers()
+	orgs, _ := listOrgs()
 	tmpl, err := template.ParseFiles("web/templates/admin-users.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
@@ -88,6 +96,13 @@ func AdminUsersHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = tmpl.Execute(w, map[string]any{
 		"Users": users,
-		"UserRole": func() string { c:=GetAuthClaims(r); if c!=nil {return c.Role}; return "" }(),
+		"Orgs":  orgs,
+		"UserRole": func() string {
+			c := GetAuthClaims(r)
+			if c != nil {
+				return c.Role
+			}
+			return ""
+		}(),
 	})
 }

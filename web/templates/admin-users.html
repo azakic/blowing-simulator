@@ -54,6 +54,7 @@
   <div class="container">
     <h1>User Management</h1>
     <p style="margin-top:.25rem; color:#607d8b; font-size:.85rem;">Create new users, adjust roles, or reset passwords. Admin-only area.</p>
+    <p style="color:#607d8b; font-size:.85rem;">Organisation decides visibility and the partner's share in reports — it is not taken from the PDF. A partner account may upload Fremco and Jetting reports regardless of the company printed in the document.</p>
     <div class="grid">
       <div class="panel">
         <h2>Create User</h2>
@@ -95,6 +96,7 @@
           <th>ID</th>
           <th>Email</th>
           <th>Role</th>
+          <th>Organisation</th>
           <th>Created</th>
           <th>Actions</th>
         </tr>
@@ -106,6 +108,18 @@
           <td>{{.Email}}</td>
           <td>
             <span class="role-badge role-{{.Role}}">{{.Role}}</span>
+          </td>
+          <td>
+            {{$u := .}}
+            <form class="inline" method="POST" action="/admin/users">
+              <input type="hidden" name="action" value="set-org" />
+              <input type="hidden" name="id" value="{{$u.ID}}" />
+              <select name="org_id">
+                <option value="" {{if not $u.OrgID.Valid}}selected{{end}}>— none —</option>
+                {{range $.Orgs}}<option value="{{.ID}}" {{if and $u.OrgID.Valid (eq $u.OrgID.Int64 .ID)}}selected{{end}}>{{.Name}} ({{.Kind}})</option>{{end}}
+              </select>
+              <button class="btn" type="submit">Set</button>
+            </form>
           </td>
           <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
           <td class="actions-cell">
@@ -124,7 +138,7 @@
         </tr>
         {{end}}
         {{if not .Users}}
-        <tr><td colspan="5" style="text-align:center; color:#78909c; padding:1.5rem;">No users found.</td></tr>
+        <tr><td colspan="6" style="text-align:center; color:#78909c; padding:1.5rem;">No users found.</td></tr>
         {{end}}
       </tbody>
     </table>
