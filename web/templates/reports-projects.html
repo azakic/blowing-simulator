@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Report - Wolken-ASM Reports</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1400px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.1); }
+        h1 { color: #2c3e50; margin: 0 0 20px; text-align: center; }
+        .back-link { display: inline-block; margin-bottom: 20px; color: #007bff; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
+        .navbar { display: flex; justify-content: space-between; align-items: center; background: #1976d2; padding: .7em 2em; border-radius: 0 0 10px 10px; margin: -20px -20px 20px; }
+        .navbar-brand a { color: #fff; font-weight: 700; text-decoration: none; font-size: 1.05em; }
+        .navbar-links { display: flex; gap: 2em; align-items: center; }
+        .navbar-link { color: #fff; text-decoration: none; font-size: 1em; font-weight: 500; padding-bottom: 2px; }
+        .navbar-link:hover, .navbar-link.active { border-bottom: 2px solid #fff; }
+        .cards { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 25px; }
+        .card { flex: 1 1 180px; background: #f8f9fa; border-left: 4px solid #1976d2; border-radius: 6px; padding: 12px 16px; }
+        .card .label { font-size: 12px; text-transform: uppercase; color: #6c757d; letter-spacing: .04em; }
+        .card .value { font-size: 22px; font-weight: 700; color: #2c3e50; margin-top: 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { background: #2c3e50; color: #fff; text-align: left; padding: 10px 8px; font-weight: 600; }
+        td { padding: 9px 8px; border-bottom: 1px solid #e9ecef; }
+        tr:hover td { background: #f8f9fa; }
+        .project { font-weight: 600; color: #1976d2; text-decoration: none; }
+        .project:hover { text-decoration: underline; }
+        .muted { color: #6c757d; }
+        .tag { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+        .tag.fremco { background: #e3f2fd; color: #1565c0; }
+        .tag.jetting { background: #f3e5f5; color: #6a1b9a; }
+        .empty { text-align: center; padding: 30px; color: #6c757d; }
+        .note { margin-top: 20px; font-size: 13px; color: #6c757d; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand"><a href="/">Wolken-ASM Reports</a></div>
+        <div class="navbar-links">
+            <a href="/" class="navbar-link">Dashboard</a>
+            <a href="/protocols" class="navbar-link">Protocols</a>
+            <a href="/protocols/length-report" class="navbar-link">Length Report</a>
+            <a href="/bulk-upload" class="navbar-link">Bulk Upload</a>
+            <a href="/reports/projects" class="navbar-link active">Project Report</a>
+            {{if .IsAdmin}}<a href="/admin/users" class="navbar-link">Users</a>{{end}}
+            {{if .UserRole}}<span style="color:#fff;font-size:.85em;opacity:.85;">Role: {{.UserRole}}</span>
+            <a href="/logout" class="navbar-link" style="border-bottom:none;">Logout</a>
+            {{else}}<a href="/login" class="navbar-link" style="border-bottom:none;">Login</a>{{end}}
+        </div>
+    </nav>
+
+    <div class="container">
+        <a href="/" class="back-link">← Back to Home</a>
+        <h1>Project Report</h1>
+
+        <div class="cards">
+            <div class="card"><div class="label">Projects</div><div class="value">{{.TotalProjects}}</div></div>
+            <div class="card"><div class="label">Protocols</div><div class="value">{{.TotalProtocols}}</div></div>
+            <div class="card"><div class="label">Distance</div><div class="value">{{.TotalDistance}}</div></div>
+            <div class="card"><div class="label">Blowing time</div><div class="value">{{.TotalDuration}}</div></div>
+        </div>
+
+        {{if .Projects}}
+        <table>
+            <thead>
+                <tr>
+                    <th>Project</th>
+                    <th>Protocols</th>
+                    <th>Types</th>
+                    <th>Period</th>
+                    <th>Distance</th>
+                    <th>Blowing time</th>
+                    <th>Organisations</th>
+                    <th>Workers</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Projects}}
+                <tr>
+                    <td>
+                        {{if eq .Project "(no project number)"}}
+                        <span class="muted">{{.Project}}</span>
+                        {{else}}
+                        <a class="project" href="/reports/project?project={{.Project}}">{{.Project}}</a>
+                        {{end}}
+                    </td>
+                    <td>{{.Protocols}}</td>
+                    <td>
+                        {{if .Fremco}}<span class="tag fremco">Fremco {{.Fremco}}</span>{{end}}
+                        {{if .Jetting}}<span class="tag jetting">Jetting {{.Jetting}}</span>{{end}}
+                    </td>
+                    <td class="muted">{{if .FirstDate}}{{.FirstDate}}{{if ne .FirstDate .LastDate}} – {{.LastDate}}{{end}}{{else}}—{{end}}</td>
+                    <td>{{.Distance}}</td>
+                    <td>{{.Duration}}</td>
+                    <td>{{.Orgs}}</td>
+                    <td>{{.Workers}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <p class="empty">No protocols yet.</p>
+        {{end}}
+
+        <p class="note">
+            Projects are matched by <code>project_number</code>, which is the only link
+            between Fremco and Jetting documents of the same job. Protocols without a
+            project number are grouped under “(no project number)” — mostly older
+            Jetting rows whose original PDF was never stored.
+        </p>
+    </div>
+</body>
+</html>

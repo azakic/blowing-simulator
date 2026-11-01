@@ -771,6 +771,8 @@ func main() {
 	http.HandleFunc("/protocols/render", requireAuth(RenderProtocolHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/measurements", requireAuth(ProtocolMeasurementsHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/length-report", requireAuth(LengthReportHandler, "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/reports/projects", requireAuth(ProjectReportHandler, "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/reports/project", requireAuth(ProjectReportDetailHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/api/get", requireAuth(ProtocolGetAPIHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/admin/users", requireAuth(AdminUsersHandler, "admin"))
 	// Admin utility: backfill ownership for existing protocols (NULL user_id)

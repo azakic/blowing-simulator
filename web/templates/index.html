@@ -85,6 +85,7 @@
                     <a href="/" class="navbar-link active">Dashboard</a>
                     <a href="/protocols" class="navbar-link">Protocols</a>
                     <a href="/protocols/length-report" class="navbar-link">Length Report</a>
+                    <a href="/reports/projects" class="navbar-link">Project Report</a>
                     {{if or .IsAdmin (eq .UserRole "editor") (eq .UserRole "partner")}}
                     <a href="/pdf2text" class="navbar-link">Upload</a>
                     <a href="/bulk-upload" class="navbar-link">Bulk Upload</a>
@@ -132,6 +133,10 @@
                 <a href="/protocols/length-report" class="dashboard-tile length-report">
                     <span class="tile-icon">📏</span>
                     <span>Length Report</span>
+                </a>
+                <a href="/reports/projects" class="dashboard-tile project-report">
+                    <span class="tile-icon">🏗️</span>
+                    <span>Project Report</span>
                 </a>
                 {{if or .IsAdmin (eq .UserRole "editor") (eq .UserRole "partner")}}
                 <a href="/pdf2text" class="dashboard-tile bulk-upload">
@@ -254,6 +259,7 @@
             .dashboard-tile.jetting { border-left: 6px solid #1976d2; }
             .dashboard-tile.protocols { border-left: 6px solid #28a745; }
             .dashboard-tile.length-report { border-left: 6px solid #28a745; }
+            .dashboard-tile.project-report { border-left: 6px solid #ff9800; }
             .dashboard-tile.bulk-upload { border-left: 6px solid #6f42c1; }
             .navbar {
                 display: flex;
