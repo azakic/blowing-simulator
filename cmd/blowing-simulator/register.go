@@ -1,12 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"html/template"
+	"log"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -23,35 +24,35 @@ const (
 	UserStatusPending = "pending"
 )
 
-// regLimiter ograničava broj registracija po IP adresi (in-memory, dovoljno za
-// jedan pod; resetuje se pri restartu).
-type regLimiter struct {
-	mu   sync.Mutex
-	hits map[string][]time.Time
-}
-
-var registerLimiter = &regLimiter{hits: map[string][]time.Time{}}
-
+// Register throttle: max 5 pokušaja po IP adresi na sat. Broji se u bazi, jer
+// aplikacija radi u više replika (in-memory brojač bi bio po podu).
 const (
 	regWindow     = time.Hour
 	regMaxPerWndw = 5
 )
 
-func (l *regLimiter) allow(ip string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	now := time.Now()
-	kept := l.hits[ip][:0]
-	for _, t := range l.hits[ip] {
-		if now.Sub(t) < regWindow {
-			kept = append(kept, t)
-		}
+// registerAllowed beleži pokušaj i vraća false kad je limit prekoračen.
+func registerAllowed(ip string) bool {
+	if db == nil || ip == "" {
+		return true
 	}
-	if len(kept) >= regMaxPerWndw {
-		l.hits[ip] = kept
+	window := fmt.Sprintf("%d minutes", int(regWindow.Minutes()))
+	if _, err := db.Exec(`DELETE FROM registration_attempts
+		WHERE created_at < NOW() - $1::interval`, window); err != nil {
+		log.Printf("register throttle cleanup: %v", err)
+	}
+	var n int
+	if err := db.Get(&n, `SELECT count(*) FROM registration_attempts
+		WHERE ip = $1 AND created_at > NOW() - $2::interval`, ip, window); err != nil {
+		log.Printf("register throttle count: %v", err)
+		return true
+	}
+	if n >= regMaxPerWndw {
 		return false
 	}
-	l.hits[ip] = append(kept, now)
+	if _, err := db.Exec(`INSERT INTO registration_attempts (ip) VALUES ($1)`, ip); err != nil {
+		log.Printf("register throttle insert: %v", err)
+	}
 	return true
 }
 
@@ -109,7 +110,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !registerLimiter.allow(clientIP(r)) {
+	if !registerAllowed(clientIP(r)) {
 		renderRegister(w, r, orgs, "Previše pokušaja registracije. Pokušaj ponovo kasnije.", http.StatusTooManyRequests)
 		return
 	}

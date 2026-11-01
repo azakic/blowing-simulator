@@ -1,9 +1,6 @@
 package main
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
 func TestValidateRegistration(t *testing.T) {
 	cases := []struct {
@@ -32,20 +29,5 @@ func TestValidateRegistration(t *testing.T) {
 		if !c.wantFail && got != "" {
 			t.Errorf("%s: neočekivana greška %q", c.name, got)
 		}
-	}
-}
-
-func TestRegisterLimiter(t *testing.T) {
-	l := &regLimiter{hits: map[string][]time.Time{}}
-	for i := 0; i < regMaxPerWndw; i++ {
-		if !l.allow("1.2.3.4") {
-			t.Fatalf("pokušaj %d je odbijen, a treba da prođe", i+1)
-		}
-	}
-	if l.allow("1.2.3.4") {
-		t.Error("prekoračen limit, a prolazi")
-	}
-	if !l.allow("5.6.7.8") {
-		t.Error("drugi IP je blokiran")
 	}
 }

@@ -42,6 +42,12 @@ func ensureOrgSchema(db *sqlx.DB) error {
 		`ALTER TABLE protocols ADD COLUMN IF NOT EXISTS company_org_id INTEGER REFERENCES orgs(id)`,
 		`ALTER TABLE protocols ADD COLUMN IF NOT EXISTS service_provider_org_id INTEGER REFERENCES orgs(id)`,
 		`ALTER TABLE protocols ADD COLUMN IF NOT EXISTS org_review BOOLEAN NOT NULL DEFAULT FALSE`,
+		`CREATE TABLE IF NOT EXISTS registration_attempts (
+			id         SERIAL PRIMARY KEY,
+			ip         TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_registration_attempts ON registration_attempts(ip, created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_protocols_owner_org ON protocols(owner_org_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_protocols_provider_org ON protocols(service_provider_org_id)`,
 	}
