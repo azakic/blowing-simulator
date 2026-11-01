@@ -21,6 +21,10 @@
     .role-admin { background:#c62828; color:#fff; }
     .role-editor { background:#ff9800; color:#fff; }
     .role-viewer { background:#607d8b; color:#fff; }
+    .status-badge { display:inline-block; padding:2px 8px; border-radius:14px; font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+    .status-active { background:#e8f5e9; color:#2e7d32; }
+    .status-pending { background:#fff3e0; color:#e65100; }
+    .requested { color:#c62828; font-size:.72rem; margin-top:.3rem; }
     form.inline { display:inline-block; margin:0; }
     form.inline select, form.inline input { font-size:.8rem; }
     .grid { display:grid; gap:2rem; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); margin-top:2rem; }
@@ -55,7 +59,7 @@
   <div class="container">
     <h1>User Management</h1>
     <p style="margin-top:.25rem; color:#607d8b; font-size:.85rem;">Create new users, adjust roles, or reset passwords. Admin-only area.</p>
-    <p style="color:#607d8b; font-size:.85rem;">Organisation decides visibility and the partner's share in reports — it is not taken from the PDF. A partner account may upload Fremco and Jetting reports regardless of the company printed in the document.</p>
+    <p style="color:#607d8b; font-size:.85rem;">New registrations (<a href="/register">/register</a>) arrive as <strong>pending</strong> — approve them here, and set the organisation before approving a partner. Organisation decides visibility and the partner's share in reports — it is not taken from the PDF. A partner account may upload Fremco and Jetting reports regardless of the company printed in the document.</p>
     <div class="grid">
       <div class="panel">
         <h2>Create User</h2>
@@ -96,6 +100,7 @@
         <tr>
           <th>ID</th>
           <th>Email</th>
+          <th>Status</th>
           <th>Role</th>
           <th>Organisation</th>
           <th>Created</th>
@@ -107,6 +112,13 @@
         <tr>
           <td>{{.ID}}</td>
           <td>{{.Email}}</td>
+          <td>
+            {{if and .Status.Valid (eq .Status.String "pending")}}
+              <span class="status-badge status-pending">pending</span>
+            {{else}}
+              <span class="status-badge status-active">active</span>
+            {{end}}
+          </td>
           <td>
             <span class="role-badge role-{{.Role}}">{{.Role}}</span>
           </td>
@@ -121,9 +133,22 @@
               </select>
               <button class="btn" type="submit">Set</button>
             </form>
+            {{if .RequestedOrg.Valid}}<div class="requested">Requested company: {{.RequestedOrg.String}}</div>{{end}}
           </td>
           <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
           <td class="actions-cell">
+            {{if and .Status.Valid (eq .Status.String "pending")}}
+            <form class="inline" method="POST" action="/admin/users">
+              <input type="hidden" name="action" value="approve" />
+              <input type="hidden" name="id" value="{{.ID}}" />
+              <button class="btn" type="submit">Approve</button>
+            </form>
+            <form class="inline" method="POST" action="/admin/users" onsubmit="return confirm('Reject and delete this pending account?');">
+              <input type="hidden" name="action" value="reject" />
+              <input type="hidden" name="id" value="{{.ID}}" />
+              <button class="btn btn-danger" type="submit">Reject</button>
+            </form>
+            {{end}}
             <form class="inline" method="POST" action="/admin/users">
               <input type="hidden" name="action" value="set-role" />
               <input type="hidden" name="id" value="{{.ID}}" />
@@ -139,7 +164,7 @@
         </tr>
         {{end}}
         {{if not .Users}}
-        <tr><td colspan="6" style="text-align:center; color:#78909c; padding:1.5rem;">No users found.</td></tr>
+        <tr><td colspan="7" style="text-align:center; color:#78909c; padding:1.5rem;">No users found.</td></tr>
         {{end}}
       </tbody>
     </table>

@@ -36,6 +36,8 @@ func ensureOrgSchema(db *sqlx.DB) error {
 			org_id           INTEGER NOT NULL REFERENCES orgs(id) ON DELETE CASCADE
 		)`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS org_id INTEGER REFERENCES orgs(id)`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS requested_org TEXT`,
 		`ALTER TABLE protocols ADD COLUMN IF NOT EXISTS owner_org_id INTEGER REFERENCES orgs(id)`,
 		`ALTER TABLE protocols ADD COLUMN IF NOT EXISTS company_org_id INTEGER REFERENCES orgs(id)`,
 		`ALTER TABLE protocols ADD COLUMN IF NOT EXISTS service_provider_org_id INTEGER REFERENCES orgs(id)`,
@@ -276,4 +278,28 @@ func orgNameByID(orgID int64) string {
 		return ""
 	}
 	return name
+}
+
+// partnerOrgs vraća podizvođačke organizacije za formu registracije.
+func partnerOrgs() ([]Org, error) {
+	var out []Org
+	err := db.Select(&out, `SELECT id, name, kind FROM orgs
+		WHERE kind = 'subcontractor' ORDER BY name`)
+	return out, err
+}
+
+// internalOrgID vraća internu organizaciju (0 ako ne postoji).
+func internalOrgID() int64 {
+	if db == nil {
+		return 0
+	}
+	var id int64
+	if err := db.Get(&id, `SELECT id FROM orgs WHERE kind = 'internal' ORDER BY id LIMIT 1`); err != nil {
+		return 0
+	}
+	return id
+}
+
+func sqlNullInt64(v int64) sql.NullInt64 {
+	return sql.NullInt64{Int64: v, Valid: v != 0}
 }

@@ -761,6 +761,7 @@ func main() {
 
 	http.HandleFunc("/", IndexHandler)
 	http.HandleFunc("/login", LoginHandler)
+	http.HandleFunc("/register", RegisterHandler)
 	http.HandleFunc("/logout", LogoutHandler)
 	http.HandleFunc("/download-json", DownloadJSONHandler)
 	// Upload/conversion requires editor+ role

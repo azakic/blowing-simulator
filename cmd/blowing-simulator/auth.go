@@ -18,12 +18,14 @@ import (
 )
 
 type User struct {
-	ID           int64        `db:"id"`
-	Email        string       `db:"email"`
-	PasswordHash string       `db:"password_hash"`
-	Role         string       `db:"role"`
-	CreatedAt    time.Time    `db:"created_at"`
-	UpdatedAt    sql.NullTime `db:"updated_at"`
+	ID           int64          `db:"id"`
+	Email        string         `db:"email"`
+	PasswordHash string         `db:"password_hash"`
+	Role         string         `db:"role"`
+	Status       sql.NullString `db:"status"`
+	RequestedOrg sql.NullString `db:"requested_org"`
+	CreatedAt    time.Time      `db:"created_at"`
+	UpdatedAt    sql.NullTime   `db:"updated_at"`
 }
 
 func ensureUsersTable(db *sqlx.DB) error {
@@ -235,13 +237,18 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var u User
-	err := db.Get(&u, "SELECT id, email, password_hash, role, created_at FROM users WHERE email=$1", email)
+	err := db.Get(&u, `SELECT id, email, password_hash, role, status, requested_org, created_at
+		FROM users WHERE lower(email) = lower($1)`, email)
 	if err != nil {
 		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
 		return
 	}
 	if err := checkPassword(u.PasswordHash, pw); err != nil {
 		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
+		return
+	}
+	if u.Status.Valid && u.Status.String != UserStatusActive {
+		http.Error(w, "Account is waiting for approval by an administrator.", http.StatusForbidden)
 		return
 	}
 	tok, err := mintJWT(&u)

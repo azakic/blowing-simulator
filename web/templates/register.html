@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register - Wolken-ASM Reports</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background:#0b1220; color:#e6edf3; margin:0; }
+    .container { max-width: 480px; margin: 4rem auto; background:#111a2b; padding: 26px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+    h1 { font-size: 1.25rem; margin: 0 0 .35rem; }
+    .lead { color:#9fb3c8; font-size:.85rem; margin:0 0 1rem; }
+    label { display:block; font-size:.85rem; margin:.7rem 0 .25rem; color:#9fb3c8; }
+    input, select { width:100%; padding:10px 12px; border-radius:8px; border:1px solid #26324a; background:#0b1220; color:#e6edf3; font-size:.9rem; box-sizing:border-box; }
+    input:focus, select:focus { outline: 2px solid #2a72f7; border-color:#2a72f7; }
+    .kinds { display:flex; gap:.6rem; margin-top:.35rem; }
+    .kind { flex:1; border:1px solid #26324a; border-radius:8px; padding:.6rem .7rem; cursor:pointer; font-size:.82rem; }
+    .kind input { width:auto; margin-right:.35rem; }
+    .kind.active { border-color:#2a72f7; background:#132139; }
+    .kind small { display:block; color:#9fb3c8; margin-top:.2rem; font-size:.72rem; }
+    .btn { margin-top: 1.2rem; width:100%; padding:10px 12px; background:#2a72f7; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:600; }
+    .btn:hover { background:#1f5dd0; }
+    .sub { color:#9fb3c8; font-size:.82rem; margin-top:.9rem; text-align:center; }
+    a { color:#7bb0ff; }
+    .msg { padding:.7rem .9rem; border-radius:8px; font-size:.85rem; margin-bottom:.5rem; background:#12301f; border-left:4px solid #2e7d32; }
+    .msg.error { background:#2c1416; border-left-color:#c62828; }
+    .hidden { display:none; }
+    .note { color:#9fb3c8; font-size:.75rem; margin-top:.5rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Create an account</h1>
+    <p class="lead">Our staff enter protocols; partners upload their own reports. Every new account is reviewed before it can sign in.</p>
+
+    {{if .Message}}<div class="msg{{if .Error}} error{{end}}">{{.Message}}</div>{{end}}
+
+    <form method="POST" action="/register">
+      <label>I am</label>
+      <div class="kinds">
+        <label class="kind" id="kind-worker-card">
+          <input type="radio" name="kind" value="worker" required />
+          Wolken-ASM staff
+          <small>Enter protocols for our projects</small>
+        </label>
+        <label class="kind" id="kind-partner-card">
+          <input type="radio" name="kind" value="partner" required />
+          Partner / subcontractor
+          <small>Upload your own Jetting/Fremco reports</small>
+        </label>
+      </div>
+
+      <div id="partner-block" class="hidden">
+        <label for="org_id">Company</label>
+        <select id="org_id" name="org_id">
+          {{range .Orgs}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+          <option value="0">Other — my company is not listed</option>
+        </select>
+        <div id="company-block" class="hidden">
+          <label for="company">Company name</label>
+          <input id="company" name="company" placeholder="e.g. M.A.X. Bauservice GmbH" />
+          <div class="note">An administrator will create the organisation and link your account to it.</div>
+        </div>
+      </div>
+
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" value="{{.Email}}" required />
+
+      <label for="password">Password (min. 8 characters)</label>
+      <input id="password" name="password" type="password" minlength="8" required />
+
+      <label for="password2">Repeat password</label>
+      <input id="password2" name="password2" type="password" minlength="8" required />
+
+      <button class="btn" type="submit">Register</button>
+    </form>
+
+    <div class="sub">Already have an account? <a href="/login">Sign in</a></div>
+  </div>
+
+  <script>
+    const workerCard = document.getElementById('kind-worker-card');
+    const partnerCard = document.getElementById('kind-partner-card');
+    const partnerBlock = document.getElementById('partner-block');
+    const orgSelect = document.getElementById('org_id');
+    const companyBlock = document.getElementById('company-block');
+
+    function sync() {
+      const kind = document.querySelector('input[name="kind"]:checked');
+      const isPartner = kind && kind.value === 'partner';
+      partnerBlock.classList.toggle('hidden', !isPartner);
+      workerCard.classList.toggle('active', kind && kind.value === 'worker');
+      partnerCard.classList.toggle('active', isPartner);
+      companyBlock.classList.toggle('hidden', !isPartner || orgSelect.value !== '0');
+    }
+    document.querySelectorAll('input[name="kind"]').forEach(el => el.addEventListener('change', sync));
+    orgSelect.addEventListener('change', sync);
+    sync();
+  </script>
+</body>
+</html>

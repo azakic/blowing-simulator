@@ -13,16 +13,19 @@ import (
 
 // AdminUser represents a user row for admin listing
 type AdminUser struct {
-	ID        int64         `db:"id"`
-	Email     string        `db:"email"`
-	Role      string        `db:"role"`
-	OrgID     sql.NullInt64 `db:"org_id"`
-	CreatedAt time.Time     `db:"created_at"`
+	ID           int64          `db:"id"`
+	Email        string         `db:"email"`
+	Role         string         `db:"role"`
+	OrgID        sql.NullInt64  `db:"org_id"`
+	Status       sql.NullString `db:"status"`
+	RequestedOrg sql.NullString `db:"requested_org"`
+	CreatedAt    time.Time      `db:"created_at"`
 }
 
 func listAllUsers() ([]AdminUser, error) {
 	var users []AdminUser
-	err := db.Select(&users, "SELECT id, email, role, org_id, created_at FROM users ORDER BY id ASC")
+	err := db.Select(&users, `SELECT id, email, role, org_id, status, requested_org, created_at
+		FROM users ORDER BY (status = 'pending') DESC, id ASC`)
 	return users, err
 }
 
@@ -83,6 +86,15 @@ func AdminUsersHandler(w http.ResponseWriter, r *http.Request) {
 				orgID, _ := strconv.ParseInt(strings.TrimSpace(r.FormValue("org_id")), 10, 64)
 				_ = setUserOrg(id, orgID)
 			}
+		case "approve":
+			if id, err := strconv.ParseInt(r.FormValue("id"), 10, 64); err == nil {
+				_ = setUserStatus(id, UserStatusPending, UserStatusActive)
+			}
+		case "reject":
+			// Briše se samo nalog koji još čeka odobrenje.
+			if id, err := strconv.ParseInt(r.FormValue("id"), 10, 64); err == nil {
+				_, _ = db.Exec(`DELETE FROM users WHERE id = $1 AND status = $2`, id, UserStatusPending)
+			}
 		}
 		http.Redirect(w, r, "/admin/users", http.StatusFound)
 		return
@@ -105,4 +117,12 @@ func AdminUsersHandler(w http.ResponseWriter, r *http.Request) {
 			return ""
 		}(),
 	})
+}
+
+// setUserStatus menja status naloga samo ako je trenutno u `from` (bezbedno za
+// approve/reject utrku).
+func setUserStatus(id int64, from, to string) error {
+	_, err := db.Exec(`UPDATE users SET status = $1, updated_at = NOW()
+		WHERE id = $2 AND status = $3`, to, id, from)
+	return err
 }
