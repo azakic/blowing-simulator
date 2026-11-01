@@ -395,7 +395,7 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 	var jsonOutput []byte
 
 	// pdftotext -layout + OCR of page 1 when the header is an image.
-	text, _, err := extractPDFText(tempPdf)
+	text, _, _, err := extractPDFText(tempPdf)
 	if err != nil {
 		// Poslednji pokušaj: Go biblioteka (radi za PDF-ove koje poppler odbije).
 		if goText, goErr := extractTextWithGoLib(tempPdf); goErr == nil {
@@ -739,6 +739,9 @@ func main() {
 	}
 	if err := ensureParseTelemetry(db); err != nil {
 		log.Fatal("Failed to ensure parse telemetry schema:", err)
+	}
+	if err := ensureDetailColumns(db); err != nil {
+		log.Fatal("Failed to ensure detail columns:", err)
 	}
 	if err := ensureProtocolAccess(db); err != nil {
 		log.Fatal("Failed to ensure protocol_access schema:", err)
@@ -2382,7 +2385,7 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 
 	// Extract text: pdftotext -layout, plus OCR of page 1 when the header is an
 	// image (Jettlogger layout). OCR is serialized inside simulator.OCRPage.
-	rawText, textSource, err := extractPDFText(tempFile.Name())
+	rawText, textSource, ocrWords, err := extractPDFText(tempFile.Name())
 	extractMethod := "pdftotext+ocr"
 	if err != nil {
 		log.Printf("Bulk upload - %s: pdftotext failed, trying Go library - %v", filename, err)
@@ -2423,6 +2426,11 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 			result["error"] = "Jetting parsing failed - unable to parse normalized text"
 			log.Printf("Bulk upload error - %s: Jetting parsing failed. First 200 chars of normalized text: %q", filename, truncateString(normalized, 200))
 			return result
+		}
+
+		// Oprema i summary su u zaglavlju kao slika — čitaju se iz OCR reči.
+		if len(ocrWords) > 0 {
+			simulator.ApplyJettingDetails(protocol, simulator.ExtractJettingDetails(ocrWords))
 		}
 
 		// Parse filename for metadata (Jetting format: "29.10.2025, 11 09, Eiemarkt 14 NVT 1V2200.pdf")
@@ -2512,6 +2520,7 @@ func processBulkPDF(filename string, content []byte, autoSave bool, ownerID int6
 				return result
 			}
 			linkOriginal(protocolID, sha, size)
+			updateParsedDetails(protocolID, protocol)
 			tel := parseTelemetry{Source: textSource}
 			tel.Warnings = buildWarnings(tel, len(rawText), measurementCount, pdfValues, hints)
 			if bboxNote != "" {

@@ -22,7 +22,7 @@ func TestHeaderOCRFromPDF(t *testing.T) {
 		}
 	}
 
-	text, source, err := extractPDFText(path)
+	text, source, _, err := extractPDFText(path)
 	if err != nil {
 		t.Fatalf("extractPDFText: %v", err)
 	}

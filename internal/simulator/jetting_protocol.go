@@ -34,22 +34,25 @@ type JettingEquipment struct {
 
 // JettingBlowingDevice represents Jetting blowing device (minimal data)
 type JettingBlowingDevice struct {
-	Model                *string `json:"model"`
-	ControllerSN         *string `json:"controller_sn"`
-	Lubricator           *bool   `json:"lubricator"`
-	CrashTestPerformed   *bool   `json:"crash_test_performed"`
-	CrashTestSpeed       *string `json:"crash_test_speed"`
-	CrashTestMoment      *string `json:"crash_test_moment"`
+	Model              *string `json:"model"`
+	ControllerSN       *string `json:"controller_sn"`
+	Lubricator         *bool   `json:"lubricator"`
+	CrashTestPerformed *bool   `json:"crash_test_performed"`
+	CrashTestSpeed     *string `json:"crash_test_speed"`
+	CrashTestMoment    *string `json:"crash_test_moment"`
 }
 
 // JettingPipe represents Jetting pipe specifications (minimal data)
 type JettingPipe struct {
-	Manufacturer *string   `json:"manufacturer"`
-	PipeBundle   *string   `json:"pipe_bundle"`
-	PipeType     *string   `json:"pipe_type"`
-	ColorCoding  []string  `json:"color_coding"`
-	InnerWall    *string   `json:"inner_wall"`
-	Temperature  *float64  `json:"temperature"`
+	Manufacturer  *string  `json:"manufacturer"`
+	PipeBundle    *string  `json:"pipe_bundle"`
+	PipeType      *string  `json:"pipe_type"`
+	ColorCoding   []string `json:"color_coding"`
+	InnerWall     *string  `json:"inner_wall"`
+	Temperature   *float64 `json:"temperature"`
+	InnerDiameter *float64 `json:"inner_diameter"`
+	OuterDiameter *float64 `json:"outer_diameter"`
+	LayingType    *string  `json:"laying_type"`
 }
 
 // JettingCable represents Jetting cable specifications (minimal data)
@@ -58,6 +61,7 @@ type JettingCable struct {
 	Designation  *string  `json:"designation"`
 	FiberCount   *int     `json:"fiber_count"`
 	Diameter     *float64 `json:"diameter"`
+	DrumNo       *string  `json:"drum_no"`
 	Temperature  *float64 `json:"temperature"`
 	Lubricant    *string  `json:"lubricant"`
 	BlowingCap   *bool    `json:"blowing_cap"`
@@ -85,10 +89,10 @@ type JettingMeterReadings struct {
 
 // JettingSummary contains summary information (minimal for Jetting)
 type JettingSummary struct {
-	Distance    *int                   `json:"distance"`
-	BlowingTime *string                `json:"blowing_time"`
-	Weather     JettingWeather         `json:"weather"`
-	GPSLocation JettingGPSLocation     `json:"gps_location"`
+	Distance    *int               `json:"distance"`
+	BlowingTime *string            `json:"blowing_time"`
+	Weather     JettingWeather     `json:"weather"`
+	GPSLocation JettingGPSLocation `json:"gps_location"`
 }
 
 // JettingWeather represents weather conditions (minimal for Jetting)

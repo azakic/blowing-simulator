@@ -32,6 +32,24 @@ func ensureParseTelemetry(db *sqlx.DB) error {
 	return nil
 }
 
+// ensureDetailColumns dodaje kolone za Jetting parametre koji ranije nisu imali
+// mesto u bazi (Rohrinnendurchmesser, Rohraußendurchmesser, Verlegungsart,
+// Kabeltrommel-Nr).
+func ensureDetailColumns(db *sqlx.DB) error {
+	stmts := []string{
+		`ALTER TABLE protocol_equipment ADD COLUMN IF NOT EXISTS pipe_inner_diameter NUMERIC(5,2)`,
+		`ALTER TABLE protocol_equipment ADD COLUMN IF NOT EXISTS pipe_outer_diameter NUMERIC(5,2)`,
+		`ALTER TABLE protocol_equipment ADD COLUMN IF NOT EXISTS pipe_laying_type TEXT`,
+		`ALTER TABLE protocol_equipment ADD COLUMN IF NOT EXISTS cable_drum_no TEXT`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("detail schema: %w", err)
+		}
+	}
+	return nil
+}
+
 // buildWarnings pravi listu upozorenja.
 //
 // `pdf` su vrednosti pročitane iz dokumenta, a `hints` one iz imena fajla

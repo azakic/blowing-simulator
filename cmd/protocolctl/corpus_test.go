@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -183,4 +184,126 @@ func TestBBoxCorpus(t *testing.T) {
 			t.Errorf("%s: bbox merenja = %d, očekivano %d", c.match, len(rows), c.measurements)
 		}
 	}
+}
+
+// TestJettingDetailsCorpus čita opremu i summary iz OCR koordinata zaglavlja.
+func TestJettingDetailsCorpus(t *testing.T) {
+	path := os.Getenv("JETTING_HEADER_PDF")
+	if path == "" {
+		t.Skip("JETTING_HEADER_PDF nije postavljen")
+	}
+	_, words, err := simulator.OCRPageWords(path, 1, 300)
+	if err != nil {
+		t.Fatalf("OCRPageWords: %v", err)
+	}
+	d := simulator.ExtractJettingDetails(words)
+	for i, col := range simulator.DebugJettingColumns(words) {
+		t.Logf("kolona %d: %q", i, col)
+	}
+
+	checks := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"pipe manufacturer", d.PipeManufacturer, "Gabocom"},
+		{"pipe type", d.PipeType, "7x1,5"},
+		{"pipe inner wall", d.PipeInnerWall, "glatt gerieft"},
+		{"device", d.DeviceModel, "MJet V1/V2"},
+		{"lubricant", d.Lubricant, "micro"},
+		{"compressor", d.CompressorModel, "jetair141000"},
+		{"blowing time", d.BlowingTime, "00:22:46"},
+		{"cable designation", d.CableDesignation, "A-D2Y 1x4 E(GYAXY-4B6a1)"},
+	}
+	for _, c := range checks {
+		if !strings.Contains(c.got, c.want) {
+			t.Errorf("%s = %q, očekivano sadrži %q", c.name, c.got, c.want)
+		}
+	}
+	if len(d.PipeColors) == 0 || d.PipeColors[0] != "Grün" {
+		t.Errorf("boje = %v", d.PipeColors)
+	}
+
+	nums := []struct {
+		name string
+		got  *float64
+		want float64
+	}{
+		{"pipe inner dia", d.PipeInnerDia, 4},
+		{"pipe outer dia", d.PipeOuterDia, 7},
+		{"pipe temp", d.PipeTemp, 12},
+		{"cable diameter", d.CableDiameter, 2.4},
+		{"cable temp", d.CableTemp, 12},
+		{"gps lat", d.GPSLat, 52.4935},
+		{"gps lon", d.GPSLon, 9.84684},
+	}
+	for _, n := range nums {
+		if n.got == nil {
+			t.Errorf("%s = nil, očekivano %v", n.name, n.want)
+			continue
+		}
+		if diff := *n.got - n.want; diff > 0.001 || diff < -0.001 {
+			t.Errorf("%s = %v, očekivano %v", n.name, *n.got, n.want)
+		}
+	}
+
+	ints := []struct {
+		name string
+		got  *int
+		want int
+	}{
+		{"distance", d.Distance, 156},
+		{"meter start", d.MeterStart, 5908},
+		{"meter end", d.MeterEnd, 5752},
+		{"fiber count", d.CableFiberCount, 4},
+	}
+	for _, n := range ints {
+		if n.got == nil {
+			t.Errorf("%s = nil, očekivano %d", n.name, n.want)
+			continue
+		}
+		if *n.got != n.want {
+			t.Errorf("%s = %d, očekivano %d", n.name, *n.got, n.want)
+		}
+	}
+}
+
+// TestJettingDetailsAllSamples ispisuje izvučene detalje za sve uzorke
+// (dijagnostika; pokreće se sa PROTOCOL_SAMPLES_DIR).
+func TestJettingDetailsAllSamples(t *testing.T) {
+	dir := os.Getenv("PROTOCOL_SAMPLES_DIR")
+	if dir == "" {
+		t.Skip("PROTOCOL_SAMPLES_DIR nije postavljen")
+	}
+	files, _ := filepath.Glob(filepath.Join(dir, "jetting", "*.pdf"))
+	for _, f := range files {
+		_, words, err := simulator.OCRPageWords(f, 1, 300)
+		if err != nil {
+			t.Logf("%s: %v", filepath.Base(f), err)
+			continue
+		}
+		d := simulator.ExtractJettingDetails(words)
+		t.Logf("%s\n  pipe=%q type=%q colors=%v in/out=%v/%v temp=%v wall=%q\n  cable=%q desig=%q dia=%v fibers=%v drum=%q temp=%v\n  device=%q lub=%q comp=%q\n  time=%q dist=%v meters=%v/%v weather=%v/%v gps=%v/%v",
+			filepath.Base(f)[:3], d.PipeManufacturer, d.PipeType, d.PipeColors,
+			fmtNum(d.PipeInnerDia), fmtNum(d.PipeOuterDia), fmtNum(d.PipeTemp), d.PipeInnerWall,
+			d.CableManufacturer, d.CableDesignation, fmtNum(d.CableDiameter), fmtNumInt(d.CableFiberCount),
+			d.CableDrumNo, fmtNum(d.CableTemp),
+			d.DeviceModel, d.Lubricant, d.CompressorModel,
+			d.BlowingTime, fmtNumInt(d.Distance), fmtNumInt(d.MeterStart), fmtNumInt(d.MeterEnd),
+			fmtNum(d.WeatherTemp), fmtNum(d.WeatherHumid), fmtNum(d.GPSLat), fmtNum(d.GPSLon))
+	}
+}
+
+func fmtNum(v *float64) string {
+	if v == nil {
+		return "—"
+	}
+	return strconv.FormatFloat(*v, 'f', -1, 64)
+}
+
+func fmtNumInt(v *int) string {
+	if v == nil {
+		return "—"
+	}
+	return strconv.Itoa(*v)
 }

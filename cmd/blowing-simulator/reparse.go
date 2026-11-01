@@ -138,7 +138,7 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 	}
 	tmp.Close()
 
-	text, textSource, err := extractPDFText(tmp.Name())
+	text, textSource, ocrWords, err := extractPDFText(tmp.Name())
 	if err != nil {
 		res.Error = "ekstrakcija teksta: " + err.Error()
 		return res
@@ -185,6 +185,9 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 		if p == nil {
 			res.Error = "Jetting parser vratio nil"
 			return res
+		}
+		if len(ocrWords) > 0 {
+			simulator.ApplyJettingDetails(p, simulator.ExtractJettingDetails(ocrWords))
 		}
 		info := p.ProtocolInfo
 		next["protocol_date"] = info.Date

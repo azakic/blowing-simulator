@@ -18,8 +18,7 @@ func updateParsedDetails(id int, loaded interface{}) {
 	case *simulator.FremcoProtocol:
 		updateFremcoDetails(id, p)
 	case *simulator.JettingProtocol:
-		// Jetting parser trenutno ne popunjava opremu/summary (podaci postoje
-		// samo kao slika u zaglavlju), pa nema šta da se upiše.
+		updateJettingDetails(id, p)
 	}
 }
 
@@ -126,4 +125,76 @@ func intOrNil(v int) interface{} {
 		return nil
 	}
 	return v
+}
+
+// updateJettingDetails upisuje opremu i summary iz Jetting OCR zaglavlja.
+func updateJettingDetails(id int, p *simulator.JettingProtocol) {
+	e := p.Equipment
+	m := p.Measurements
+
+	var colors interface{}
+	if len(e.Pipe.ColorCoding) > 0 {
+		colors = pq.Array(e.Pipe.ColorCoding)
+	}
+
+	_, err := db.Exec(`
+		UPDATE protocol_equipment SET
+			pipe_manufacturer    = COALESCE(NULLIF($2, ''), pipe_manufacturer),
+			pipe_type            = COALESCE(NULLIF($3, ''), pipe_type),
+			pipe_color_coding    = COALESCE($4, pipe_color_coding),
+			pipe_inner_wall      = COALESCE(NULLIF($5, ''), pipe_inner_wall),
+			pipe_temperature     = COALESCE($6, pipe_temperature),
+			pipe_inner_diameter  = COALESCE($7, pipe_inner_diameter),
+			pipe_outer_diameter  = COALESCE($8, pipe_outer_diameter),
+			pipe_laying_type     = COALESCE(NULLIF($9, ''), pipe_laying_type),
+			cable_manufacturer   = COALESCE(NULLIF($10, ''), cable_manufacturer),
+			cable_designation    = COALESCE(NULLIF($11, ''), cable_designation),
+			cable_diameter       = COALESCE($12, cable_diameter),
+			cable_fiber_count    = COALESCE($13, cable_fiber_count),
+			cable_temperature    = COALESCE($14, cable_temperature),
+			cable_drum_no        = COALESCE(NULLIF($15, ''), cable_drum_no),
+			cable_lubricant      = COALESCE(NULLIF($16, ''), cable_lubricant),
+			device_model         = COALESCE(NULLIF($17, ''), device_model),
+			compressor_model     = COALESCE(NULLIF($18, ''), compressor_model)
+		WHERE protocol_id = $1`,
+		id,
+		strVal(e.Pipe.Manufacturer), strVal(e.Pipe.PipeType), colors,
+		strVal(e.Pipe.InnerWall), e.Pipe.Temperature,
+		e.Pipe.InnerDiameter, e.Pipe.OuterDiameter, strVal(e.Pipe.LayingType),
+		strVal(e.Cable.Manufacturer), strVal(e.Cable.Designation),
+		e.Cable.Diameter, e.Cable.FiberCount, e.Cable.Temperature,
+		strVal(e.Cable.DrumNo), strVal(e.Cable.Lubricant),
+		strVal(e.BlowingDevice.Model), strVal(e.Compressor.Model),
+	)
+	if err != nil {
+		log.Printf("reparse %d: jetting equipment update: %v", id, err)
+	}
+
+	_, err = db.Exec(`
+		UPDATE protocol_summary SET
+			meter_start         = COALESCE($2, meter_start),
+			meter_end           = COALESCE($3, meter_end),
+			total_distance      = COALESCE($4, total_distance),
+			blowing_time        = COALESCE($5, blowing_time),
+			weather_temperature = COALESCE($6, weather_temperature),
+			weather_humidity    = COALESCE($7, weather_humidity),
+			gps_latitude        = COALESCE($8, gps_latitude),
+			gps_longitude       = COALESCE($9, gps_longitude)
+		WHERE protocol_id = $1`,
+		id,
+		m.MeterReadings.Start, m.MeterReadings.End, m.Summary.Distance,
+		durationForDB(strVal(m.Summary.BlowingTime)),
+		m.Summary.Weather.Temperature, m.Summary.Weather.Humidity,
+		m.Summary.GPSLocation.Latitude, m.Summary.GPSLocation.Longitude,
+	)
+	if err != nil {
+		log.Printf("reparse %d: jetting summary update: %v", id, err)
+	}
+}
+
+func strVal(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
