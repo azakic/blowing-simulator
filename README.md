@@ -708,6 +708,13 @@ docker compose logs -f
 | `/protocols/render?id=X` | GET | Generiše PDF iz podataka u bazi (round-trip layout) |
 | `/protocols/api/get?id=X` | GET | Protokol kao JSON |
 
+### Report Routes
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/reports/projects` | GET | All projects grouped by `project_number` (Fremco + Jetting merged) with distance, blowing time, orgs, workers |
+| `/reports/project?project=X` | GET | All protocols of one project, chronological, with original/parse-status flags |
+
 ### Administracija
 
 | Route | Method | Description |
@@ -795,6 +802,19 @@ type SimpleMeasurement struct {
   - Source filename and action buttons
 - **CSV Export**: One-click export of length report data for external analysis
 - **Smart Defaults**: Automatically sets to last 30 days if no date range specified
+
+### Project Report (`/reports/projects`)
+- **Cross-format grouping**: Fremco and Jetting protocols of the same job are
+  merged by `project_number` — the only key shared by both PDF formats.
+- **Aggregates per project**: protocol count (per type), period, total distance,
+  total blowing time, organisation and worker counts.
+- **Detail page**: every protocol of the project with date, section, address,
+  operator, organisation, distance, blowing time, measurement count, original
+  availability and parse source (`text` / `ocr` / `bbox`).
+- **Scope aware**: partners see only their own and explicitly shared protocols;
+  staff sees everything.
+- Rows without a project number are grouped under “(no project number)” —
+  mostly legacy Jetting protocols whose original PDF was never stored.
 
 ### Bulk Upload (`/bulk-upload`)
 - **Multiple Upload Methods**:

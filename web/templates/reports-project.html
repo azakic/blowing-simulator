@@ -23,6 +23,9 @@
         .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 22px; }
         .chips .title { font-size: 12px; text-transform: uppercase; color: #6c757d; letter-spacing: .04em; align-self: center; margin-right: 4px; }
         .chip { background: #eef2f6; color: #34495e; border-radius: 12px; padding: 3px 10px; font-size: 13px; }
+        .toolbar { display: flex; justify-content: center; margin: 0 0 20px; }
+        .btn-export { display: inline-block; background: #2e7d32; color: #fff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 8px 16px; border-radius: 6px; }
+        .btn-export:hover { background: #256428; }
         table { width: 100%; border-collapse: collapse; font-size: 14px; }
         th { background: #2c3e50; color: #fff; text-align: left; padding: 10px 8px; font-weight: 600; white-space: nowrap; }
         td { padding: 9px 8px; border-bottom: 1px solid #e9ecef; }
@@ -60,6 +63,10 @@
         <a href="/reports/projects" class="back-link">← Back to Project Report</a>
         <h1>{{.Project}}</h1>
         <p class="subtitle">All protocols of this project, newest data aggregated across Fremco and Jetting documents.</p>
+
+        <div class="toolbar">
+            <a class="btn-export" href="/reports/project.csv?project={{.Project}}">⬇ Export CSV</a>
+        </div>
 
         <div class="cards">
             <div class="card"><div class="label">Protocols</div><div class="value">{{.Count}}</div></div>

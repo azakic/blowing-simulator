@@ -1,12 +1,15 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // projectRow je jedan red u izveštaju „po projektu" (spaja Fremco i Jetting).
@@ -23,6 +26,10 @@ type projectRow struct {
 	Workers   int
 	Points    int
 	Quality   string
+
+	// sirove vrednosti za CSV/izvoz
+	DistanceM float64
+	Seconds   float64
 }
 
 type protocolRow struct {
@@ -39,6 +46,10 @@ type protocolRow struct {
 	Points    int
 	Original  bool
 	ParseInfo string
+
+	// sirove vrednosti za CSV/izvoz (nil = nema podatka)
+	DistanceM *float64
+	Seconds   *float64
 }
 
 // scopeFilter vraća SQL uslov i argumente za vidljivost (partner vidi svoje +
@@ -70,8 +81,8 @@ const projectBaseQuery = `
 	)
 `
 
-// ProjectReportHandler prikazuje sve projekte sa agregatima.
-func ProjectReportHandler(w http.ResponseWriter, r *http.Request) {
+// loadProjects vraća sve projekte (u opsegu korisnika) sa agregatima.
+func loadProjects(r *http.Request) ([]projectRow, float64, float64, int, error) {
 	scope, args := scopeFilter(r, 1)
 
 	query := fmt.Sprintf(projectBaseQuery, scope) + `
@@ -92,14 +103,12 @@ func ProjectReportHandler(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.Queryx(query, args...)
 	if err != nil {
-		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
-		return
+		return nil, 0, 0, 0, err
 	}
 	defer rows.Close()
 
 	var projects []projectRow
-	var totalDistance float64
-	var totalSeconds float64
+	var totalDistance, totalSeconds float64
 	var totalProtocols int
 
 	for rows.Next() {
@@ -114,10 +123,12 @@ func ProjectReportHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if strings.TrimSpace(project) == "" {
-			p.Project = "(no project number)"
+			p.Project = noProjectNumber
 		} else {
 			p.Project = project
 		}
+		p.DistanceM = distance
+		p.Seconds = seconds
 		p.Distance = formatMeters(distance)
 		p.Duration = formatSeconds(seconds)
 		if points != nil {
@@ -129,27 +140,16 @@ func ProjectReportHandler(w http.ResponseWriter, r *http.Request) {
 		totalSeconds += seconds
 		totalProtocols += p.Protocols
 	}
-
-	data := map[string]interface{}{
-		"Projects":       projects,
-		"TotalProjects":  len(projects),
-		"TotalProtocols": totalProtocols,
-		"TotalDistance":  formatMeters(totalDistance),
-		"TotalDuration":  formatSeconds(totalSeconds),
-		"UserRole":       userRole(r),
-		"IsAdmin":        isAdminRole(r),
+	if err := rows.Err(); err != nil {
+		return nil, 0, 0, 0, err
 	}
-	renderTemplate(w, "reports-projects.html", data)
+	return projects, totalDistance, totalSeconds, totalProtocols, nil
 }
 
-// ProjectReportDetailHandler prikazuje sve protokole jednog projekta.
-func ProjectReportDetailHandler(w http.ResponseWriter, r *http.Request) {
-	project := strings.TrimSpace(r.URL.Query().Get("project"))
-	if project == "" {
-		http.Error(w, "Project required", http.StatusBadRequest)
-		return
-	}
+const noProjectNumber = "(no project number)"
 
+// loadProjectDetail vraća sve protokole jednog projekta u opsegu korisnika.
+func loadProjectDetail(r *http.Request, project string) ([]protocolRow, float64, float64, []string, []string, error) {
 	scope, args := scopeFilter(r, 2)
 	args = append([]interface{}{project}, args...)
 
@@ -167,8 +167,7 @@ func ProjectReportDetailHandler(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.Queryx(query, args...)
 	if err != nil {
-		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
-		return
+		return nil, 0, 0, nil, nil, err
 	}
 	defer rows.Close()
 
@@ -189,6 +188,8 @@ func ProjectReportDetailHandler(w http.ResponseWriter, r *http.Request) {
 			log.Printf("project detail scan: %v", err)
 			continue
 		}
+		p.DistanceM = distance
+		p.Seconds = seconds
 		if distance != nil {
 			p.Distance = formatMeters(*distance)
 			totalDistance += *distance
@@ -214,6 +215,75 @@ func ProjectReportDetailHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		protocols = append(protocols, p)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, 0, nil, nil, err
+	}
+	return protocols, totalDistance, totalSeconds, sortedKeys(workers), sortedKeys(orgs), nil
+}
+
+// ProjectReportHandler prikazuje sve projekte sa agregatima.
+func ProjectReportHandler(w http.ResponseWriter, r *http.Request) {
+	projects, totalDistance, totalSeconds, totalProtocols, err := loadProjects(r)
+	if err != nil {
+		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	data := map[string]interface{}{
+		"Projects":       projects,
+		"TotalProjects":  len(projects),
+		"TotalProtocols": totalProtocols,
+		"TotalDistance":  formatMeters(totalDistance),
+		"TotalDuration":  formatSeconds(totalSeconds),
+		"UserRole":       userRole(r),
+		"IsAdmin":        isAdminRole(r),
+	}
+	renderTemplate(w, "reports-projects.html", data)
+}
+
+// ProjectReportCSVHandler izvozi listu projekata kao CSV.
+func ProjectReportCSVHandler(w http.ResponseWriter, r *http.Request) {
+	projects, _, _, _, err := loadProjects(r)
+	if err != nil {
+		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	header := []string{
+		"Project", "Protocols", "Fremco", "Jetting", "First date", "Last date",
+		"Distance (m)", "Blowing time (h:mm:ss)", "Organisations", "Workers",
+	}
+	rows := make([][]string, 0, len(projects))
+	for _, p := range projects {
+		rows = append(rows, []string{
+			csvSafe(p.Project),
+			strconv.Itoa(p.Protocols),
+			strconv.Itoa(p.Fremco),
+			strconv.Itoa(p.Jetting),
+			p.FirstDate,
+			p.LastDate,
+			fmt.Sprintf("%.0f", p.DistanceM),
+			formatClock(p.Seconds),
+			strconv.Itoa(p.Orgs),
+			strconv.Itoa(p.Workers),
+		})
+	}
+	writeCSVResponse(w, "project-report-"+time.Now().Format("2006-01-02")+".csv", header, rows)
+}
+
+// ProjectReportDetailHandler prikazuje sve protokole jednog projekta.
+func ProjectReportDetailHandler(w http.ResponseWriter, r *http.Request) {
+	project := strings.TrimSpace(r.URL.Query().Get("project"))
+	if project == "" {
+		http.Error(w, "Project required", http.StatusBadRequest)
+		return
+	}
+
+	protocols, totalDistance, totalSeconds, workers, orgs, err := loadProjectDetail(r, project)
+	if err != nil {
+		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	data := map[string]interface{}{
 		"Project":       project,
@@ -221,12 +291,120 @@ func ProjectReportDetailHandler(w http.ResponseWriter, r *http.Request) {
 		"Count":         len(protocols),
 		"TotalDistance": formatMeters(totalDistance),
 		"TotalDuration": formatSeconds(totalSeconds),
-		"Workers":       sortedKeys(workers),
-		"Orgs":          sortedKeys(orgs),
+		"Workers":       workers,
+		"Orgs":          orgs,
 		"UserRole":      userRole(r),
 		"IsAdmin":       isAdminRole(r),
 	}
 	renderTemplate(w, "reports-project.html", data)
+}
+
+// ProjectReportDetailCSVHandler izvozi protokole jednog projekta kao CSV.
+func ProjectReportDetailCSVHandler(w http.ResponseWriter, r *http.Request) {
+	project := strings.TrimSpace(r.URL.Query().Get("project"))
+	if project == "" {
+		http.Error(w, "Project required", http.StatusBadRequest)
+		return
+	}
+
+	protocols, _, _, _, _, err := loadProjectDetail(r, project)
+	if err != nil {
+		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	header := []string{
+		"ID", "Type", "Date", "Time", "Section", "Address", "Operator",
+		"Organisation", "Distance (m)", "Blowing time (h:mm:ss)", "Measurements",
+		"Original", "Parse source",
+	}
+	rows := make([][]string, 0, len(protocols))
+	for _, p := range protocols {
+		distance := ""
+		if p.DistanceM != nil {
+			distance = fmt.Sprintf("%.0f", *p.DistanceM)
+		}
+		seconds := ""
+		if p.Seconds != nil {
+			seconds = formatClock(*p.Seconds)
+		}
+		original := ""
+		if p.Original {
+			original = "yes"
+		}
+		rows = append(rows, []string{
+			strconv.Itoa(p.ID),
+			p.Type,
+			p.Date,
+			p.Time,
+			csvSafe(p.Section),
+			csvSafe(p.Address),
+			csvSafe(p.Operator),
+			csvSafe(p.Org),
+			distance,
+			seconds,
+			strconv.Itoa(p.Points),
+			original,
+			p.ParseInfo,
+		})
+	}
+	writeCSVResponse(w, "project-"+csvFilenameSlug(project)+"-"+time.Now().Format("2006-01-02")+".csv", header, rows)
+}
+
+// writeCSVResponse piše CSV sa UTF-8 BOM-om i `;` kao separatorom (Excel na
+// nemačkom sistemu otvara takav fajl direktno u kolonama).
+func writeCSVResponse(w http.ResponseWriter, filename string, header []string, rows [][]string) {
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+
+	if _, err := w.Write([]byte("\uFEFF")); err != nil {
+		return
+	}
+	cw := csv.NewWriter(w)
+	cw.Comma = ';'
+	if err := cw.Write(header); err != nil {
+		log.Printf("csv header: %v", err)
+		return
+	}
+	for _, row := range rows {
+		if err := cw.Write(row); err != nil {
+			log.Printf("csv row: %v", err)
+			return
+		}
+	}
+	cw.Flush()
+	if err := cw.Error(); err != nil {
+		log.Printf("csv flush: %v", err)
+	}
+}
+
+// csvSafe sprečava da vrednost iz PDF-a bude protumačena kao formula u Excel-u.
+func csvSafe(v string) string {
+	v = strings.TrimSpace(v)
+	if len(v) > 1 && strings.ContainsRune("=+-@", rune(v[0])) {
+		return "'" + v
+	}
+	return v
+}
+
+// csvFilenameSlug zadržava samo bezbedne znake za ime fajla.
+func csvFilenameSlug(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
+	out := strings.Trim(b.String(), "_.")
+	if out == "" {
+		return "project"
+	}
+	return out
 }
 
 func renderTemplate(w http.ResponseWriter, name string, data map[string]interface{}) {
@@ -260,6 +438,15 @@ func formatSeconds(v float64) string {
 		return fmt.Sprintf("%dh %02dm", h, m)
 	}
 	return fmt.Sprintf("%dm", m)
+}
+
+// formatClock vraća HH:MM:SS (prazno kad vrednosti nema) — za CSV izvoz.
+func formatClock(v float64) string {
+	if v <= 0 {
+		return ""
+	}
+	total := int64(v)
+	return fmt.Sprintf("%02d:%02d:%02d", total/3600, (total%3600)/60, total%60)
 }
 
 func userRole(r *http.Request) string {

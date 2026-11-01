@@ -19,6 +19,9 @@
         .card { flex: 1 1 180px; background: #f8f9fa; border-left: 4px solid #1976d2; border-radius: 6px; padding: 12px 16px; }
         .card .label { font-size: 12px; text-transform: uppercase; color: #6c757d; letter-spacing: .04em; }
         .card .value { font-size: 22px; font-weight: 700; color: #2c3e50; margin-top: 4px; }
+        .toolbar { display: flex; justify-content: center; margin: 0 0 20px; }
+        .btn-export { display: inline-block; background: #2e7d32; color: #fff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 8px 16px; border-radius: 6px; }
+        .btn-export:hover { background: #256428; }
         table { width: 100%; border-collapse: collapse; font-size: 14px; }
         th { background: #2c3e50; color: #fff; text-align: left; padding: 10px 8px; font-weight: 600; }
         td { padding: 9px 8px; border-bottom: 1px solid #e9ecef; }
@@ -52,6 +55,10 @@
     <div class="container">
         <a href="/" class="back-link">← Back to Home</a>
         <h1>Project Report</h1>
+
+        <div class="toolbar">
+            <a class="btn-export" href="/reports/projects.csv">⬇ Export CSV</a>
+        </div>
 
         <div class="cards">
             <div class="card"><div class="label">Projects</div><div class="value">{{.TotalProjects}}</div></div>
