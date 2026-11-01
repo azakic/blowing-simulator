@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"fmt"
 	"log"
@@ -35,6 +36,8 @@ func ensureOrgSchema(db *sqlx.DB) error {
 			alias_normalized TEXT PRIMARY KEY,
 			org_id           INTEGER NOT NULL REFERENCES orgs(id) ON DELETE CASCADE
 		)`,
+		`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS invite_code TEXT`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_orgs_invite_code ON orgs(upper(invite_code))`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS org_id INTEGER REFERENCES orgs(id)`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS requested_org TEXT`,
@@ -308,4 +311,78 @@ func internalOrgID() int64 {
 
 func sqlNullInt64(v int64) sql.NullInt64 {
 	return sql.NullInt64{Int64: v, Valid: v != 0}
+}
+
+// inviteCodeLen i inviteAlphabet: kod za registraciju (bez 0/O/1/I da se ne
+// mešaju pri prepisivanju).
+const inviteCodeLen = 12
+
+var inviteAlphabet = []byte("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
+
+// newInviteCode pravi slučajan kod za registraciju organizacije.
+func newInviteCode() string {
+	buf := make([]byte, inviteCodeLen)
+	if _, err := rand.Read(buf); err != nil {
+		// crypto/rand ne bi smeo da padne; ako padne, ne izmišljamo kod.
+		return ""
+	}
+	for i := range buf {
+		buf[i] = inviteAlphabet[int(buf[i])%len(inviteAlphabet)]
+	}
+	return string(buf)
+}
+
+// ensureInviteCodes dodeljuje kod svakoj organizaciji koja ga još nema.
+func ensureInviteCodes(db *sqlx.DB) error {
+	var ids []int64
+	if err := db.Select(&ids, `SELECT id FROM orgs WHERE invite_code IS NULL OR invite_code = ''`); err != nil {
+		return fmt.Errorf("invite codes: %w", err)
+	}
+	for _, id := range ids {
+		for attempt := 0; attempt < 5; attempt++ {
+			code := newInviteCode()
+			if code == "" {
+				return fmt.Errorf("invite codes: generator failed")
+			}
+			if _, err := db.Exec(`UPDATE orgs SET invite_code = $1 WHERE id = $2`, code, id); err != nil {
+				continue // sudar sa unique indeksom → novi pokušaj
+			}
+			log.Printf("orgs: dodeljen registracioni kod organizaciji %d", id)
+			break
+		}
+	}
+	return nil
+}
+
+// orgByInviteCode vraća organizaciju, njenu vrstu i da li kod postoji.
+func orgByInviteCode(code string) (int64, string, bool) {
+	code = strings.TrimSpace(code)
+	if code == "" || db == nil {
+		return 0, "", false
+	}
+	var row struct {
+		ID   int64  `db:"id"`
+		Kind string `db:"kind"`
+	}
+	if err := db.Get(&row, `SELECT id, kind FROM orgs WHERE upper(invite_code) = upper($1)`, code); err != nil {
+		return 0, "", false
+	}
+	return row.ID, row.Kind, true
+}
+
+// regenerateInviteCode menja kod organizacije (stari prestaje da važi).
+func regenerateInviteCode(orgID int64) (string, error) {
+	if orgID <= 0 {
+		return "", fmt.Errorf("invalid org")
+	}
+	for attempt := 0; attempt < 5; attempt++ {
+		code := newInviteCode()
+		if code == "" {
+			return "", fmt.Errorf("code generator failed")
+		}
+		if _, err := db.Exec(`UPDATE orgs SET invite_code = $1 WHERE id = $2`, code, orgID); err == nil {
+			return code, nil
+		}
+	}
+	return "", fmt.Errorf("could not allocate a unique code")
 }

@@ -755,6 +755,9 @@ func main() {
 	if err := seedOrgs(db); err != nil {
 		log.Fatal("Failed to seed orgs:", err)
 	}
+	if err := ensureInviteCodes(db); err != nil {
+		log.Fatal("Failed to ensure invite codes:", err)
+	}
 	if err := backfillOrgAttribution(db); err != nil {
 		log.Fatal("Failed to backfill org attribution:", err)
 	}

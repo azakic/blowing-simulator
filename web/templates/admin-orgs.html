@@ -29,6 +29,7 @@
     .btn { background:#1976d2; color:#fff; border:none; padding:.5rem .85rem; font-size:.8rem; font-weight:600; border-radius:6px; cursor:pointer; }
     .btn:hover { background:#145ea8; }
     .btn-small { padding:.32rem .6rem; font-size:.72rem; }
+    .code { display:inline-block; font-family:ui-monospace,monospace; background:#eef2f6; border:1px solid #d7dfe7; border-radius:6px; padding:2px 8px; letter-spacing:.08em; font-size:.78rem; }
     .alias { display:inline-block; background:#eceff1; color:#37474f; border-radius:10px; padding:1px 7px; font-size:.7rem; margin:0 .25rem .25rem 0; font-family:ui-monospace,monospace; }
     .msg { background:#e8f5e9; border-left:4px solid #2e7d32; padding:.7rem 1rem; border-radius:6px; margin-bottom:1rem; font-size:.85rem; }
     .note { color:#607d8b; font-size:.8rem; margin-top:.5rem; }
@@ -53,7 +54,11 @@
     <p class="note">
       Visibility and the partner's share are driven by the organisation of the account that uploads a
       protocol — not by the company printed in the PDF. A partner account may always upload Fremco and
-      Jetting reports.
+      Jetting reports.<br>
+      Each organisation has a <strong>registration code</strong>: give it to the people who should be able
+      to register at <code>/register</code>. An internal code creates staff accounts (<code>editor</code>),
+      a subcontractor code creates partner accounts. Every registration still waits for approval here, and
+      <em>New code</em> invalidates the old one.
     </p>
     {{if .Message}}<div class="msg">{{.Message}}</div>{{end}}
 
@@ -65,6 +70,7 @@
           <th class="num">Owned<br><span style="font-weight:400;text-transform:none;">(uploaded by)</span></th>
           <th class="num">Credited<br><span style="font-weight:400;text-transform:none;">(share)</span></th>
           <th class="num">As company</th>
+          <th>Registration code</th>
           <th>Aliases</th>
           <th>Actions</th>
         </tr>
@@ -77,6 +83,19 @@
           <td class="num">{{.Owned}}</td>
           <td class="num">{{.Credited}}</td>
           <td class="num">{{.Company}}</td>
+          <td>
+            {{if .InviteCode.Valid}}
+            <code class="code">{{.InviteCode.String}}</code>
+            <div style="margin-top:.35rem;display:flex;gap:.35rem;">
+              <button class="btn btn-small" type="button" onclick="navigator.clipboard.writeText('{{.InviteCode.String}}')">Copy</button>
+              <form method="POST" action="/admin/orgs" onsubmit="return confirm('Generate a new code? The old one stops working.');">
+                <input type="hidden" name="action" value="regenerate-code" />
+                <input type="hidden" name="org_id" value="{{.ID}}" />
+                <button class="btn btn-small btn-danger" type="submit">New code</button>
+              </form>
+            </div>
+            {{else}}<span class="warn">—</span>{{end}}
+          </td>
           <td>
             {{range .Aliases}}<span class="alias">{{.}}</span>{{end}}
             <form method="POST" action="/admin/orgs" style="margin-top:.4rem;display:flex;gap:.4rem;">

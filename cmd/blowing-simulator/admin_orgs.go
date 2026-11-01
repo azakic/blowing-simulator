@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"html/template"
 	"log"
@@ -12,13 +13,14 @@ import (
 
 // OrgStat je red na /admin/orgs: organizacija + broj protokola po koloni.
 type OrgStat struct {
-	ID       int      `db:"id"`
-	Name     string   `db:"name"`
-	Kind     string   `db:"kind"`
-	Owned    int      `db:"owned"`
-	Credited int      `db:"credited"`
-	Company  int      `db:"company"`
-	Aliases  []string `db:"-"`
+	ID         int            `db:"id"`
+	Name       string         `db:"name"`
+	Kind       string         `db:"kind"`
+	Owned      int            `db:"owned"`
+	Credited   int            `db:"credited"`
+	Company    int            `db:"company"`
+	InviteCode sql.NullString `db:"invite_code"`
+	Aliases    []string       `db:"-"`
 }
 
 // orgFieldColumn mapira ime polja iz forme na kolonu (whitelist — sprečava SQL
@@ -116,6 +118,14 @@ func handleOrgAction(r *http.Request) string {
 		}
 		return "Tip organizacije promenjen."
 
+	case "regenerate-code":
+		orgID, _ := strconv.ParseInt(r.FormValue("org_id"), 10, 64)
+		code, err := regenerateInviteCode(orgID)
+		if err != nil {
+			return "Greška: " + err.Error()
+		}
+		return "Novi registracioni kod: " + code
+
 	case "bulk-assign":
 		return bulkAssignOrg(r)
 	}
@@ -168,7 +178,7 @@ func bulkAssignOrg(r *http.Request) string {
 // orgStats vraća organizacije sa brojem protokola po koloni i aliasima.
 func orgStats() ([]OrgStat, error) {
 	var out []OrgStat
-	if err := db.Select(&out, `SELECT o.id, o.name, o.kind,
+	if err := db.Select(&out, `SELECT o.id, o.name, o.kind, o.invite_code,
 			(SELECT count(*) FROM protocols p WHERE p.owner_org_id = o.id) AS owned,
 			(SELECT count(*) FROM protocols p WHERE p.service_provider_org_id = o.id) AS credited,
 			(SELECT count(*) FROM protocols p WHERE p.company_org_id = o.id) AS company
