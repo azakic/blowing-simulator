@@ -3,438 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bulk PDF Upload - Wolken-ASM Reports</title>
+    <meta name="theme-color" content="#1976d2">
+    <title>Bulk Upload - Wolken-ASM Reports</title>
+    <link rel="stylesheet" href="/static/app.css">
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
+        /* komponente specifične za ovu stranu */
+        .methods { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+        .method { border: 1px solid var(--line); border-radius: 10px; padding: 1rem; background: #fbfcfe; }
+        .method h3 { margin: 0 0 .35rem; font-size: .95rem; display: flex; align-items: center; gap: .4rem; }
+        .method p { margin: .25rem 0; font-size: .82rem; color: var(--muted); }
+        .droparea {
+            margin-top: .6rem; border: 2px dashed #c7d4e2; border-radius: 10px;
+            padding: 1.2rem 1rem; text-align: center; background: #f8fafd;
+            transition: border-color .15s, background .15s;
         }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #2c3e50;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .back-link {
-            color: #007bff;
-            text-decoration: none;
-            font-size: 16px;
-            margin-bottom: 20px;
-            display: inline-block;
-        }
-        .back-link:hover {
-            text-decoration: underline;
-        }
-        .upload-section {
-            background: #f8f9fa;
-            padding: 25px;
-            border-radius: 8px;
-            margin-bottom: 30px;
-        }
-        .upload-methods {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-bottom: 30px;
-        }
-        .upload-method {
-            background: white;
-            padding: 25px;
-            border-radius: 8px;
-            border: 2px solid #e9ecef;
-        }
-        .upload-method h3 {
-            margin-top: 0;
-            color: #495057;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .method-icon {
-            font-size: 24px;
-        }
-        .file-drop-area {
-            border: 2px dashed #007bff;
-            border-radius: 8px;
-            padding: 40px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin-bottom: 20px;
-        }
-        .file-drop-area:hover {
-            background: #f0f8ff;
-            border-color: #0056b3;
-        }
-        .file-drop-area.dragover {
-            background: #e3f2fd;
-            border-color: #1976d2;
-        }
-        .directory-browser {
-            margin-bottom: 20px;
-        }
-        .directory-input {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            margin-bottom: 15px;
-        }
-        .browse-btn {
-            background: #28a745;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-right: 10px;
-        }
-        .browse-btn:hover {
-            background: #218838;
-        }
-        .selected-files {
-            margin-top: 20px;
-        }
-        .file-list {
-            max-height: 300px;
-            overflow-y: auto;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            background: white;
-        }
+        .droparea.dragover { border-color: var(--blue); background: #eef5fd; }
+        .droparea strong { display: block; margin-bottom: .35rem; }
+
+        .file-list { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
         .file-item {
-            padding: 10px 15px;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            display: flex; align-items: center; gap: .6rem;
+            padding: .55rem .8rem; border-bottom: 1px solid var(--line); background: #fff;
+            font-size: .85rem;
         }
-        .file-item:last-child {
-            border-bottom: none;
-        }
-        .file-item:nth-child(even) {
-            background: #f9f9f9;
-        }
-        .file-info {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .file-icon {
-            color: #dc3545;
-            font-size: 16px;
-        }
-        .file-path {
-            font-family: monospace;
-            font-size: 12px;
-            color: #6c757d;
-        }
-        .file-size {
-            font-size: 12px;
-            color: #6c757d;
-        }
+        .file-item:last-child { border-bottom: 0; }
+        .file-info { flex: 1; min-width: 0; }
+        .file-path { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .file-size { display: block; font-size: .74rem; color: var(--muted); }
         .remove-file {
-            background: #dc3545;
-            color: white;
-            border: none;
-            padding: 4px 8px;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 12px;
+            border: 0; background: #fdecea; color: var(--red); border-radius: 6px;
+            padding: .25rem .55rem; font-size: .78rem; font-weight: 600; cursor: pointer;
         }
-        .remove-file:hover {
-            background: #c82333;
-        }
-        .upload-controls {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 20px;
-        }
-        .file-count {
-            font-weight: 500;
-            color: #495057;
-        }
-        .upload-btn {
-            background: #007bff;
-            color: white;
-            border: none;
-            padding: 12px 30px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 500;
-        }
-        .upload-btn:hover {
-            background: #0056b3;
-        }
-        .upload-btn:disabled {
-            background: #6c757d;
-            cursor: not-allowed;
-        }
-        .clear-btn {
-            background: #6c757d;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-right: 10px;
-        }
-        .clear-btn:hover {
-            background: #545b62;
-        }
-        .progress-section {
-            margin-top: 30px;
-            display: none;
-        }
-        .progress-bar {
-            width: 100%;
-            height: 20px;
-            background: #e9ecef;
-            border-radius: 10px;
-            overflow: hidden;
-            margin-bottom: 10px;
-        }
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #007bff, #28a745);
-            width: 0%;
-            transition: width 0.3s;
-        }
-        .progress-info {
-            display: flex;
-            justify-content: space-between;
-            font-size: 14px;
-            color: #495057;
-        }
-        .results-section {
-            margin-top: 30px;
-            display: none;
-        }
-        .results-summary {
-            background: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        .error-summary {
-            background: #f8d7da;
-            border: 1px solid #f5c6cb;
-            color: #721c24;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
+        .remove-file:hover { background: #f9d7d5; }
+
+        .progress { height: .7rem; background: #edf1f6; border-radius: 999px; overflow: hidden; margin: .6rem 0 .4rem; }
+        #progressFill { height: 100%; width: 0; background: var(--blue); transition: width .2s ease; }
+        .progress-info { display: flex; justify-content: space-between; font-size: .8rem; color: var(--muted); }
+
+        .results-summary { font-weight: 600; margin-bottom: .5rem; }
+        .error-summary { color: var(--red); font-weight: 600; margin-bottom: .5rem; }
         .result-item {
-            padding: 10px;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            padding: .55rem .7rem; border-radius: 8px; margin-bottom: .4rem;
+            font-size: .84rem; border-left: 4px solid var(--line); background: #f7f9fc;
         }
-        .result-success {
-            color: #155724;
-        }
-        .result-error {
-            color: #721c24;
-        }
-        .options-section {
-            background: #fff3cd;
-            border: 1px solid #ffeaa7;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        .option-group {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            margin-bottom: 15px;
-        }
-        .option-group:last-child {
-            margin-bottom: 0;
-        }
-        .checkbox-option {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .checkbox-option input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-        }
-        .navbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #1976d2;
-            padding: 0.7em 2em;
-            border-radius: 0 0 10px 10px;
-            margin-bottom: 2em;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-        }
-        .navbar-brand {
-            font-size: 1.3em;
-            font-weight: bold;
-        }
-        .navbar-logo {
-            color: #fff;
-            text-decoration: none;
-            font-weight: bold;
-            letter-spacing: 1px;
-        }
-        .navbar-links {
-            display: flex;
-            gap: 2em;
-        }
-        .navbar-link {
-            color: #fff;
-            text-decoration: none;
-            font-size: 1em;
-            font-weight: 500;
-            padding-bottom: 2px;
-            border-bottom: 2px solid transparent;
-            transition: border-color 0.2s;
-        }
-        .navbar-link:hover, .navbar-link.active {
-            border-bottom: 2px solid #fff;
-        }
-        @media (max-width: 700px) {
-            .navbar { flex-direction: column; gap: 1em; padding: 1em; }
-            .navbar-links { gap: 1em; }
+        .result-item.result-success { border-left-color: var(--green); background: #f2fbf3; }
+        .result-item.result-error { border-left-color: var(--red); background: #fdf3f2; }
+
+        .options { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .35rem .9rem; }
+        .options label { display: flex; align-items: flex-start; gap: .45rem; font-size: .85rem; cursor: pointer; }
+        .options input { width: auto; margin-top: .15rem; }
+
+        @media (max-width: 760px) {
+            .file-item { flex-wrap: wrap; }
         }
     </style>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="navbar-brand">
-            <a href="/" class="navbar-logo">Wolken-ASM Reports</a>
-        </div>
-        <div class="navbar-links">
-            <a href="/" class="navbar-link">Dashboard</a>
-            <a href="/protocols" class="navbar-link">Protocols</a>
-            <a href="/protocols/length-report" class="navbar-link">Length Report</a>
-            <a href="/bulk-upload" class="navbar-link active">Bulk Upload</a>
-            {{if .IsAdmin}}
-            <a href="/admin/users" class="navbar-link">Users</a>
-            {{end}}
-            {{if .UserRole}}
-            <span style="color:#fff;font-size:0.85em;opacity:0.85;padding-top:2px;">Role: {{.UserRole}}</span>
-            <a href="/logout" class="navbar-link" style="border-bottom:none;">Logout</a>
-            {{else}}
-            <a href="/login" class="navbar-link" style="border-bottom:none;">Login</a>
-            {{end}}
-        </div>
-    </nav>
-    
-    <div class="container">
-        <a href="/" class="back-link">← Back to Home</a>
-        
-        <h1>Bulk PDF Upload</h1>
-        
-        <div class="upload-methods">
-            <div class="upload-method">
-                <h3><span class="method-icon">📁</span>Multiple File Selection</h3>
-                <div class="file-drop-area" id="dropArea">
-                    <p><strong>Drag & Drop PDF files here</strong></p>
-                    <p>or</p>
-                    <input type="file" id="fileInput" multiple accept=".pdf" style="display: none;">
-                    <button type="button" class="browse-btn" onclick="document.getElementById('fileInput').click()">
-                        Browse Files
-                    </button>
-                    <p style="font-size: 14px; color: #6c757d; margin-top: 15px;">
-                        Select multiple PDF files at once (Ctrl+Click or Shift+Click)
-                    </p>
-                </div>
-            </div>
-            
-            <div class="upload-method">
-                <h3><span class="method-icon">🗂️</span>Directory Upload</h3>
-                <p style="color: #6c757d; font-size: 14px; margin-bottom: 15px;">
-                    Upload all PDFs from a directory and its subdirectories
-                </p>
-                <input type="file" id="directoryInput" webkitdirectory directory multiple accept=".pdf" style="display: none;">
-                <button type="button" class="browse-btn" onclick="document.getElementById('directoryInput').click()">
-                    Select Directory
-                </button>
-                <p style="font-size: 12px; color: #868e96; margin-top: 10px;">
-                    This will include all PDF files in subdirectories
-                </p>
+    <header class="topbar">
+        <a class="brand" href="/">Wolken-ASM Reports</a>
+        <nav class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/protocols">Protocols</a>
+            <a href="/protocols/length-report">Length Report</a>
+            <a href="/reports/projects">Project Report</a>
+            <a href="/bulk-upload" class="active">Bulk Upload</a>
+            {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a>{{end}}
+            {{if .UserRole}}<span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+            {{else}}<a href="/login">Login</a>{{end}}
+        </nav>
+    </header>
+
+    <main class="page">
+        <a class="back" href="/">← Dashboard</a>
+
+        <div class="head">
+            <div>
+                <h1>Bulk upload</h1>
+                <p class="sub">Drop one or many PDF reports. Each file is parsed, stored in S3 and written to the database.</p>
             </div>
         </div>
-        
-        <div class="options-section">
-            <h4 style="margin-top: 0;">Upload Options</h4>
-            <div class="option-group">
-                <div class="checkbox-option">
-                    <input type="checkbox" id="skipExisting" checked>
-                    <label for="skipExisting">Skip files that already exist in database</label>
+
+        <section class="panel">
+            <div class="panel-head"><h2>Choose files</h2><span class="hint">PDF only</span></div>
+            <div class="panel-body">
+                <div class="methods">
+                    <div class="method">
+                        <h3>📁 Multiple files</h3>
+                        <div class="droparea" id="dropArea">
+                            <strong>Drag &amp; drop PDF files here</strong>
+                            <p>or pick them from disk</p>
+                            <input type="file" id="fileInput" multiple accept=".pdf" style="display:none">
+                            <button type="button" class="btn btn-primary" onclick="document.getElementById('fileInput').click()">Browse files</button>
+                            <p>Ctrl+Click / Shift+Click for multiple selection</p>
+                        </div>
+                    </div>
+                    <div class="method">
+                        <h3>🗂️ Whole directory</h3>
+                        <p>Uploads every PDF from a folder and its subfolders.</p>
+                        <input type="file" id="directoryInput" webkitdirectory directory multiple accept=".pdf" style="display:none">
+                        <button type="button" class="btn btn-ghost" onclick="document.getElementById('directoryInput').click()">Select directory</button>
+                    </div>
                 </div>
-                <div class="checkbox-option">
-                    <input type="checkbox" id="autoSave" checked>
-                    <label for="autoSave">Automatically save parsed data to database</label>
+
+                <div style="margin-top:1rem;">
+                    <h3 style="margin:0 0 .4rem;font-size:.9rem;">Options</h3>
+                    <div class="options">
+                        <label><input type="checkbox" id="skipExisting" checked> Skip files that already exist in the database</label>
+                        <label><input type="checkbox" id="autoSave" checked> Save parsed data to the database</label>
+                        <label><input type="checkbox" id="continueOnError"> Continue when a single file fails</label>
+                        <label><input type="checkbox" id="showPreview"> Show a parsing preview before saving</label>
+                    </div>
                 </div>
             </div>
-            <div class="option-group">
-                <div class="checkbox-option">
-                    <input type="checkbox" id="continueOnError">
-                    <label for="continueOnError">Continue processing if individual files fail</label>
-                </div>
-                <div class="checkbox-option">
-                    <input type="checkbox" id="showPreview">
-                    <label for="showPreview">Show parsing preview before saving</label>
-                </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-head">
+                <h2>Selected files (<span id="fileCount">0</span>)</h2>
+                <span class="hint">total <span id="totalSize">0 MB</span></span>
             </div>
-        </div>
-        
-        <div class="selected-files">
-            <h4>Selected Files (<span id="fileCount">0</span>)</h4>
-            <div class="file-list" id="fileList">
-                <div style="padding: 20px; text-align: center; color: #6c757d;">
-                    No files selected yet
+            <div class="panel-body">
+                <div class="file-list" id="fileList">
+                    <div style="padding:1.2rem;text-align:center;color:var(--muted);">No files selected yet</div>
+                </div>
+                <div class="actions" style="margin-top:.85rem;">
+                    <button type="button" class="btn btn-ghost" onclick="clearFiles()">Clear all</button>
+                    <button type="button" class="btn btn-primary" id="uploadBtn" onclick="startUpload()" disabled>⬆ Upload &amp; process</button>
                 </div>
             </div>
-            
-            <div class="upload-controls">
-                <div>
-                    <button type="button" class="clear-btn" onclick="clearFiles()">Clear All</button>
-                    <span class="file-count">Total size: <span id="totalSize">0 MB</span></span>
+        </section>
+
+        <section class="panel" id="progressSection" style="display:none;">
+            <div class="panel-head"><h2>Upload progress</h2></div>
+            <div class="panel-body">
+                <div class="progress"><div id="progressFill"></div></div>
+                <div class="progress-info">
+                    <span id="progressText">Preparing upload…</span>
+                    <span id="progressPercent">0%</span>
                 </div>
-                <button type="button" class="upload-btn" id="uploadBtn" onclick="startUpload()" disabled>
-                    Upload & Process Files
-                </button>
             </div>
-        </div>
-        
-        <div class="progress-section" id="progressSection">
-            <h4>Upload Progress</h4>
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill"></div>
+        </section>
+
+        <section class="panel" id="resultsSection" style="display:none;">
+            <div class="panel-head"><h2>Upload results</h2></div>
+            <div class="panel-body">
+                <div id="resultsSummary"></div>
+                <div id="resultsDetails"></div>
             </div>
-            <div class="progress-info">
-                <span id="progressText">Preparing upload...</span>
-                <span id="progressPercent">0%</span>
-            </div>
-        </div>
-        
-        <div class="results-section" id="resultsSection">
-            <h4>Upload Results</h4>
-            <div id="resultsSummary"></div>
-            <div id="resultsDetails"></div>
-        </div>
-    </div>
+        </section>
+    </main>
 
     <script>
         let selectedFiles = [];
@@ -671,6 +388,7 @@
                 </div>
             `).join('');
         }
+    
     </script>
 </body>
 </html>

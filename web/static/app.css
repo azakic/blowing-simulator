@@ -185,6 +185,20 @@ tbody tr:hover td { background: #f9fbfd; }
     font-size: .78rem;
 }
 
+/* ---------- tile grid (dashboard) ---------- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .75rem; }
+.tile {
+    display: flex; flex-direction: column; align-items: flex-start; gap: .45rem;
+    background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--blue);
+    border-radius: 10px; padding: 1rem; text-decoration: none; color: var(--ink);
+    transition: box-shadow .15s, transform .15s;
+}
+.tile:hover { box-shadow: 0 6px 18px rgba(25,118,210,.12); transform: translateY(-2px); }
+.tile .icon { font-size: 1.5rem; line-height: 1; }
+.tile .t { font-weight: 650; font-size: .92rem; }
+.tile .d { font-size: .78rem; color: var(--muted); }
+.tile.accent-user { border-left-color: var(--red); }
+
 /* ---------- paginacija ---------- */
 .pager { display: flex; align-items: center; justify-content: center; gap: .35rem; flex-wrap: wrap; padding: .9rem 1rem; border-top: 1px solid var(--line); }
 .pager a, .pager span {

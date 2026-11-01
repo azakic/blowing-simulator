@@ -1,308 +1,142 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <title>Wolken-ASM Reports - Batch Calculate Reports</title>
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                margin: 2em;
-                background: #f9f9f9;
-            }
-            h1 {
-                color: #333;
-                margin-bottom: 1em;
-            }
-            form {
-                background: #fff;
-                padding: 2em;
-                border-radius: 8px;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
-                max-width: 500px;
-                margin: 0 auto;
-            }
-            label {
-                display: block;
-                margin-bottom: 0.5em;
-                font-weight: bold;
-                color: #444;
-            }
-            input[type="file"] {
-                margin-bottom: 1em;
-                width: 100%;
-            }
-            button {
-                background: #1976d2;
-                color: #fff;
-                border: none;
-                padding: 0.7em 2em;
-                border-radius: 4px;
-                font-size: 1em;
-                cursor: pointer;
-                transition: background 0.2s;
-            }
-            button:hover {
-                background: #1565c0;
-            }
-            .info {
-                margin-top: 2em;
-                color: #555;
-                text-align: center;
-                font-size: 1em;
-            }
-            .results {
-                margin-top: 2em;
-            }
-            table {
-                border-collapse: collapse;
-                width: 100%;
-                margin-top: 1em;
-            }
-            th,
-            td {
-                border: 1px solid #ccc;
-                padding: 8px;
-                text-align: left;
-            }
-            th {
-                background: #eee;
-            }
-            .json-download {
-                margin-top: 1em;
-            }
-            .sourcefile {
-                color: #888;
-                font-size: 0.95em;
-            }
-        </style>
-    </head>
-    <body>
-            <nav class="navbar">
-                <div class="navbar-brand">
-                    <a href="/" class="navbar-logo">Wolken-ASM Reports</a>
-                </div>
-                <div class="navbar-links">
-                    <a href="/" class="navbar-link active">Dashboard</a>
-                    <a href="/protocols" class="navbar-link">Protocols</a>
-                    <a href="/protocols/length-report" class="navbar-link">Length Report</a>
-                    <a href="/reports/projects" class="navbar-link">Project Report</a>
-                    {{if or .IsAdmin (eq .UserRole "editor") (eq .UserRole "partner")}}
-                    <a href="/pdf2text" class="navbar-link">Upload</a>
-                    <a href="/bulk-upload" class="navbar-link">Bulk Upload</a>
-                    {{end}}
-                    {{if .IsAdmin}}
-                    <a href="/admin/users" class="navbar-link">Users</a>
-                    {{end}}
-                    {{if .UserRole}}
-                    <span style="color:#fff;font-size:0.85em;opacity:0.85;padding-top:2px;">Role: {{.UserRole}}</span>
-                    <a href="/logout" class="navbar-link" style="border-bottom:none;">Logout</a>
-                    {{else}}
-                    <a href="/login" class="navbar-link" style="border-bottom:none;">Login</a>
-                    {{end}}
-                </div>
-            </nav>
-        <div class="dashboard-container">
-            <h1>Wolken-ASM Reports Dashboard</h1>
-            <div class="dashboard-stats">
-                <div class="stat-tile">
-                    <div class="stat-title">Protocols</div>
-                    <div class="stat-value" id="protocolCount">—</div>
-                </div>
-                <div class="stat-tile">
-                    <div class="stat-title">Reports</div>
-                    <div class="stat-value" id="reportCount">—</div>
-                </div>
-                <div class="stat-tile">
-                    <div class="stat-title">Last Upload</div>
-                    <div class="stat-value" id="lastUpload">—</div>
-                </div>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1976d2">
+    <title>Dashboard - Wolken-ASM Reports</title>
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="/">Wolken-ASM Reports</a>
+        <nav class="nav">
+            <a href="/" class="active">Dashboard</a>
+            <a href="/protocols">Protocols</a>
+            <a href="/protocols/length-report">Length Report</a>
+            <a href="/reports/projects">Project Report</a>
+            {{if or .IsAdmin (eq .UserRole "editor") (eq .UserRole "partner")}}
+            <a href="/pdf2text">Upload</a>
+            <a href="/bulk-upload">Bulk Upload</a>
+            {{end}}
+            {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a>{{end}}
+            {{if .UserRole}}<span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+            {{else}}<a href="/login">Login</a>{{end}}
+        </nav>
+    </header>
+
+    <main class="page">
+        <div class="head">
+            <div>
+                <h1>Dashboard</h1>
+                <p class="sub">Everything about imported protocols, reports and the share of each organisation.</p>
             </div>
-            <div class="dashboard-tiles">
-                <a href="/create-fremco" class="dashboard-tile fremco">
-                    <span class="tile-icon">🛠️</span>
-                    <span>New Fremco Protocol</span>
-                </a>
-                <a href="/create-jetting" class="dashboard-tile jetting">
-                    <span class="tile-icon">🚀</span>
-                    <span>New Jetting Protocol</span>
-                </a>
-                <a href="/protocols" class="dashboard-tile protocols">
-                    <span class="tile-icon">📄</span>
-                    <span>View Protocols</span>
-                </a>
-                <a href="/protocols/length-report" class="dashboard-tile length-report">
-                    <span class="tile-icon">📏</span>
-                    <span>Length Report</span>
-                </a>
-                <a href="/reports/projects" class="dashboard-tile project-report">
-                    <span class="tile-icon">🏗️</span>
-                    <span>Project Report</span>
-                </a>
+            <div class="actions">
                 {{if or .IsAdmin (eq .UserRole "editor") (eq .UserRole "partner")}}
-                <a href="/pdf2text" class="dashboard-tile bulk-upload">
-                    <span class="tile-icon">📄</span>
-                    <span>Upload Protocol</span>
-                </a>
-                <a href="/bulk-upload" class="dashboard-tile bulk-upload">
-                    <span class="tile-icon">📤</span>
-                    <span>Bulk Upload</span>
-                </a>
+                <a class="btn btn-primary" href="/bulk-upload">⬆ Import protocols</a>
                 {{end}}
-                                {{if .IsAdmin}}
-                                <a href="/admin/users" class="dashboard-tile" style="border-left: 6px solid #dc3545;">
-                                    <span class="tile-icon">👥</span>
-                                    <span>User Management</span>
-                                </a>
-                                <a href="/admin/backfill-ownership" class="dashboard-tile" style="border-left: 6px solid #dc3545;">
-                                    <span class="tile-icon">🧹</span>
-                                    <span>Backfill Ownership</span>
-                                </a>
-                                {{end}}
+                <a class="btn btn-export" href="/reports/projects">Project Report</a>
             </div>
         </div>
-        <script>
-                        // Fetch stats via API and update dashboard
-                        fetch('/api/dashboard-stats')
-                            .then(r => r.ok ? r.json() : Promise.reject())
-                            .then(stats => {
-                                document.getElementById('protocolCount').textContent = stats.protocols ?? '—';
-                                document.getElementById('reportCount').textContent = stats.reports ?? '—';
-                                document.getElementById('lastUpload').textContent = stats.lastUpload || '—';
-                            })
-                            .catch(() => {
-                                document.getElementById('protocolCount').textContent = '—';
-                                document.getElementById('reportCount').textContent = '—';
-                                document.getElementById('lastUpload').textContent = '—';
-                            });
-        </script>
-        <style>
-            .navbar {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                background: #1976d2;
-                padding: 0.7em 2em;
-                border-radius: 0 0 10px 10px;
-                margin-bottom: 2em;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-            }
-            .navbar-brand { font-size: 1.3em; font-weight: bold; }
-            .navbar-logo { color: #fff; text-decoration: none; font-weight: bold; letter-spacing: 1px; }
-            .navbar-links { display: flex; gap: 2em; }
-            .navbar-link { color: #fff; text-decoration: none; font-size: 1em; font-weight: 500; padding-bottom: 2px; border-bottom: 2px solid transparent; transition: border-color 0.2s; }
-            .navbar-link:hover, .navbar-link.active { border-bottom: 2px solid #fff; }
-            .dashboard-container {
-                max-width: 900px;
-                margin: 0 auto;
-                background: #fff;
-                padding: 2em;
-                border-radius: 12px;
-                box-shadow: 0 2px 16px rgba(0,0,0,0.08);
-            }
-            .dashboard-container h1 {
-                text-align: center;
-                color: #2c3e50;
-                margin-bottom: 2em;
-            }
-            .dashboard-stats {
-                display: flex;
-                justify-content: center;
-                gap: 2em;
-                margin-bottom: 2em;
-            }
-            .stat-tile {
-                background: #f8f9fa;
-                border-radius: 8px;
-                padding: 1em 2em;
-                text-align: center;
-                box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-            }
-            .stat-title {
-                color: #888;
-                font-size: 1em;
-                margin-bottom: 0.5em;
-            }
-            .stat-value {
-                font-size: 2em;
-                font-weight: bold;
-                color: #1976d2;
-            }
-            .dashboard-tiles {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-                gap: 2em;
-            }
-            .dashboard-tile {
-                background: linear-gradient(135deg, #e3eafc 0%, #f8f9fa 100%);
-                border-radius: 10px;
-                padding: 2em 1em;
-                text-align: center;
-                text-decoration: none;
-                color: #2c3e50;
-                font-size: 1.1em;
-                box-shadow: 0 1px 8px rgba(0,0,0,0.06);
-                transition: box-shadow 0.2s, transform 0.2s;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 1em;
-            }
-            .dashboard-tile:hover {
-                box-shadow: 0 4px 16px rgba(33,150,243,0.12);
-                transform: translateY(-4px) scale(1.04);
-            }
-            .tile-icon {
-                font-size: 2.5em;
-                margin-bottom: 0.5em;
-            }
-            .dashboard-tile.fremco { border-left: 6px solid #1976d2; }
-            .dashboard-tile.jetting { border-left: 6px solid #1976d2; }
-            .dashboard-tile.protocols { border-left: 6px solid #28a745; }
-            .dashboard-tile.length-report { border-left: 6px solid #28a745; }
-            .dashboard-tile.project-report { border-left: 6px solid #ff9800; }
-            .dashboard-tile.bulk-upload { border-left: 6px solid #6f42c1; }
-            .navbar {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                background: #1976d2;
-                padding: 0.7em 2em;
-                border-radius: 0 0 10px 10px;
-                margin-bottom: 2em;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-            }
-            .navbar-brand {
-                font-size: 1.3em;
-                font-weight: bold;
-            }
-            .navbar-logo {
-                color: #fff;
-                text-decoration: none;
-                font-weight: bold;
-                letter-spacing: 1px;
-            }
-            .navbar-links {
-                display: flex;
-                gap: 2em;
-            }
-            .navbar-link {
-                color: #fff;
-                text-decoration: none;
-                font-size: 1em;
-                font-weight: 500;
-                padding-bottom: 2px;
-                border-bottom: 2px solid transparent;
-                transition: border-color 0.2s;
-            }
-            .navbar-link:hover, .navbar-link.active {
-                border-bottom: 2px solid #fff;
-            }
-            @media (max-width: 600px) {
-                .dashboard-stats { flex-direction: column; gap: 1em; }
-                .dashboard-tiles { grid-template-columns: 1fr; gap: 1em; }
-                .navbar { flex-direction: column; gap: 1em; padding: 1em; }
-                .navbar-links { gap: 1em; }
-            }
-        </style>
-    </body>
+
+        <section class="kpis">
+            <div class="kpi"><div class="label">Protocols</div><div class="value" id="protocolCount">—</div></div>
+            <div class="kpi"><div class="label">Reports</div><div class="value" id="reportCount">—</div></div>
+            <div class="kpi" style="grid-column: span 2;"><div class="label">Last upload</div><div class="value" id="lastUpload" style="font-size:.95rem;">—</div></div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-head"><h2>Reports</h2><span class="hint">read-only views over all protocols</span></div>
+            <div class="panel-body">
+                <div class="tiles">
+                    <a class="tile" href="/protocols">
+                        <span class="icon">📄</span>
+                        <span class="t">Protocols</span>
+                        <span class="d">Search, filter and open any protocol</span>
+                    </a>
+                    <a class="tile" href="/protocols/length-report">
+                        <span class="icon">📏</span>
+                        <span class="t">Length Report</span>
+                        <span class="d">Cable lengths by date and format</span>
+                    </a>
+                    <a class="tile" href="/reports/projects">
+                        <span class="icon">🏗️</span>
+                        <span class="t">Project Report</span>
+                        <span class="d">Fremco + Jetting merged, with each organisation's share</span>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        {{if or .IsAdmin (eq .UserRole "editor") (eq .UserRole "partner")}}
+        <section class="panel">
+            <div class="panel-head"><h2>Data entry</h2><span class="hint">PDF in, protocol out</span></div>
+            <div class="panel-body">
+                <div class="tiles">
+                    <a class="tile" href="/create-fremco">
+                        <span class="icon">🛠️</span>
+                        <span class="t">New Fremco protocol</span>
+                        <span class="d">Fill the form by hand</span>
+                    </a>
+                    <a class="tile" href="/create-jetting">
+                        <span class="icon">🚀</span>
+                        <span class="t">New Jetting protocol</span>
+                        <span class="d">Fill the form by hand</span>
+                    </a>
+                    <a class="tile" href="/pdf2text">
+                        <span class="icon">📄</span>
+                        <span class="t">Upload protocol</span>
+                        <span class="d">Single PDF, with preview</span>
+                    </a>
+                    <a class="tile" href="/bulk-upload">
+                        <span class="icon">📤</span>
+                        <span class="t">Bulk upload</span>
+                        <span class="d">Many PDFs at once</span>
+                    </a>
+                </div>
+            </div>
+        </section>
+        {{end}}
+
+        {{if .IsAdmin}}
+        <section class="panel">
+            <div class="panel-head"><h2>Administration</h2></div>
+            <div class="panel-body">
+                <div class="tiles">
+                    <a class="tile accent-user" href="/admin/users">
+                        <span class="icon">👥</span>
+                        <span class="t">Users</span>
+                        <span class="d">Approve registrations, roles, organisations</span>
+                    </a>
+                    <a class="tile accent-user" href="/admin/orgs">
+                        <span class="icon">🏢</span>
+                        <span class="t">Organisations</span>
+                        <span class="d">Codes, aliases, bulk assignment</span>
+                    </a>
+                    <a class="tile accent-user" href="/admin/backfill-ownership">
+                        <span class="icon">🧹</span>
+                        <span class="t">Backfill ownership</span>
+                        <span class="d">Assign owner where it is missing</span>
+                    </a>
+                </div>
+            </div>
+        </section>
+        {{end}}
+    </main>
+
+    <script>
+        fetch('/api/dashboard-stats')
+            .then(r => r.ok ? r.json() : Promise.reject())
+            .then(stats => {
+                document.getElementById('protocolCount').textContent = stats.protocols ?? '—';
+                document.getElementById('reportCount').textContent = stats.reports ?? '—';
+                document.getElementById('lastUpload').textContent = stats.lastUpload || '—';
+            })
+            .catch(() => {
+                document.getElementById('protocolCount').textContent = '—';
+                document.getElementById('reportCount').textContent = '—';
+                document.getElementById('lastUpload').textContent = '—';
+            });
+    </script>
+</body>
 </html>

@@ -3,504 +3,173 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1976d2">
     <title>Length Report - Wolken-ASM Reports</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #2c3e50;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .back-link {
-            color: #007bff;
-            text-decoration: none;
-            font-size: 16px;
-            margin-bottom: 20px;
-            display: inline-block;
-        }
-        .back-link:hover {
-            text-decoration: underline;
-        }
-        .filter-form {
-            background: #f8f9fa;
-            padding: 25px;
-            border-radius: 8px;
-            margin-bottom: 30px;
-        }
-        .filter-row {
-            display: flex;
-            gap: 20px;
-            align-items: end;
-            flex-wrap: wrap;
-            margin-bottom: 15px;
-        }
-        .filter-group {
-            display: flex;
-            flex-direction: column;
-            min-width: 150px;
-        }
-        .filter-group label {
-            font-weight: 600;
-            margin-bottom: 5px;
-            color: #495057;
-        }
-        .filter-group input[type="date"] {
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 14px;
-        }
-        .checkbox-group {
-            display: flex;
-            gap: 20px;
-            align-items: center;
-        }
-        .checkbox-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .checkbox-item input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-        }
-        .checkbox-item label {
-            font-weight: 500;
-            cursor: pointer;
-        }
-        .fremco-label {
-            color: #155724;
-        }
-        .jetting-label {
-            color: #004085;
-        }
-        .filter-buttons {
-            display: flex;
-            gap: 10px;
-        }
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .btn-primary {
-            background: #007bff;
-            color: white;
-        }
-        .btn-primary:hover {
-            background: #0056b3;
-        }
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-        .btn-secondary:hover {
-            background: #545b62;
-        }
-        .summary-cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        .summary-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-        }
-        .summary-card h3 {
-            margin: 0 0 10px 0;
-            font-size: 16px;
-            opacity: 0.9;
-        }
-        .summary-card .value {
-            font-size: 24px;
-            font-weight: bold;
-            margin: 0;
-        }
-        .summary-card .unit {
-            font-size: 14px;
-            opacity: 0.8;
-        }
-        .report-table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            margin: 20px 0;
-            font-size: 15px;
-            background: #fff;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(44,62,80,0.07);
-        }
-        .report-table th {
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            color: #fff;
-            padding: 18px 12px;
-            text-align: left;
-            font-weight: 700;
-            position: sticky;
-            top: 0;
-            z-index: 2;
-            border-top-left-radius: 12px;
-            border-top-right-radius: 12px;
-        }
-        .report-table td {
-            padding: 14px 12px;
-            border-bottom: 1px solid #e0e0e0;
-        }
-        .report-table tr:hover {
-            background-color: #f3f0fa;
-            transition: background 0.2s;
-        }
-        .report-table tr:nth-child(even) {
-            background-color: #f8f8fc;
-        }
-        .report-table tr:nth-child(even):hover {
-            background-color: #e7e3f3;
-        }
-        .protocol-type {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-        .protocol-type.fremco {
-            background: #d4edda;
-            color: #155724;
-        }
-        .protocol-type.jetting {
-            background: #cce7ff;
-            color: #004085;
-        }
-        .numeric-value {
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-weight: 500;
-            text-align: right;
-        }
-        .null-value {
-            color: #adb5bd;
-            font-style: italic;
-            font-size: 12px;
-        }
-        .filename {
-            font-family: monospace;
-            background: #f8f9fa;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 11px;
-        }
-        .no-data {
-            text-align: center;
-            padding: 40px;
-            color: #6c757d;
-        }
-        .export-options {
-            margin-bottom: 20px;
-            text-align: right;
-        }
-        .btn-success {
-            background: #28a745;
-            color: white;
-        }
-        .btn-success:hover {
-            background: #218838;
-        }
-        .view-btn {
-            background: #17a2b8;
-            color: white;
-            text-decoration: none;
-            padding: 4px 8px;
-            border-radius: 3px;
-            font-size: 11px;
-        }
-        .view-btn:hover {
-            background: #138496;
-            text-decoration: none;
-        }
-        .navbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #1976d2;
-            padding: 0.7em 2em;
-            border-radius: 0 0 10px 10px;
-            margin-bottom: 2em;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-        }
-        .navbar-brand {
-            font-size: 1.3em;
-            font-weight: bold;
-        }
-        .navbar-logo {
-            color: #fff;
-            text-decoration: none;
-            font-weight: bold;
-            letter-spacing: 1px;
-        }
-        .navbar-links {
-            display: flex;
-            gap: 2em;
-        }
-        .navbar-link {
-            color: #fff;
-            text-decoration: none;
-            font-size: 1em;
-            font-weight: 500;
-            padding-bottom: 2px;
-            border-bottom: 2px solid transparent;
-            transition: border-color 0.2s;
-        }
-        .navbar-link:hover, .navbar-link.active {
-            border-bottom: 2px solid #fff;
-        }
-        @media (max-width: 700px) {
-            .navbar { flex-direction: column; gap: 1em; padding: 1em; }
-            .navbar-links { gap: 1em; }
-        }
-    </style>
+    <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-    <nav class="navbar">
-        <div class="navbar-brand">
-            <a href="/" class="navbar-logo">Wolken-ASM Reports</a>
-        </div>
-        <div class="navbar-links">
-            <a href="/" class="navbar-link">Dashboard</a>
-            <a href="/protocols" class="navbar-link">Protocols</a>
-            <a href="/protocols/length-report" class="navbar-link active">Length Report</a>
-            <a href="/reports/projects" class="navbar-link">Project Report</a>
-            <a href="/bulk-upload" class="navbar-link">Bulk Upload</a>
-            {{if .IsAdmin}}
-            <a href="/admin/users" class="navbar-link">Users</a>
-            {{end}}
-        </div>
-    </nav>
-    <div class="container">
-        <a href="/protocols" class="back-link">← Back to Protocols</a>
-        
-        <h1>Length Report by Date</h1>
-        {{/* Admin scope toggles */}}
-        {{if .UserRole}}
-        <div style="margin:10px 0 20px 0;">
-            {{if eq .UserRole "admin"}}
-            <span style="margin-right:10px;color:#555;">Scope:</span>
-            <a href="/protocols/length-report?scope=my" class="btn btn-secondary">My</a>
-            <a href="/protocols/length-report?scope=all" class="btn btn-secondary">All</a>
-            {{end}}
-        </div>
-        {{end}}
-        
-        <form class="filter-form" method="GET">
-            <div class="filter-row">
-                <div class="filter-group">
-                    <label for="start_date">Start Date:</label>
-                    <input type="date" name="start_date" id="start_date" value="{{.StartDate}}">
-                </div>
-                <div class="filter-group">
-                    <label for="end_date">End Date:</label>
-                    <input type="date" name="end_date" id="end_date" value="{{.EndDate}}">
-                </div>
-                {{if .CanFilterUsers}}
-                <div class="filter-group">
-                    <label for="partner_id">Korisnik:</label>
-                    <select name="partner_id" id="partner_id">
-                        <option value="">Svi korisnici</option>
-                        {{range .Users}}
-                            <option value="{{.ID}}" {{if eq $.SelectedPartnerID .ID}}selected{{end}}>[{{.Role}}] {{.Email}}</option>
-                        {{end}}
-                    </select>
-                </div>
+    <header class="topbar">
+        <a class="brand" href="/">Wolken-ASM Reports</a>
+        <nav class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/protocols">Protocols</a>
+            <a href="/protocols/length-report" class="active">Length Report</a>
+            <a href="/reports/projects">Project Report</a>
+            <a href="/bulk-upload">Bulk Upload</a>
+            {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a>{{end}}
+            {{if .UserRole}}<span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+            {{else}}<a href="/login">Login</a>{{end}}
+        </nav>
+    </header>
+
+    <main class="page">
+        <a class="back" href="/protocols">← Protocols</a>
+
+        <div class="head">
+            <div>
+                <h1>Length Report</h1>
+                <p class="sub">Cable lengths over time, with per-protocol min/max/average and a one-click CSV export.</p>
+            </div>
+            <div class="actions">
+                {{if eq .UserRole "admin"}}
+                <a class="btn btn-ghost" href="/protocols/length-report?scope=my">My</a>
+                <a class="btn btn-ghost" href="/protocols/length-report?scope=all">All</a>
                 {{end}}
-                <div class="filter-group">
-                    <label>Protocol Types:</label>
-                    <div class="checkbox-group">
-                        <div class="checkbox-item">
-                            <input type="checkbox" name="fremco" id="fremco" {{if .IncludeFremco}}checked{{end}}>
-                            <label for="fremco" class="fremco-label">Fremco</label>
-                        </div>
-                        <div class="checkbox-item">
-                            <input type="checkbox" name="jetting" id="jetting" {{if .IncludeJetting}}checked{{end}}>
-                            <label for="jetting" class="jetting-label">Jetting</label>
-                        </div>
-                    </div>
-                </div>
-                <div class="filter-buttons">
-                    <button type="submit" class="btn btn-primary">Apply Filters</button>
-                    <a href="/protocols/length-report" class="btn btn-secondary">Clear All</a>
+                <button class="btn btn-export" type="button" onclick="exportToCSV()">⬇ Export CSV</button>
+            </div>
+        </div>
+
+        <form class="filters" method="GET" action="/protocols/length-report">
+            <label class="field"><span>Start date</span><input type="date" name="start_date" id="start_date" value="{{.StartDate}}"></label>
+            <label class="field"><span>End date</span><input type="date" name="end_date" id="end_date" value="{{.EndDate}}"></label>
+            {{if .CanFilterUsers}}
+            <label class="field"><span>Uploaded by</span>
+                <select name="partner_id" id="partner_id">
+                    <option value="">All users</option>
+                    {{range .Users}}<option value="{{.ID}}" {{if eq $.SelectedPartnerID .ID}}selected{{end}}>[{{.Role}}] {{.Email}}</option>{{end}}
+                </select>
+            </label>
+            {{end}}
+            <div class="field" style="flex:1 1 190px;">
+                <span>Protocol types</span>
+                <div style="display:flex;gap:.9rem;align-items:center;height:2.1rem;">
+                    <label style="display:flex;align-items:center;gap:.35rem;font-size:.85rem;cursor:pointer;">
+                        <input type="checkbox" name="fremco" id="fremco" {{if .IncludeFremco}}checked{{end}} style="width:auto;"> Fremco
+                    </label>
+                    <label style="display:flex;align-items:center;gap:.35rem;font-size:.85rem;cursor:pointer;">
+                        <input type="checkbox" name="jetting" id="jetting" {{if .IncludeJetting}}checked{{end}} style="width:auto;"> Jetting
+                    </label>
                 </div>
             </div>
+            <button class="btn btn-primary" type="submit">Apply filters</button>
+            <a class="btn btn-ghost" href="/protocols/length-report">Clear</a>
         </form>
-        
+
         {{if .Reports}}
-        <div class="summary-cards">
-            <div class="summary-card">
-                <h3>Total Protocols</h3>
-                <div class="value">{{.TotalProtocols}}</div>
-            </div>
-            <div class="summary-card">
-                <h3>Total Length</h3>
-                <div class="value">{{printf "%.1f" .TotalMeasurements}}</div>
-                <div class="unit">meters</div>
-            </div>
-            <div class="summary-card">
-                <h3>Max Length</h3>
-                <div class="value">{{printf "%.1f" .MaxLengthOverall}}</div>
-                <div class="unit">meters</div>
-            </div>
-            <div class="summary-card">
-                <h3>Average Length</h3>
-                <div class="value">{{printf "%.1f" .OverallAverage}}</div>
-                <div class="unit">meters</div>
-            </div>
-        </div>
-        
-        <div class="export-options">
-            <button class="btn btn-success" onclick="exportToCSV()">Export CSV</button>
-        </div>
-        
-        <table class="report-table" id="reportTable">
-            <thead>
-                <tr>
-                    <th onclick="sortTable(0)" style="cursor: pointer;">Date ▲▼</th>
-                    <th onclick="sortTable(1)" style="cursor: pointer;">Type ▲▼</th>
-                    <th onclick="sortTable(2)" style="cursor: pointer;">Company ▲▼</th>
-                    <th onclick="sortTable(3)" style="cursor: pointer;">Service Provider ▲▼</th>
-                    <th onclick="sortTable(4)" style="cursor: pointer;">Max Length (m) ▲▼</th>
-                    <th onclick="sortTable(5)" style="cursor: pointer;">Address ▲▼</th>
-                    <th onclick="sortTable(6)" style="cursor: pointer;">NVT Number ▲▼</th>
-                    <th onclick="sortTable(7)" style="cursor: pointer;">Filename ▲▼</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {{range .Reports}}
-                <tr>
-                    <td>{{if .ProtocolDate.Valid}}{{dateFormat .ProtocolDate.String}}{{else}}<span class="null-value">N/A</span>{{end}}</td>
-                    <td><span class="protocol-type {{.ProtocolType}}">{{.ProtocolType}}</span></td>
-                    <td>{{if .Company.Valid}}{{.Company.String}}{{else}}<span class="null-value">N/A</span>{{end}}</td>
-                    <td>{{if .ServiceProvider.Valid}}{{.ServiceProvider.String}}{{else}}<span class="null-value">N/A</span>{{end}}</td>
-                    <td class="numeric-value">{{if .MaxLength.Valid}}{{printf "%.1f" .MaxLength.Float64}}{{else}}<span class="null-value">—</span>{{end}}</td>
-                    <td>{{if .Address.Valid}}{{.Address.String}}{{else}}<span class="null-value">N/A</span>{{end}}</td>
-                    <td>{{extractNVT .SourceFilename.String}}</td>
-                    <td>{{if .SourceFilename.Valid}}<span class="filename">{{.SourceFilename.String}}</span>{{else}}<span class="null-value">N/A</span>{{end}}</td>
-                    <td>
-                        <a href="/protocols/view?id={{.ProtocolID}}" class="view-btn">View</a>
-                        {{if gt .MeasurementCount 0}}
-                        <a href="/protocols/measurements?id={{.ProtocolID}}" class="view-btn">Data</a>
+        <section class="kpis">
+            <div class="kpi"><div class="label">Total protocols</div><div class="value">{{.TotalProtocols}}</div></div>
+            <div class="kpi"><div class="label">Total length</div><div class="value">{{printf "%.1f" .TotalMeasurements}} <span style="font-size:.7rem;font-weight:600;color:var(--muted);">m</span></div></div>
+            <div class="kpi"><div class="label">Max length</div><div class="value">{{printf "%.1f" .MaxLengthOverall}} <span style="font-size:.7rem;font-weight:600;color:var(--muted);">m</span></div></div>
+            <div class="kpi"><div class="label">Average length</div><div class="value">{{printf "%.1f" .OverallAverage}} <span style="font-size:.7rem;font-weight:600;color:var(--muted);">m</span></div></div>
+        </section>
+
+        <div class="table-wrap">
+            <div class="table-scroll">
+                <table id="reportTable">
+                    <thead>
+                        <tr>
+                            <th class="sortable" onclick="sortTable(0)">Date</th>
+                            <th class="sortable" onclick="sortTable(1)">Type</th>
+                            <th class="sortable" onclick="sortTable(2)">Company</th>
+                            <th class="sortable" onclick="sortTable(3)">Service provider</th>
+                            <th class="sortable num" onclick="sortTable(4)">Max length (m)</th>
+                            <th class="sortable" onclick="sortTable(5)">Address</th>
+                            <th class="sortable" onclick="sortTable(6)">NVT</th>
+                            <th class="sortable" onclick="sortTable(7)">Filename</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Reports}}
+                        <tr>
+                            <td data-label="Date">{{if .ProtocolDate.Valid}}{{dateFormat .ProtocolDate.String}}{{else}}<span class="muted">N/A</span>{{end}}</td>
+                            <td data-label="Type"><span class="pill {{.ProtocolType}}">{{.ProtocolType}}</span></td>
+                            <td data-label="Company">{{if .Company.Valid}}{{.Company.String}}{{else}}<span class="muted">N/A</span>{{end}}</td>
+                            <td data-label="Service provider">{{if .ServiceProvider.Valid}}{{.ServiceProvider.String}}{{else}}<span class="muted">N/A</span>{{end}}</td>
+                            <td data-label="Max length (m)" class="num">{{if .MaxLength.Valid}}{{printf "%.1f" .MaxLength.Float64}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Address">{{if .Address.Valid}}{{.Address.String}}{{else}}<span class="muted">N/A</span>{{end}}</td>
+                            <td data-label="NVT">{{extractNVT .SourceFilename.String}}</td>
+                            <td data-label="Filename">{{if .SourceFilename.Valid}}{{.SourceFilename.String}}{{else}}<span class="muted">N/A</span>{{end}}</td>
+                            <td data-label="Actions">
+                                <a class="btn btn-ghost btn-small" href="/protocols/view?id={{.ProtocolID}}">View</a>
+                                {{if gt .MeasurementCount 0}}
+                                <a class="btn btn-ghost btn-small" href="/protocols/measurements?id={{.ProtocolID}}">Data</a>
+                                {{end}}
+                            </td>
+                        </tr>
                         {{end}}
-                    </td>
-                </tr>
-                {{end}}
-            </tbody>
-        </table>
-        
-        {{else}}
-        <div class="no-data">
-            <h3>No data found</h3>
-            <p>{{if or .StartDate .EndDate}}Try adjusting your date range or format filters{{else}}No protocols match your criteria{{end}}</p>
+                    </tbody>
+                </table>
+            </div>
         </div>
+        {{else}}
+        <div class="table-wrap"><p class="empty">{{if or .StartDate .EndDate}}No protocols in this range — try adjusting the dates or formats.{{else}}No protocols match these filters.{{end}}</p></div>
         {{end}}
-    </div>
+    </main>
 
     <script>
-        let sortDirection = {}; // Track sort direction for each column
-        
+        let sortDirection = {};
+
         function sortTable(columnIndex) {
             const table = document.getElementById('reportTable');
             const tbody = table.querySelector('tbody');
             const rows = Array.from(tbody.querySelectorAll('tr'));
-            
-            // Determine sort direction
             const isAscending = sortDirection[columnIndex] !== true;
             sortDirection[columnIndex] = isAscending;
-            
-            // Sort rows
-            rows.sort((a, b) => {
-                const cellA = a.cells[columnIndex];
-                const cellB = b.cells[columnIndex];
-                let valueA = cellA.textContent.trim();
-                let valueB = cellB.textContent.trim();
 
-                // Handle numeric columns (Min/Max/Avg Length, Measurements)
-                if (columnIndex >= 4 && columnIndex <= 7) {
+            function parseDMY(str) {
+                const m = str.match(/(\d{2})[.\/-](\d{2})[.\/-](\d{4})/);
+                if (m) return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+                const d = new Date(str.replace(/T.*$/, ''));
+                return isNaN(d) ? new Date(0) : d;
+            }
+
+            rows.sort((a, b) => {
+                const valueA = a.cells[columnIndex].textContent.trim();
+                const valueB = b.cells[columnIndex].textContent.trim();
+
+                if (columnIndex === 4) { // Max length — jedina numerička kolona
                     const numA = parseFloat(valueA.replace(/[^0-9.-]/g, '')) || 0;
                     const numB = parseFloat(valueB.replace(/[^0-9.-]/g, '')) || 0;
                     return isAscending ? numA - numB : numB - numA;
                 }
-
-                // Handle date column (DD.MM.YYYY)
                 if (columnIndex === 0) {
-                    function parseDMY(str) {
-                        const m = str.match(/(\d{2})[.\/-](\d{2})[.\/-](\d{4})/);
-                        if (m) {
-                            // JS Date: YYYY, MM-1, DD
-                            return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
-                        }
-                        return new Date(0);
-                    }
                     const dateA = valueA === 'N/A' ? new Date(0) : parseDMY(valueA);
                     const dateB = valueB === 'N/A' ? new Date(0) : parseDMY(valueB);
                     return isAscending ? dateA - dateB : dateB - dateA;
                 }
-
-                // Handle text columns
                 const comparison = valueA.localeCompare(valueB);
                 return isAscending ? comparison : -comparison;
             });
-            
-            // Clear tbody and add sorted rows
+
             tbody.innerHTML = '';
             rows.forEach(row => tbody.appendChild(row));
-            
-            // Update header indicators
             updateSortIndicators(columnIndex, isAscending);
         }
-        
+
         function updateSortIndicators(activeColumn, isAscending) {
-            const headers = document.querySelectorAll('#reportTable th[onclick]');
-            headers.forEach((header, index) => {
+            document.querySelectorAll('#reportTable th[onclick]').forEach((header, index) => {
                 const text = header.textContent.replace(/ [▲▼]+$/, '');
-                if (index === activeColumn) {
-                    header.textContent = text + (isAscending ? ' ▲' : ' ▼');
-                } else {
-                    header.textContent = text + ' ▲▼';
-                }
+                header.textContent = text + (index === activeColumn ? (isAscending ? ' ▲' : ' ▼') : '');
             });
         }
-        
+
         function exportToCSV() {
-            // Get date range from form inputs
             const startDate = document.getElementById('start_date').value || 'All dates';
             const endDate = document.getElementById('end_date').value || 'All dates';
-
-            // Create CSV header with only table columns
             let csvContent = 'Date\tAddress\tNVT\tMax Length (m)\n';
 
-            // Get table data rows in current visible order (after sorting)
-            const table = document.getElementById('reportTable');
-            const dataRows = Array.from(table.querySelectorAll('tbody tr'));
-
-            // Export rows in current order
+            const dataRows = Array.from(document.querySelectorAll('#reportTable tbody tr'));
             let totalMaxLength = 0;
             dataRows.forEach(row => {
                 const cols = row.querySelectorAll('td');
@@ -508,38 +177,30 @@
                 const address = cols[5].textContent.trim();
                 const nvt = cols[6].textContent.trim();
                 const maxLength = cols[4].textContent.trim();
-                // Format date as DD.MM.YYYY
+
                 let formattedDate = date;
                 if (date !== 'N/A') {
                     const dateMatch = date.match(/(\d{2})[./-](\d{2})[./-](\d{4})/);
                     if (dateMatch) {
                         formattedDate = dateMatch[1] + '.' + dateMatch[2] + '.' + dateMatch[3];
                     } else {
-                        // Try to parse and format
                         const d = new Date(date.replace(/T.*$/, ''));
                         if (!isNaN(d)) {
-                            const day = String(d.getDate()).padStart(2, '0');
-                            const month = String(d.getMonth() + 1).padStart(2, '0');
-                            const year = d.getFullYear();
-                            formattedDate = day + '.' + month + '.' + year;
+                            formattedDate = String(d.getDate()).padStart(2, '0') + '.' +
+                                String(d.getMonth() + 1).padStart(2, '0') + '.' + d.getFullYear();
                         }
                     }
                 }
                 csvContent += formattedDate + '\t' + address.replace(/"/g, '""') + '\t' + nvt + '\t' + maxLength + '\n';
-                // Sum up max lengths (parse numeric value, ignore non-numeric)
                 const numericLength = parseFloat(maxLength.replace(/[^0-9.]/g, ''));
-                if (!isNaN(numericLength)) {
-                    totalMaxLength += numericLength;
-                }
+                if (!isNaN(numericLength)) totalMaxLength += numericLength;
             });
 
-            // Add summary row for sum and protocol count
             csvContent += '\nSum of Max Lengths:\t\t\t' + totalMaxLength.toFixed(1) + '\n';
             csvContent += 'Number of Protocols:\t' + dataRows.length + '\t\t\n';
 
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
-
             if (link.download !== undefined) {
                 const url = URL.createObjectURL(blob);
                 link.setAttribute('href', url);
@@ -551,39 +212,18 @@
             }
         }
 
-        // Set default dates if none provided
         document.addEventListener('DOMContentLoaded', function() {
             const startDate = document.getElementById('start_date');
             const endDate = document.getElementById('end_date');
-            
             if (!startDate.value) {
-                // Default to 30 days ago
                 const thirtyDaysAgo = new Date();
                 thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
                 startDate.value = thirtyDaysAgo.toISOString().split('T')[0];
             }
-            
             if (!endDate.value) {
-                // Default to today
                 endDate.value = new Date().toISOString().split('T')[0];
             }
         });
     </script>
-    
-    <style>
-        .report-table th[onclick] {
-            background-color: #f8f9fa;
-            user-select: none;
-            transition: background-color 0.2s;
-        }
-        
-        .report-table th[onclick]:hover {
-            background-color: #e9ecef;
-        }
-        
-        .report-table th[onclick]:active {
-            background-color: #dee2e6;
-        }
-    </style>
 </body>
 </html>
