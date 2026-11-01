@@ -23,6 +23,14 @@
         .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 22px; }
         .chips .title { font-size: 12px; text-transform: uppercase; color: #6c757d; letter-spacing: .04em; align-self: center; margin-right: 4px; }
         .chip { background: #eef2f6; color: #34495e; border-radius: 12px; padding: 3px 10px; font-size: 13px; }
+        .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: center; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 14px 16px; margin: 0 0 18px; }
+        .filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; text-transform: uppercase; color: #6c757d; letter-spacing: .04em; }
+        .filters select, .filters input[type="date"] { font: inherit; font-size: 14px; text-transform: none; letter-spacing: 0; color: #2c3e50; padding: 6px 8px; border: 1px solid #ced4da; border-radius: 6px; background: #fff; min-width: 180px; }
+        .filters input[type="date"] { min-width: 150px; }
+        .filters button { font: inherit; font-size: 14px; font-weight: 600; color: #fff; background: #1976d2; border: 0; border-radius: 6px; padding: 8px 18px; cursor: pointer; }
+        .filters button:hover { background: #1565c0; }
+        .filters .clear { font-size: 13px; color: #c62828; text-decoration: none; padding: 8px 4px; }
+        .filters .clear:hover { text-decoration: underline; }
         .toolbar { display: flex; justify-content: center; margin: 0 0 20px; }
         .btn-export { display: inline-block; background: #2e7d32; color: #fff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 8px 16px; border-radius: 6px; }
         .btn-export:hover { background: #256428; }
@@ -64,8 +72,28 @@
         <h1>{{.Project}}</h1>
         <p class="subtitle">All protocols of this project, newest data aggregated across Fremco and Jetting documents.</p>
 
+        <form class="filters" method="get" action="/reports/project">
+            <input type="hidden" name="project" value="{{.Project}}">
+            <label>Organisation
+                <select name="org">
+                    <option value="">All</option>
+                    {{range .OrgOptions}}<option value="{{.}}"{{if eq . $.Filter.Org}} selected{{end}}>{{.}}</option>{{end}}
+                </select>
+            </label>
+            <label>Worker
+                <select name="worker">
+                    <option value="">All</option>
+                    {{range .WorkerOptions}}<option value="{{.}}"{{if eq . $.Filter.Worker}} selected{{end}}>{{.}}</option>{{end}}
+                </select>
+            </label>
+            <label>From <input type="date" name="from" value="{{.Filter.From}}"></label>
+            <label>To <input type="date" name="to" value="{{.Filter.To}}"></label>
+            <button type="submit">Filter</button>
+            {{if .HasFilter}}<a class="clear" href="/reports/project?project={{.Project}}">Clear</a>{{end}}
+        </form>
+
         <div class="toolbar">
-            <a class="btn-export" href="/reports/project.csv?project={{.Project}}">⬇ Export CSV</a>
+            <a class="btn-export" href="{{.ExportURL}}">⬇ Export CSV</a>
         </div>
 
         <div class="cards">
@@ -129,7 +157,7 @@
             </tbody>
         </table>
         {{else}}
-        <p class="empty">No protocols visible for this project.</p>
+        <p class="empty">{{if .HasFilter}}No protocols match these filters.{{else}}No protocols visible for this project.{{end}}</p>
         {{end}}
 
         <p class="note">

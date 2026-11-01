@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
 
 func TestFormatClock(t *testing.T) {
 	cases := []struct {
@@ -69,5 +73,47 @@ func TestCSVFilenameSlug(t *testing.T) {
 		if got := csvFilenameSlug(c.in); got != c.want {
 			t.Errorf("csvFilenameSlug(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+func TestParseReportFilter(t *testing.T) {
+	r := httptest.NewRequest("GET", "/reports/projects?org=M.A.X.+Bauservice+GmbH&worker=Marko&from=2025-10-01&to=2025-10-31&junk=1", nil)
+	f := parseReportFilter(r)
+
+	if f.Org != "M.A.X. Bauservice GmbH" {
+		t.Errorf("Org = %q", f.Org)
+	}
+	if f.Worker != "Marko" {
+		t.Errorf("Worker = %q", f.Worker)
+	}
+	if f.From != "2025-10-01" || f.To != "2025-10-31" {
+		t.Errorf("From/To = %q/%q", f.From, f.To)
+	}
+	if !f.HasAny() {
+		t.Error("HasAny() = false, want true")
+	}
+}
+
+func TestParseReportFilterRejectsInvalid(t *testing.T) {
+	long := strings.Repeat("x", maxFilterValueLen+50)
+	r := httptest.NewRequest("GET", "/reports/projects?org="+long+"&from=not-a-date&to=2025-13-45", nil)
+	f := parseReportFilter(r)
+
+	if len(f.Org) != maxFilterValueLen {
+		t.Errorf("Org length = %d, want %d", len(f.Org), maxFilterValueLen)
+	}
+	if f.From != "" || f.To != "" {
+		t.Errorf("invalid dates must be dropped, got From=%q To=%q", f.From, f.To)
+	}
+	if (reportFilter{}).HasAny() {
+		t.Error("empty filter HasAny() = true")
+	}
+}
+
+func TestReportFilterQueryString(t *testing.T) {
+	f := reportFilter{Org: "M.A.X. Bauservice", Worker: "Marko", From: "2025-10-01"}
+	want := "from=2025-10-01&org=M.A.X.+Bauservice&worker=Marko"
+	if got := f.QueryString(); got != want {
+		t.Errorf("QueryString() = %q, want %q", got, want)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -52,16 +53,97 @@ type protocolRow struct {
 	Seconds   *float64
 }
 
-// scopeFilter vraća SQL uslov i argumente za vidljivost (partner vidi svoje +
-// dodeljeno kroz `protocol_access`; staff vidi sve).
-func scopeFilter(r *http.Request, argStart int) (string, []interface{}) {
-	claims := GetAuthClaims(r)
-	if claims == nil || seesAllProtocols(claims.Role) {
-		return "", nil
+// reportFilter su zajednički filteri izveštaja (`?org=&worker=&from=&to=`).
+// Nevažeći datumi se ignorišu (prazno polje = bez ograničenja).
+type reportFilter struct {
+	Org    string
+	Worker string
+	From   string
+	To     string
+}
+
+func (f reportFilter) HasAny() bool {
+	return f.Org != "" || f.Worker != "" || f.From != "" || f.To != ""
+}
+
+// Values vraća aktivne filtere kao URL parametre.
+func (f reportFilter) Values() url.Values {
+	v := url.Values{}
+	if f.Org != "" {
+		v.Set("org", f.Org)
 	}
-	return fmt.Sprintf(` AND (p.user_id = $%[1]d OR EXISTS (
-		SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $%[1]d))`, argStart),
-		[]interface{}{claims.UserID}
+	if f.Worker != "" {
+		v.Set("worker", f.Worker)
+	}
+	if f.From != "" {
+		v.Set("from", f.From)
+	}
+	if f.To != "" {
+		v.Set("to", f.To)
+	}
+	return v
+}
+
+// QueryString vraća filtere kao URL query (bez `?`).
+func (f reportFilter) QueryString() string {
+	return f.Values().Encode()
+}
+
+// exportURL pravi link na CSV/izvoz sa filterima; template.URL sprečava
+// html/template da `&` pretvori u `%26` (što bi pokvarilo query).
+func exportURL(path string, f reportFilter, extra url.Values) template.URL {
+	v := f.Values()
+	for k, vals := range extra {
+		for _, val := range vals {
+			v.Add(k, val)
+		}
+	}
+	if q := v.Encode(); q != "" {
+		return template.URL(path + "?" + q)
+	}
+	return template.URL(path)
+}
+
+const maxFilterValueLen = 200
+
+func parseReportFilter(r *http.Request) reportFilter {
+	q := r.URL.Query()
+	return reportFilter{
+		Org:    cleanFilterValue(q.Get("org")),
+		Worker: cleanFilterValue(q.Get("worker")),
+		From:   cleanFilterDate(q.Get("from")),
+		To:     cleanFilterDate(q.Get("to")),
+	}
+}
+
+func cleanFilterValue(v string) string {
+	v = strings.TrimSpace(v)
+	if len(v) > maxFilterValueLen {
+		v = v[:maxFilterValueLen]
+	}
+	return v
+}
+
+func cleanFilterDate(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return ""
+	}
+	if _, err := time.Parse("2006-01-02", v); err != nil {
+		return ""
+	}
+	return v
+}
+
+// queryBuilder dodeljuje `$n` placeholdere redom, da scope i filteri mogu da
+// se kombinuju bez ručnog brojanja.
+type queryBuilder struct {
+	args []interface{}
+}
+
+func (b *queryBuilder) add(v interface{}) string {
+	b.args = append(b.args, v)
+	return fmt.Sprintf("$%d", len(b.args))
 }
 
 const projectBaseQuery = `
@@ -77,15 +159,44 @@ const projectBaseQuery = `
 		       COALESCE(NULLIF(trim(p.service_provider), ''), NULLIF(trim(p.company), '')) AS org
 		FROM protocols p
 		LEFT JOIN protocol_summary s ON s.protocol_id = p.id
-		WHERE 1=1 %s
+		%s
 	)
 `
 
-// loadProjects vraća sve projekte (u opsegu korisnika) sa agregatima.
-func loadProjects(r *http.Request) ([]projectRow, float64, float64, int, error) {
-	scope, args := scopeFilter(r, 1)
+// orgExpr je izraz koji se koristi i za kolonu `org` i za filter po organizaciji.
+const orgExpr = `COALESCE(NULLIF(trim(p.service_provider), ''), NULLIF(trim(p.company), ''))`
 
-	query := fmt.Sprintf(projectBaseQuery, scope) + `
+// buildScopedQuery vraća CTE `scoped` sa scope-om korisnika i filterima.
+func buildScopedQuery(r *http.Request, f reportFilter) (string, []interface{}) {
+	b := &queryBuilder{}
+	where := "WHERE 1=1"
+
+	if claims := GetAuthClaims(r); claims != nil && !seesAllProtocols(claims.Role) {
+		uid := b.add(claims.UserID)
+		where += fmt.Sprintf(` AND (p.user_id = %[1]s OR EXISTS (
+			SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = %[1]s))`, uid)
+	}
+	if f.Org != "" {
+		where += " AND " + orgExpr + " = " + b.add(f.Org)
+	}
+	if f.Worker != "" {
+		where += " AND trim(p.operator) = " + b.add(f.Worker)
+	}
+	if f.From != "" {
+		where += " AND p.protocol_date >= " + b.add(f.From) + "::date"
+	}
+	if f.To != "" {
+		where += " AND p.protocol_date <= " + b.add(f.To) + "::date"
+	}
+
+	return fmt.Sprintf(projectBaseQuery, where), b.args
+}
+
+// loadProjects vraća sve projekte (u opsegu korisnika, uz filtere) sa agregatima.
+func loadProjects(r *http.Request, f reportFilter) ([]projectRow, float64, float64, int, error) {
+	scoped, args := buildScopedQuery(r, f)
+
+	query := scoped + `
 		SELECT COALESCE(trim(project_number), '') AS project,
 		       count(*) AS protocols,
 		       count(*) FILTER (WHERE protocol_type = 'fremco') AS fremco,
@@ -148,12 +259,14 @@ func loadProjects(r *http.Request) ([]projectRow, float64, float64, int, error) 
 
 const noProjectNumber = "(no project number)"
 
-// loadProjectDetail vraća sve protokole jednog projekta u opsegu korisnika.
-func loadProjectDetail(r *http.Request, project string) ([]protocolRow, float64, float64, []string, []string, error) {
-	scope, args := scopeFilter(r, 2)
-	args = append([]interface{}{project}, args...)
+// loadProjectDetail vraća sve protokole jednog projekta (u opsegu korisnika,
+// uz filtere).
+func loadProjectDetail(r *http.Request, project string, f reportFilter) ([]protocolRow, float64, float64, []string, []string, error) {
+	scoped, args := buildScopedQuery(r, f)
+	b := &queryBuilder{args: args}
+	projectArg := b.add(project)
 
-	query := fmt.Sprintf(projectBaseQuery, scope) + `
+	query := scoped + `
 		SELECT id, protocol_type,
 		       COALESCE(to_char(protocol_date, 'YYYY-MM-DD'), '') AS date,
 		       COALESCE(to_char(start_time, 'HH24:MI'), '') AS time,
@@ -162,10 +275,10 @@ func loadProjectDetail(r *http.Request, project string) ([]protocolRow, float64,
 		       distance, seconds, points, source_sha256 IS NOT NULL,
 		       COALESCE(parse_source, '')
 		FROM scoped
-		WHERE trim(project_number) = $1
+		WHERE trim(project_number) = ` + projectArg + `
 		ORDER BY protocol_date, start_time, id`
 
-	rows, err := db.Queryx(query, args...)
+	rows, err := db.Queryx(query, b.args...)
 	if err != nil {
 		return nil, 0, 0, nil, nil, err
 	}
@@ -221,29 +334,83 @@ func loadProjectDetail(r *http.Request, project string) ([]protocolRow, float64,
 	return protocols, totalDistance, totalSeconds, sortedKeys(workers), sortedKeys(orgs), nil
 }
 
+// loadFilterOptions vraća sve organizacije i radnike vidljive korisniku
+// (ignoriše aktivne filtere, da se opcije ne skupljaju pri svakom filtriranju).
+func loadFilterOptions(r *http.Request) ([]string, []string, error) {
+	scoped, args := buildScopedQuery(r, reportFilter{})
+
+	query := scoped + `
+		SELECT kind, value FROM (
+			SELECT 'org' AS kind, org AS value
+			FROM scoped WHERE org IS NOT NULL
+			UNION
+			SELECT 'worker' AS kind, trim(operator) AS value
+			FROM scoped WHERE operator IS NOT NULL AND trim(operator) <> ''
+		) AS options
+		ORDER BY kind, value`
+
+	rows, err := db.Queryx(query, args...)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	var orgs, workers []string
+	for rows.Next() {
+		var kind, value string
+		if err := rows.Scan(&kind, &value); err != nil {
+			log.Printf("filter options scan: %v", err)
+			continue
+		}
+		if kind == "org" {
+			orgs = append(orgs, value)
+		} else {
+			workers = append(workers, value)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	return orgs, workers, nil
+}
+
 // ProjectReportHandler prikazuje sve projekte sa agregatima.
 func ProjectReportHandler(w http.ResponseWriter, r *http.Request) {
-	projects, totalDistance, totalSeconds, totalProtocols, err := loadProjects(r)
+	f := parseReportFilter(r)
+
+	projects, totalDistance, totalSeconds, totalProtocols, err := loadProjects(r, f)
+	if err != nil {
+		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	orgOptions, workerOptions, err := loadFilterOptions(r)
 	if err != nil {
 		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	data := map[string]interface{}{
+	renderTemplate(w, "reports-projects.html", map[string]interface{}{
 		"Projects":       projects,
 		"TotalProjects":  len(projects),
 		"TotalProtocols": totalProtocols,
 		"TotalDistance":  formatMeters(totalDistance),
 		"TotalDuration":  formatSeconds(totalSeconds),
+		"OrgOptions":     orgOptions,
+		"WorkerOptions":  workerOptions,
+		"Filter":         f,
+		"QueryString":    f.QueryString(),
+		"ExportURL":      exportURL("/reports/projects.csv", f, nil),
+		"HasFilter":      f.HasAny(),
 		"UserRole":       userRole(r),
 		"IsAdmin":        isAdminRole(r),
-	}
-	renderTemplate(w, "reports-projects.html", data)
+	})
 }
 
 // ProjectReportCSVHandler izvozi listu projekata kao CSV.
 func ProjectReportCSVHandler(w http.ResponseWriter, r *http.Request) {
-	projects, _, _, _, err := loadProjects(r)
+	f := parseReportFilter(r)
+
+	projects, _, _, _, err := loadProjects(r, f)
 	if err != nil {
 		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -278,8 +445,14 @@ func ProjectReportDetailHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Project required", http.StatusBadRequest)
 		return
 	}
+	f := parseReportFilter(r)
 
-	protocols, totalDistance, totalSeconds, workers, orgs, err := loadProjectDetail(r, project)
+	protocols, totalDistance, totalSeconds, workers, orgs, err := loadProjectDetail(r, project, f)
+	if err != nil {
+		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	orgOptions, workerOptions, err := loadFilterOptions(r)
 	if err != nil {
 		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -293,6 +466,12 @@ func ProjectReportDetailHandler(w http.ResponseWriter, r *http.Request) {
 		"TotalDuration": formatSeconds(totalSeconds),
 		"Workers":       workers,
 		"Orgs":          orgs,
+		"OrgOptions":    orgOptions,
+		"WorkerOptions": workerOptions,
+		"Filter":        f,
+		"QueryString":   f.QueryString(),
+		"ExportURL":     exportURL("/reports/project.csv", f, url.Values{"project": {project}}),
+		"HasFilter":     f.HasAny(),
 		"UserRole":      userRole(r),
 		"IsAdmin":       isAdminRole(r),
 	}
@@ -306,8 +485,9 @@ func ProjectReportDetailCSVHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Project required", http.StatusBadRequest)
 		return
 	}
+	f := parseReportFilter(r)
 
-	protocols, _, _, _, _, err := loadProjectDetail(r, project)
+	protocols, _, _, _, _, err := loadProjectDetail(r, project, f)
 	if err != nil {
 		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
 		return
