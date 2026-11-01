@@ -25,6 +25,7 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID
 	// uploaduje (nikad se ne blokira zbog sadržaja PDF-a), a `company` /
 	// `service_provider` se prevode u organizacije preko aliasa.
 	attrib := attributionFor(ownerID, protocol.ProtocolInfo.Company, protocol.ProtocolInfo.ServiceProvider)
+	projectArg := sqlNullProjectID(protocol.ProtocolInfo.ProjectNumber)
 
 	// Insert main protocol record
 	var protocolID int
@@ -33,9 +34,9 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID
 			protocol_type, system_name, document_type, protocol_date, start_time,
 			project_number, section_nvt, company, service_provider, operator,
 			remarks, source_filename, parser_version, address, user_id,
-			owner_org_id, company_org_id, service_provider_org_id, org_review
+			owner_org_id, company_org_id, service_provider_org_id, org_review, project_id
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-			$16, $17, $18, $19)
+			$16, $17, $18, $19, $20)
 		RETURNING id`,
 		"fremco",
 		protocol.ProtocolInfo.System,
@@ -56,6 +57,7 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID
 		attrib.Company,
 		attrib.Provider,
 		attrib.Review,
+		projectArg,
 	).Scan(&protocolID)
 
 	if err != nil {
@@ -176,6 +178,7 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol, owner
 	// uploaduje (nikad se ne blokira zbog sadržaja PDF-a), a `company` /
 	// `service_provider` se prevode u organizacije preko aliasa.
 	attrib := attributionFor(ownerID, protocol.ProtocolInfo.Company, protocol.ProtocolInfo.ServiceProvider)
+	projectArg := sqlNullProjectIDPtr(protocol.ProtocolInfo.ProjectNumber)
 
 	// Insert main protocol record
 	var protocolID int
@@ -184,9 +187,9 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol, owner
 			protocol_type, system_name, document_type, protocol_date, start_time,
 			project_number, section_nvt, company, service_provider, operator,
 			remarks, source_filename, parser_version, address, user_id,
-			owner_org_id, company_org_id, service_provider_org_id, org_review
+			owner_org_id, company_org_id, service_provider_org_id, org_review, project_id
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-			$16, $17, $18, $19)
+			$16, $17, $18, $19, $20)
 		RETURNING id`,
 		"jetting",
 		protocol.ProtocolInfo.System,
@@ -207,6 +210,7 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol, owner
 		attrib.Company,
 		attrib.Provider,
 		attrib.Review,
+		projectArg,
 	).Scan(&protocolID)
 
 	if err != nil {

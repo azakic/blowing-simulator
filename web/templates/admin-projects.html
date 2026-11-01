@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1976d2" />
+  <title>Projects - Wolken-ASM Reports</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Wolken-ASM Reports</a>
+    <input type="checkbox" id="nav-toggle" class="nav-toggle">
+    <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
+    <nav class="nav">
+      <a href="/">Dashboard</a>
+      <a href="/protocols">Protocols</a>
+      <a href="/protocols/length-report">Length Report</a>
+      <a href="/reports/projects">Project Report</a>
+      <a href="/bulk-upload">Bulk Upload</a>
+      {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a><a href="/admin/projects" class="active">Projects</a>{{end}}
+      {{if .UserRole}}<span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+      {{else}}<a href="/login">Login</a>{{end}}
+    </nav>
+  </header>
+
+  <main class="page">
+    <a class="back" href="/">← Dashboard</a>
+    <div class="head">
+      <div>
+        <h1>Projects</h1>
+        <p class="sub">A project groups the work of several companies and people. Assigning a company or a user to a project does <strong>not</strong> grant access to other companies' protocols — visibility still follows the uploading account and its organisation.</p>
+      </div>
+    </div>
+
+    {{if .Message}}<div class="msg">{{.Message}}</div>{{end}}
+
+    <div class="table-wrap">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Number</th>
+              <th>Name</th>
+              <th>Status</th>
+              <th class="num">Protocols</th>
+              <th>Companies</th>
+              <th>People</th>
+              <th>Assign</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Projects}}
+            {{$p := .}}
+            <tr>
+              <td data-label="Number"><strong>{{.Number}}</strong></td>
+              <td data-label="Name">{{if .Name}}{{.Name}}{{else}}<span class="muted">—</span>{{end}}</td>
+              <td data-label="Status">
+                <span class="pill {{if eq .Status "active"}}active{{else}}pending{{end}}">{{.Status}}</span>
+                <form method="POST" action="/admin/projects" style="margin-top:.35rem;">
+                  <input type="hidden" name="action" value="set-status" />
+                  <input type="hidden" name="project_id" value="{{.ID}}" />
+                  <input type="hidden" name="status" value="{{if eq .Status "active"}}closed{{else}}active{{end}}" />
+                  <button class="btn btn-ghost btn-small" type="submit">{{if eq .Status "active"}}Close{{else}}Reopen{{end}}</button>
+                </form>
+              </td>
+              <td data-label="Protocols" class="num">{{.Protocols}}</td>
+              <td data-label="Companies">
+                {{range index $.OrgsByProject $p.ID}}
+                <span class="chip">{{.Name}} <span class="muted">({{.Role}})</span>
+                  <form method="POST" action="/admin/projects" style="display:inline;">
+                    <input type="hidden" name="action" value="remove-org" />
+                    <input type="hidden" name="project_id" value="{{$p.ID}}" />
+                    <input type="hidden" name="org_id" value="{{.OrgID}}" />
+                    <button class="btn btn-ghost btn-small" type="submit" title="Remove">✕</button>
+                  </form>
+                </span>
+                {{end}}
+                {{if not (index $.OrgsByProject $p.ID)}}<span class="muted">none</span>{{end}}
+              </td>
+              <td data-label="People">
+                {{range index $.UsersByProject $p.ID}}
+                <span class="chip">{{.Email}}
+                  <form method="POST" action="/admin/projects" style="display:inline;">
+                    <input type="hidden" name="action" value="remove-user" />
+                    <input type="hidden" name="project_id" value="{{$p.ID}}" />
+                    <input type="hidden" name="user_id" value="{{.UserID}}" />
+                    <button class="btn btn-ghost btn-small" type="submit" title="Remove">✕</button>
+                  </form>
+                </span>
+                {{end}}
+                {{if not (index $.UsersByProject $p.ID)}}<span class="muted">none</span>{{end}}
+              </td>
+              <td data-label="Assign">
+                <form method="POST" action="/admin/projects" style="display:flex;gap:.3rem;margin-bottom:.35rem;">
+                  <input type="hidden" name="action" value="add-org" />
+                  <input type="hidden" name="project_id" value="{{.ID}}" />
+                  <select name="org_id" style="padding:.3rem .4rem;font-size:.8rem;">
+                    {{range $.Orgs}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+                  </select>
+                  <select name="org_role" style="padding:.3rem .4rem;font-size:.8rem;">
+                    <option value="contractor">contractor</option>
+                    <option value="client">client</option>
+                    <option value="internal">internal</option>
+                  </select>
+                  <button class="btn btn-ghost btn-small" type="submit">+ company</button>
+                </form>
+                <form method="POST" action="/admin/projects" style="display:flex;gap:.3rem;">
+                  <input type="hidden" name="action" value="add-user" />
+                  <input type="hidden" name="project_id" value="{{.ID}}" />
+                  <select name="user_id" style="padding:.3rem .4rem;font-size:.8rem;">
+                    {{range $.Users}}<option value="{{.ID}}">{{.Email}} ({{.Role}})</option>{{end}}
+                  </select>
+                  <button class="btn btn-ghost btn-small" type="submit">+ person</button>
+                </form>
+              </td>
+            </tr>
+            {{end}}
+            {{if not .Projects}}
+            <tr><td colspan="7" class="empty">No projects yet — create one below.</td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <section class="panel">
+      <div class="panel-head"><h2>New project</h2><span class="hint">protocols with the same project number are linked automatically</span></div>
+      <div class="panel-body">
+        <form class="filters" method="POST" action="/admin/projects" style="margin:0;border:0;padding:0;background:transparent;">
+          <input type="hidden" name="action" value="create" />
+          <label class="field"><span>Project number</span><input name="number" placeholder="SM209214964" required /></label>
+          <label class="field" style="flex:2 1 260px;"><span>Name (optional)</span><input name="name" placeholder="Oldenburger Koppel" /></label>
+          <button class="btn btn-primary" type="submit">Create project</button>
+        </form>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -771,6 +771,13 @@ func main() {
 	if err := ensureInviteCodes(db); err != nil {
 		log.Fatal("Failed to ensure invite codes:", err)
 	}
+	// Projekti: prvorazredni objekat + dodele organizacijama i korisnicima.
+	if err := ensureProjectSchema(db); err != nil {
+		log.Fatal("Failed to ensure project schema:", err)
+	}
+	if err := backfillProjects(db); err != nil {
+		log.Fatal("Failed to backfill projects:", err)
+	}
 	if err := backfillOrgAttribution(db); err != nil {
 		log.Fatal("Failed to backfill org attribution:", err)
 	}
@@ -809,6 +816,7 @@ func main() {
 	http.HandleFunc("/protocols/api/get", requireAuth(ProtocolGetAPIHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/admin/users", requireAuth(AdminUsersHandler, "admin"))
 	http.HandleFunc("/admin/orgs", requireAuth(AdminOrgsHandler, "admin"))
+	http.HandleFunc("/admin/projects", requireAuth(AdminProjectsHandler, "admin"))
 	// Admin utility: backfill ownership for existing protocols (NULL user_id)
 	http.HandleFunc("/admin/backfill-ownership", requireAuth(AdminBackfillOwnershipHandler, "admin"))
 	http.HandleFunc("/admin/reparse", requireAuth(AdminReparseHandler, "admin"))
