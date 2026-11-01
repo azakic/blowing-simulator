@@ -107,8 +107,9 @@ func AdminUsersHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = tmpl.Execute(w, map[string]any{
-		"Users": users,
-		"Orgs":  orgs,
+		"Users":   users,
+		"Orgs":    orgs,
+		"IsAdmin": true,
 		"UserRole": func() string {
 			c := GetAuthClaims(r)
 			if c != nil {

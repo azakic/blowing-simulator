@@ -782,10 +782,11 @@ func main() {
 	http.HandleFunc("/download-json", DownloadJSONHandler)
 	// Upload/conversion requires editor+ role
 	http.HandleFunc("/pdf2text", requireAuth(Pdf2TextHandler, "editor", "partner", "admin"))
-	http.HandleFunc("/create-report", CreateReportHandler)
-	http.HandleFunc("/edit-report", EditReportHandler)
-	http.HandleFunc("/create-fremco", CreateFremcoHandler)
-	http.HandleFunc("/create-jetting", CreateJettingHandler)
+	// Forme traže prijavu (i time dobijaju claims za navigaciju).
+	http.HandleFunc("/create-report", requireAuth(CreateReportHandler, "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/edit-report", requireAuth(EditReportHandler, "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/create-fremco", requireAuth(CreateFremcoHandler, "editor", "partner", "admin"))
+	http.HandleFunc("/create-jetting", requireAuth(CreateJettingHandler, "editor", "partner", "admin"))
 	http.HandleFunc("/submit-jetting-report", SubmitJettingReportHandler)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 	http.HandleFunc("/jetting-report", JettingReportHandler)

@@ -68,6 +68,8 @@ func AdminOrgsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = tmpl.Execute(w, map[string]any{
+		"IsAdmin":         true,
+		"UserRole":        userRole(r),
 		"Orgs":            orgs,
 		"MissingOwner":    missingOwner,
 		"MissingProvider": missingProvider,
