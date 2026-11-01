@@ -230,20 +230,26 @@ func backfillOrgAttribution(db *sqlx.DB) error {
 	for _, r := range rows {
 		if r.Company.Valid {
 			if id := resolveOrgID(r.Company.String); id != 0 {
-				if _, err := db.Exec(`UPDATE protocols SET company_org_id = $1
-					WHERE id = $2 AND company_org_id IS NULL`, id, r.ID); err != nil {
+				res, err := db.Exec(`UPDATE protocols SET company_org_id = $1
+					WHERE id = $2 AND company_org_id IS NULL`, id, r.ID)
+				if err != nil {
 					return err
 				}
-				updated++
+				if n, _ := res.RowsAffected(); n > 0 {
+					updated++
+				}
 			}
 		}
 		if r.Provider.Valid {
 			if id := resolveOrgID(r.Provider.String); id != 0 {
-				if _, err := db.Exec(`UPDATE protocols SET service_provider_org_id = $1
-					WHERE id = $2 AND service_provider_org_id IS NULL`, id, r.ID); err != nil {
+				res, err := db.Exec(`UPDATE protocols SET service_provider_org_id = $1
+					WHERE id = $2 AND service_provider_org_id IS NULL`, id, r.ID)
+				if err != nil {
 					return err
 				}
-				updated++
+				if n, _ := res.RowsAffected(); n > 0 {
+					updated++
+				}
 			}
 		}
 	}

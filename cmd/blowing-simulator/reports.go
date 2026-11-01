@@ -295,7 +295,7 @@ func loadProjectDetail(r *http.Request, project string, f reportFilter) ([]proto
 
 	query := scoped + `
 		SELECT s.id, s.protocol_type,
-		       COALESCE(to_char(s.protocol_date), '') AS date,
+		       COALESCE(to_char(s.protocol_date, 'YYYY-MM-DD'), '') AS date,
 		       COALESCE(to_char(s.start_time, 'HH24:MI'), '') AS time,
 		       COALESCE(s.section_nvt, ''), COALESCE(s.address, ''),
 		       COALESCE(s.operator, ''), COALESCE(s.org, ''),
