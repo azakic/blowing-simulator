@@ -50,6 +50,7 @@
             </div>
         </section>
 
+        {{ if .Filename }}
         <div class="kv-grid">
             <section class="panel" style="margin:0;">
                 <div class="panel-head"><h2>Report info</h2></div>
@@ -123,6 +124,7 @@
             <div class="panel-head"><h2>Normalized text</h2><span class="hint">input for the Jetting parser</span></div>
             <div class="panel-body"><pre>{{ .Normalized }}</pre></div>
         </section>
+        {{ end }}
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -200,7 +202,9 @@
         const force = measurements.map((m) => isJettingData ? m.schubkraft_n : m.torque);
         const pressure = measurements.map((m) => isJettingData ? m.einblasdruck_bar : m.pressure);
         const speed = measurements.map((m) => isJettingData ? m.geschwindigkeit_m_min : m.speed);
-        const ctx = document.getElementById("measurements-chart").getContext("2d");
+        const chartEl = document.getElementById("measurements-chart");
+        if (!chartEl) return; // GET prikaz nema chart (nema podataka)
+        const ctx = chartEl.getContext("2d");
         if (measurements && measurements.length > 0) {
             new Chart(ctx, {
                 type: "line",
