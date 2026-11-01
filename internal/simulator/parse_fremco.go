@@ -314,6 +314,15 @@ func extractFremcoProtocolInfo(lines []string) FremcoProtocolInfo {
 	return info
 }
 
+// firstToken vraća prvu reč linije.
+func firstToken(s string) string {
+	fields := strings.Fields(s)
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
+}
+
 // valueUntilLabels vraća deo linije posle `rest` do prve od oznaka.
 //
 // U -layout izlazu više polja deli istu liniju:
@@ -379,13 +388,23 @@ func extractFremcoEquipment(lines []string) FremcoEquipment {
 			}
 		}
 
-		if strings.Contains(line, "Farbe-Kennung:") {
-			colorMatch := regexp.MustCompile(`Farbe-Kennung:\s*(.+)`).FindStringSubmatch(line)
-			if len(colorMatch) > 1 {
-				value := valueUntilLabels(colorMatch[1], "Kabel-Durchmesser:", "Kompressor:", "Gleitmittel:")
-				if value != "" {
-					equipment.Pipe.ColorCoding = strings.Fields(value)
+		if idx := strings.Index(line, "Farbe-Kennung:"); idx >= 0 {
+			value := valueUntilLabels(line[idx+len("Farbe-Kennung:"):],
+				"Kabel-Durchmesser:", "Kompressor:", "Gleitmittel:")
+			var colors []string
+			if value != "" {
+				colors = strings.Fields(value)
+			}
+			// Kod starijeg layouta boja se nastavlja u sledećem redu
+			// ("Farbe-Kennung: Braun Kabel-Durchmesser:" / "Schwarz  2.5 …").
+			if i+1 < len(lines) {
+				if tok := firstToken(strings.TrimSpace(lines[i+1])); tok != "" &&
+					!strings.Contains(tok, ":") && !isNumeric(tok) {
+					colors = append(colors, tok)
 				}
+			}
+			if len(colors) > 0 {
+				equipment.Pipe.ColorCoding = colors
 			}
 		}
 
@@ -417,15 +436,20 @@ func extractFremcoEquipment(lines []string) FremcoEquipment {
 			}
 		}
 
-		// Vrednost je u ISTOJ liniji (noviji layout), a kod starijeg u sledećoj.
+		// Vrednost je najčešće u istoj liniji; kod starijeg layouta u sledećoj
+		// (ponekad posle boje: "Schwarz  2.5 Kompressor: …").
 		if idx := strings.Index(line, "Kabel-Durchmesser:"); idx >= 0 {
 			value := valueUntilLabels(line[idx+len("Kabel-Durchmesser:"):],
 				"Kompressor:", "Gleitmittel:", "Ölabscheider", "Nachkühler")
-			if value == "" && i+1 < len(lines) {
-				value = strings.TrimSpace(lines[i+1])
+			if strings.TrimSpace(value) == "" && i+1 < len(lines) {
+				value = valueUntilLabels(lines[i+1],
+					"Kompressor:", "Gleitmittel:", "Ölabscheider", "Nachkühler")
 			}
-			if diameter, err := strconv.ParseFloat(strings.Fields(value + " x")[0], 64); err == nil {
-				equipment.Cable.Diameter = diameter
+			for _, tok := range strings.Fields(value) {
+				if v, err := strconv.ParseFloat(strings.ReplaceAll(tok, ",", "."), 64); err == nil {
+					equipment.Cable.Diameter = v
+					break
+				}
 			}
 		}
 

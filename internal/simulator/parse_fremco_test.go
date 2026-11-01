@@ -59,3 +59,23 @@ func TestExtractFremcoEquipmentRealLines(t *testing.T) {
 		t.Errorf("InnerWall = %q", e.Pipe.InnerWall)
 	}
 }
+
+// Stariji layout: boja i prečnik se nastavljaju u sledećem redu.
+func TestExtractFremcoEquipmentWrappedLine(t *testing.T) {
+	lines := []string{
+		"Farbe-Kennung:                     Braun Kabel-Durchmesser:",
+		"                                Schwarz                                              2.5 Kompressor:                    Kaiser m17a",
+		"Rohrinnenwand:                    Gerieft",
+	}
+	e := extractFremcoEquipment(lines)
+
+	if len(e.Pipe.ColorCoding) != 2 || e.Pipe.ColorCoding[0] != "Braun" || e.Pipe.ColorCoding[1] != "Schwarz" {
+		t.Errorf("ColorCoding = %v, očekivano [Braun Schwarz]", e.Pipe.ColorCoding)
+	}
+	if e.Cable.Diameter != 2.5 {
+		t.Errorf("Cable.Diameter = %v, očekivano 2.5", e.Cable.Diameter)
+	}
+	if e.Compressor.Model != "Kaiser m17a" {
+		t.Errorf("Compressor = %q", e.Compressor.Model)
+	}
+}
