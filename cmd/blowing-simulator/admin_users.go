@@ -136,8 +136,14 @@ func updateUserRole(id int64, role string) error {
 			}
 		}
 	}
-	_, err := db.Exec("UPDATE users SET role=$1, updated_at=NOW() WHERE id=$2", r, id)
-	return err
+	res, err := db.Exec("UPDATE users SET role=$1, updated_at=NOW() WHERE id=$2", r, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("korisnik nije nađen")
+	}
+	return nil
 }
 
 func resetUserPassword(id int64, newPassword string) error {
@@ -151,8 +157,14 @@ func resetUserPassword(id int64, newPassword string) error {
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("UPDATE users SET password_hash=$1, updated_at=NOW() WHERE id=$2", string(hash), id)
-	return err
+	res, err := db.Exec("UPDATE users SET password_hash=$1, updated_at=NOW() WHERE id=$2", string(hash), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("korisnik nije nađen")
+	}
+	return nil
 }
 
 // AdminUsersHandler serves the admin users page (GET list, POST actions)
@@ -209,10 +221,12 @@ func handleUserAction(r *http.Request) string {
 		if !ok {
 			return "Nepoznata rola."
 		}
-		if _, orgKind, err := roleOfUser(id); err == nil {
-			if msg := validateRoleOrg(role, orgKind); msg != "" {
-				return msg
-			}
+		_, orgKind, err := roleOfUser(id)
+		if err != nil {
+			return "Korisnik nije nađen."
+		}
+		if msg := validateRoleOrg(role, orgKind); msg != "" {
+			return msg
 		}
 		if err := updateUserRole(id, role); err != nil {
 			return "Greška: " + err.Error()
@@ -222,7 +236,10 @@ func handleUserAction(r *http.Request) string {
 
 	case "set-org":
 		orgID, _ := strconv.ParseInt(strings.TrimSpace(r.FormValue("org_id")), 10, 64)
-		role, _, _ := roleOfUser(id)
+		role, _, err := roleOfUser(id)
+		if err != nil {
+			return "Korisnik nije nađen."
+		}
 		kind := ""
 		if orgID != 0 {
 			kind = orgKindOf(orgID)
@@ -240,6 +257,9 @@ func handleUserAction(r *http.Request) string {
 		return "Organizacija postavljena."
 
 	case "reset-password":
+		if _, _, err := roleOfUser(id); err != nil {
+			return "Korisnik nije nađen."
+		}
 		if err := resetUserPassword(id, r.FormValue("new_password")); err != nil {
 			return "Greška: " + err.Error()
 		}
@@ -271,7 +291,11 @@ func handleUserAction(r *http.Request) string {
 		if id == actorID {
 			return "Ne možeš deaktivirati sopstveni nalog."
 		}
-		if role, _, err := roleOfUser(id); err == nil && role == RoleAdmin && countActiveAdmins(id) == 0 {
+		role, _, err := roleOfUser(id)
+		if err != nil {
+			return "Korisnik nije nađen."
+		}
+		if role == RoleAdmin && countActiveAdmins(id) == 0 {
 			return "Ne možeš deaktivirati poslednjeg aktivnog administratora."
 		}
 		if err := setUserStatus(id, UserStatusActive, UserStatusDisabled); err != nil {
@@ -281,6 +305,9 @@ func handleUserAction(r *http.Request) string {
 		return "Nalog deaktiviran."
 
 	case "enable":
+		if _, _, err := roleOfUser(id); err != nil {
+			return "Korisnik nije nađen."
+		}
 		if err := setUserStatus(id, UserStatusDisabled, UserStatusActive); err != nil {
 			return "Greška: " + err.Error()
 		}
@@ -296,11 +323,19 @@ func handleUserAction(r *http.Request) string {
 		if owned > 0 {
 			return fmt.Sprintf("Korisnik ima %d protokola — deaktiviraj nalog umesto brisanja.", owned)
 		}
-		if role, _, err := roleOfUser(id); err == nil && role == RoleAdmin && countActiveAdmins(id) == 0 {
+		role, _, err := roleOfUser(id)
+		if err != nil {
+			return "Korisnik nije nađen."
+		}
+		if role == RoleAdmin && countActiveAdmins(id) == 0 {
 			return "Ne možeš obrisati poslednjeg aktivnog administratora."
 		}
-		if _, err := db.Exec(`DELETE FROM users WHERE id = $1`, id); err != nil {
+		res, err := db.Exec(`DELETE FROM users WHERE id = $1`, id)
+		if err != nil {
 			return "Greška: " + err.Error()
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return "Korisnik nije nađen."
 		}
 		logUserEvent(actorID, id, "delete", "")
 		return "Nalog obrisan."

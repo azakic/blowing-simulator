@@ -282,9 +282,15 @@ func backfillOrgAttribution(db *sqlx.DB) error {
 
 // setUserOrg dodeljuje korisnika organizaciji (0 = bez organizacije).
 func setUserOrg(userID, orgID int64) error {
-	_, err := db.Exec(`UPDATE users SET org_id = $1, updated_at = NOW() WHERE id = $2`,
+	res, err := db.Exec(`UPDATE users SET org_id = $1, updated_at = NOW() WHERE id = $2`,
 		sql.NullInt64{Int64: orgID, Valid: orgID != 0}, userID)
-	return err
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("korisnik nije nađen")
+	}
+	return nil
 }
 
 // orgNameByID vraća naziv organizacije ("" ako ne postoji).
