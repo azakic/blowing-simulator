@@ -216,6 +216,46 @@ func handleUserAction(r *http.Request) string {
 		logUserEvent(actorID, 0, "create", email)
 		return "Korisnik napravljen: " + email
 
+	case "set-access":
+		// Rola i organizacija se menjaju zajedno, jer pojedinačno mogu da budu
+		// u zabranjenoj kombinaciji (npr. viewer → partner).
+		role, ok := validUserRole(r.FormValue("role"))
+		if !ok {
+			return "Nepoznata rola."
+		}
+		orgID, _ := strconv.ParseInt(strings.TrimSpace(r.FormValue("org_id")), 10, 64)
+		kind := ""
+		if orgID != 0 {
+			kind = orgKindOf(orgID)
+			if kind == "" {
+				return "Nepoznata organizacija."
+			}
+		}
+		if msg := validateRoleOrg(role, kind); msg != "" {
+			return msg
+		}
+		oldRole, _, err := roleOfUser(id)
+		if err != nil {
+			return "Korisnik nije nađen."
+		}
+		if oldRole == RoleAdmin && role != RoleAdmin && countActiveAdmins(id) == 0 {
+			return "Ne možeš ukinuti rolu poslednjem aktivnom administratoru."
+		}
+		tx, err := db.Begin()
+		if err != nil {
+			return "Greška: " + err.Error()
+		}
+		defer tx.Rollback()
+		if _, err := tx.Exec(`UPDATE users SET role = $1, org_id = $2, updated_at = NOW() WHERE id = $3`,
+			role, sqlNullInt64(orgID), id); err != nil {
+			return "Greška: " + err.Error()
+		}
+		if err := tx.Commit(); err != nil {
+			return "Greška: " + err.Error()
+		}
+		logUserEvent(actorID, id, "set-access", role+" / "+orgNameByID(orgID))
+		return "Rola i organizacija sačuvane."
+
 	case "set-role":
 		role, ok := validUserRole(r.FormValue("role"))
 		if !ok {

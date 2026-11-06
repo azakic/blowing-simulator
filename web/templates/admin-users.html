@@ -43,8 +43,7 @@
               <th>ID</th>
               <th>Email</th>
               <th>Status</th>
-              <th>Role</th>
-              <th>Organisation</th>
+              <th>Role &amp; organisation</th>
               <th class="num">Protocols</th>
               <th>Created</th>
               <th>Actions</th>
@@ -61,16 +60,21 @@
                 {{else if and .Status.Valid (eq .Status.String "disabled")}}<span class="pill" style="background:#eceff1;color:#455a64;">disabled</span>
                 {{else}}<span class="pill active">active</span>{{end}}
               </td>
-              <td data-label="Role"><span class="pill role-{{.Role}}">{{.Role}}</span></td>
-              <td data-label="Organisation">
-                <form method="POST" action="/admin/users" style="display:flex;gap:.35rem;">
-                  <input type="hidden" name="action" value="set-org" />
+              <td data-label="Role &amp; organisation">
+                <form method="POST" action="/admin/users" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;">
+                  <input type="hidden" name="action" value="set-access" />
                   <input type="hidden" name="id" value="{{$u.ID}}" />
-                  <select name="org_id" style="flex:1;padding:.3rem .4rem;font-size:.8rem;">
-                    <option value="" {{if not $u.OrgID.Valid}}selected{{end}}>— none —</option>
+                  <select name="role" style="padding:.3rem .4rem;font-size:.8rem;">
+                    <option value="viewer" {{if eq $u.Role "viewer"}}selected{{end}}>viewer</option>
+                    <option value="editor" {{if eq $u.Role "editor"}}selected{{end}}>editor</option>
+                    <option value="partner" {{if eq $u.Role "partner"}}selected{{end}}>partner</option>
+                    <option value="admin" {{if eq $u.Role "admin"}}selected{{end}}>admin</option>
+                  </select>
+                  <select name="org_id" style="padding:.3rem .4rem;font-size:.8rem;">
+                    <option value="" {{if not $u.OrgID.Valid}}selected{{end}}>— no organisation —</option>
                     {{range $.Orgs}}<option value="{{.ID}}" {{if and $u.OrgID.Valid (eq $u.OrgID.Int64 .ID)}}selected{{end}}>{{.Name}} ({{.Kind}})</option>{{end}}
                   </select>
-                  <button class="btn btn-ghost btn-small" type="submit">Set</button>
+                  <button class="btn btn-ghost btn-small" type="submit">Save</button>
                 </form>
                 {{if .RequestedOrg.Valid}}<div class="warn" style="font-size:.75rem;margin-top:.25rem;">Requested: {{.RequestedOrg.String}}</div>{{end}}
               </td>
@@ -112,22 +116,11 @@
                 </form>
                 {{end}}
 
-                <form method="POST" action="/admin/users" style="display:inline-flex;gap:.35rem;margin-top:.35rem;">
-                  <input type="hidden" name="action" value="set-role" />
-                  <input type="hidden" name="id" value="{{.ID}}" />
-                  <select name="role" style="padding:.3rem .4rem;font-size:.8rem;">
-                    <option value="viewer" {{if eq .Role "viewer"}}selected{{end}}>viewer</option>
-                    <option value="editor" {{if eq .Role "editor"}}selected{{end}}>editor</option>
-                    <option value="partner" {{if eq .Role "partner"}}selected{{end}}>partner</option>
-                    <option value="admin" {{if eq .Role "admin"}}selected{{end}}>admin</option>
-                  </select>
-                  <button class="btn btn-ghost btn-small" type="submit">Save role</button>
-                </form>
               </td>
             </tr>
             {{end}}
             {{if not .Users}}
-            <tr><td colspan="8" class="empty">No users found.</td></tr>
+            <tr><td colspan="7" class="empty">No users found.</td></tr>
             {{end}}
           </tbody>
         </table>
