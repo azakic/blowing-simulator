@@ -8,38 +8,139 @@
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-    <header class="topbar">
-        <a class="brand" href="/">Wolken-ASM Reports</a>
-        <input type="checkbox" id="nav-toggle" class="nav-toggle">
-        <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
-        <nav class="nav">
-            <a href="/">Dashboard</a>
-            <a href="/protocols">Protocols</a>
-            <a href="/protocols/length-report">Length Report</a>
-            <a href="/reports/projects">Project Report</a>
-            <a href="/bulk-upload">Bulk Upload</a>
-            {{if .IsAdmin}}<a href="/admin/users" class="active">Users</a><a href="/admin/orgs">Organisations</a><a href="/admin/projects">Projects</a>{{end}}
-            {{if .UserRole}}<span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
-            {{else}}<a href="/login">Login</a>{{end}}
-        </nav>
-    </header>
+  <header class="topbar">
+    <a class="brand" href="/">Wolken-ASM Reports</a>
+    <input type="checkbox" id="nav-toggle" class="nav-toggle">
+    <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
+    <nav class="nav">
+      <a href="/">Dashboard</a>
+      <a href="/protocols">Protocols</a>
+      <a href="/protocols/length-report">Length Report</a>
+      <a href="/reports/projects">Project Report</a>
+      <a href="/bulk-upload">Bulk Upload</a>
+      {{if .IsAdmin}}<a href="/admin/users" class="active">Users</a><a href="/admin/orgs">Organisations</a><a href="/admin/projects">Projects</a>{{end}}
+      {{if .UserRole}}<span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+      {{else}}<a href="/login">Login</a>{{end}}
+    </nav>
+  </header>
 
   <main class="page">
     <a class="back" href="/">← Dashboard</a>
     <div class="head">
       <div>
         <h1>Users</h1>
-        <p class="sub">Approve new registrations, set the organisation (which decides visibility and the partner's share) and manage roles. New accounts from <code>/register</code> arrive as <strong>pending</strong>.</p>
+        <p class="sub">New accounts register at <code>/register</code> with an organisation code and arrive as <strong>pending</strong>. Approve them here — set the organisation first, because it decides visibility and the partner's share.</p>
+      </div>
+    </div>
+
+    {{if .Message}}<div class="msg">{{.Message}}</div>{{end}}
+
+    <div class="table-wrap">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Email</th>
+              <th>Status</th>
+              <th>Role</th>
+              <th>Organisation</th>
+              <th class="num">Protocols</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Users}}
+            {{$u := .}}
+            <tr>
+              <td data-label="ID">{{.ID}}</td>
+              <td data-label="Email">{{.Email}}</td>
+              <td data-label="Status">
+                {{if and .Status.Valid (eq .Status.String "pending")}}<span class="pill pending">pending</span>
+                {{else if and .Status.Valid (eq .Status.String "disabled")}}<span class="pill" style="background:#eceff1;color:#455a64;">disabled</span>
+                {{else}}<span class="pill active">active</span>{{end}}
+              </td>
+              <td data-label="Role"><span class="pill role-{{.Role}}">{{.Role}}</span></td>
+              <td data-label="Organisation">
+                <form method="POST" action="/admin/users" style="display:flex;gap:.35rem;">
+                  <input type="hidden" name="action" value="set-org" />
+                  <input type="hidden" name="id" value="{{$u.ID}}" />
+                  <select name="org_id" style="flex:1;padding:.3rem .4rem;font-size:.8rem;">
+                    <option value="" {{if not $u.OrgID.Valid}}selected{{end}}>— none —</option>
+                    {{range $.Orgs}}<option value="{{.ID}}" {{if and $u.OrgID.Valid (eq $u.OrgID.Int64 .ID)}}selected{{end}}>{{.Name}} ({{.Kind}})</option>{{end}}
+                  </select>
+                  <button class="btn btn-ghost btn-small" type="submit">Set</button>
+                </form>
+                {{if .RequestedOrg.Valid}}<div class="warn" style="font-size:.75rem;margin-top:.25rem;">Requested: {{.RequestedOrg.String}}</div>{{end}}
+              </td>
+              <td data-label="Protocols" class="num">{{.Protocols}}</td>
+              <td data-label="Created"><span class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}</span></td>
+              <td data-label="Actions">
+                {{if and .Status.Valid (eq .Status.String "pending")}}
+                <form method="POST" action="/admin/users" style="display:inline;">
+                  <input type="hidden" name="action" value="approve" />
+                  <input type="hidden" name="id" value="{{.ID}}" />
+                  <button class="btn btn-primary btn-small" type="submit">Approve</button>
+                </form>
+                <form method="POST" action="/admin/users" style="display:inline;" onsubmit="return confirm('Reject and delete this pending account?');">
+                  <input type="hidden" name="action" value="reject" />
+                  <input type="hidden" name="id" value="{{.ID}}" />
+                  <button class="btn btn-danger btn-small" type="submit">Reject</button>
+                </form>
+                {{else if and .Status.Valid (eq .Status.String "disabled")}}
+                <form method="POST" action="/admin/users" style="display:inline;">
+                  <input type="hidden" name="action" value="enable" />
+                  <input type="hidden" name="id" value="{{.ID}}" />
+                  <button class="btn btn-primary btn-small" type="submit">Enable</button>
+                </form>
+                {{else}}
+                <form method="POST" action="/admin/users" style="display:inline;" onsubmit="return confirm('Deactivate this account? The person can no longer sign in.');">
+                  <input type="hidden" name="action" value="disable" />
+                  <input type="hidden" name="id" value="{{.ID}}" />
+                  <button class="btn btn-ghost btn-small" type="submit">Disable</button>
+                </form>
+                {{end}}
+
+                {{if ne .Protocols 0}}
+                <div class="muted" style="font-size:.72rem;margin-top:.25rem;">Has protocols — disable instead of deleting.</div>
+                {{else if not (and .Status.Valid (eq .Status.String "pending"))}}
+                <form method="POST" action="/admin/users" style="display:inline;" onsubmit="return confirm('Delete this account permanently?');">
+                  <input type="hidden" name="action" value="delete" />
+                  <input type="hidden" name="id" value="{{.ID}}" />
+                  <button class="btn btn-danger btn-small" type="submit">Delete</button>
+                </form>
+                {{end}}
+
+                <form method="POST" action="/admin/users" style="display:inline-flex;gap:.35rem;margin-top:.35rem;">
+                  <input type="hidden" name="action" value="set-role" />
+                  <input type="hidden" name="id" value="{{.ID}}" />
+                  <select name="role" style="padding:.3rem .4rem;font-size:.8rem;">
+                    <option value="viewer" {{if eq .Role "viewer"}}selected{{end}}>viewer</option>
+                    <option value="editor" {{if eq .Role "editor"}}selected{{end}}>editor</option>
+                    <option value="partner" {{if eq .Role "partner"}}selected{{end}}>partner</option>
+                    <option value="admin" {{if eq .Role "admin"}}selected{{end}}>admin</option>
+                  </select>
+                  <button class="btn btn-ghost btn-small" type="submit">Save role</button>
+                </form>
+              </td>
+            </tr>
+            {{end}}
+            {{if not .Users}}
+            <tr><td colspan="8" class="empty">No users found.</td></tr>
+            {{end}}
+          </tbody>
+        </table>
       </div>
     </div>
 
     <section class="panel">
-      <div class="panel-head"><h2>New user</h2><span class="hint">password is hashed with bcrypt</span></div>
+      <div class="panel-head"><h2>New user</h2><span class="hint">password is hashed with bcrypt; account is active immediately</span></div>
       <div class="panel-body">
         <form class="filters" method="POST" action="/admin/users" style="margin:0;border:0;padding:0;background:transparent;">
           <input type="hidden" name="action" value="create" />
-          <label class="field" style="flex:2 1 240px;"><span>Email</span><input name="email" type="email" required /></label>
-          <label class="field"><span>Password</span><input name="password" type="password" required /></label>
+          <label class="field" style="flex:2 1 220px;"><span>Email</span><input name="email" type="email" required /></label>
+          <label class="field"><span>Password (min. 8)</span><input name="password" type="password" minlength="8" required /></label>
           <label class="field"><span>Role</span>
             <select name="role">
               <option value="viewer">viewer (read only)</option>
@@ -54,92 +155,41 @@
     </section>
 
     <section class="panel">
-      <div class="panel-head"><h2>Reset password</h2></div>
+      <div class="panel-head"><h2>Reset password</h2><span class="hint">tell the person the new password out of band</span></div>
       <div class="panel-body">
         <form class="filters" method="POST" action="/admin/users" style="margin:0;border:0;padding:0;background:transparent;">
           <input type="hidden" name="action" value="reset-password" />
           <label class="field"><span>User ID</span><input name="id" type="number" min="1" required /></label>
-          <label class="field"><span>New password</span><input name="new_password" type="password" required /></label>
+          <label class="field"><span>New password (min. 8)</span><input name="new_password" type="password" minlength="8" required /></label>
           <button class="btn btn-primary" type="submit">Reset password</button>
         </form>
       </div>
     </section>
 
-    <div class="table-wrap">
+    <section class="panel">
+      <div class="panel-head"><h2>Recent account activity</h2><span class="hint">last 20 changes</span></div>
       <div class="table-scroll">
         <table>
           <thead>
-            <tr>
-              <th>ID</th>
-              <th>Email</th>
-              <th>Status</th>
-              <th>Role</th>
-              <th>Organisation</th>
-              <th>Created</th>
-              <th>Actions</th>
-            </tr>
+            <tr><th>When</th><th>Who</th><th>Account</th><th>Action</th><th>Detail</th></tr>
           </thead>
           <tbody>
-            {{range .Users}}
+            {{range .Events}}
             <tr>
-              <td data-label="ID">{{.ID}}</td>
-              <td data-label="Email">{{.Email}}</td>
-              <td data-label="Status">
-                {{if and .Status.Valid (eq .Status.String "pending")}}
-                <span class="pill pending">pending</span>
-                {{else}}
-                <span class="pill active">active</span>
-                {{end}}
-              </td>
-              <td data-label="Role"><span class="pill role-{{.Role}}">{{.Role}}</span></td>
-              <td data-label="Organisation">
-                {{$u := .}}
-                <form method="POST" action="/admin/users" style="display:flex;gap:.35rem;">
-                  <input type="hidden" name="action" value="set-org" />
-                  <input type="hidden" name="id" value="{{$u.ID}}" />
-                  <select name="org_id" style="flex:1;padding:.3rem .4rem;font-size:.8rem;">
-                    <option value="" {{if not $u.OrgID.Valid}}selected{{end}}>— none —</option>
-                    {{range $.Orgs}}<option value="{{.ID}}" {{if and $u.OrgID.Valid (eq $u.OrgID.Int64 .ID)}}selected{{end}}>{{.Name}} ({{.Kind}})</option>{{end}}
-                  </select>
-                  <button class="btn btn-ghost btn-small" type="submit">Set</button>
-                </form>
-                {{if .RequestedOrg.Valid}}<div class="warn" style="font-size:.75rem;margin-top:.25rem;">Requested: {{.RequestedOrg.String}}</div>{{end}}
-              </td>
-              <td data-label="Created">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
-              <td data-label="Actions">
-                {{if and .Status.Valid (eq .Status.String "pending")}}
-                <form method="POST" action="/admin/users" style="display:inline;">
-                  <input type="hidden" name="action" value="approve" />
-                  <input type="hidden" name="id" value="{{.ID}}" />
-                  <button class="btn btn-primary btn-small" type="submit">Approve</button>
-                </form>
-                <form method="POST" action="/admin/users" style="display:inline;" onsubmit="return confirm('Reject and delete this pending account?');">
-                  <input type="hidden" name="action" value="reject" />
-                  <input type="hidden" name="id" value="{{.ID}}" />
-                  <button class="btn btn-danger btn-small" type="submit">Reject</button>
-                </form>
-                {{end}}
-                <form method="POST" action="/admin/users" style="display:inline-flex;gap:.35rem;margin-top:.25rem;">
-                  <input type="hidden" name="action" value="set-role" />
-                  <input type="hidden" name="id" value="{{.ID}}" />
-                  <select name="role" style="padding:.3rem .4rem;font-size:.8rem;">
-                    <option value="viewer" {{if eq .Role "viewer"}}selected{{end}}>viewer</option>
-                    <option value="editor" {{if eq .Role "editor"}}selected{{end}}>editor</option>
-                    <option value="partner" {{if eq .Role "partner"}}selected{{end}}>partner</option>
-                    <option value="admin" {{if eq .Role "admin"}}selected{{end}}>admin</option>
-                  </select>
-                  <button class="btn btn-ghost btn-small" type="submit">Save</button>
-                </form>
-              </td>
+              <td data-label="When"><span class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}</span></td>
+              <td data-label="Who">{{if .Actor.Valid}}{{.Actor.String}}{{else}}<span class="muted">self-service</span>{{end}}</td>
+              <td data-label="Account">{{if .Target.Valid}}{{.Target.String}}{{else}}<span class="muted">—</span>{{end}}</td>
+              <td data-label="Action"><span class="pill">{{.Action}}</span></td>
+              <td data-label="Detail">{{if .Detail}}{{.Detail}}{{else}}<span class="muted">—</span>{{end}}</td>
             </tr>
             {{end}}
-            {{if not .Users}}
-            <tr><td colspan="7" class="empty">No users found.</td></tr>
+            {{if not .Events}}
+            <tr><td colspan="5" class="empty">No activity recorded yet.</td></tr>
             {{end}}
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
   </main>
 </body>
 </html>

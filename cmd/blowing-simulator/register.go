@@ -126,7 +126,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email := strings.TrimSpace(r.FormValue("email"))
+	email := strings.ToLower(strings.TrimSpace(r.FormValue("email")))
 	code := strings.TrimSpace(r.FormValue("code"))
 
 	if msg := validateRegistration(email, r.FormValue("password"), r.FormValue("password2"), code); msg != "" {
@@ -167,12 +167,14 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := db.Exec(`INSERT INTO users (email, password_hash, role, org_id, status)
-		VALUES ($1, $2, $3, $4, $5)`,
+	var newID int64
+	if err := db.Get(&newID, `INSERT INTO users (email, password_hash, role, org_id, status)
+		VALUES ($1, $2, $3, $4, $5) RETURNING id`,
 		email, string(hash), role, sqlNullInt64(orgID), UserStatusPending); err != nil {
 		renderRegister(w, r, "Registracija nije uspela. Pokušaj ponovo.", http.StatusInternalServerError)
 		return
 	}
+	logUserEvent(0, newID, "register", role)
 
 	renderRegister(w, r, "Registracija primljena. Nalog čeka odobrenje administratora.", http.StatusOK)
 }
