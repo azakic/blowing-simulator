@@ -22,6 +22,7 @@ type User struct {
 	Email        string         `db:"email"`
 	PasswordHash string         `db:"password_hash"`
 	Role         string         `db:"role"`
+	IsOrgAdmin   bool           `db:"is_org_admin"`
 	Status       sql.NullString `db:"status"`
 	RequestedOrg sql.NullString `db:"requested_org"`
 	CreatedAt    time.Time      `db:"created_at"`
@@ -271,6 +272,9 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Login failed", http.StatusInternalServerError)
 		return
 	}
+	// Poslednja prijava je jedini podatak koji partner vidi o svom čoveku —
+	// ne logujemo IP ni user-agent.
+	_, _ = db.Exec(`UPDATE users SET last_login_at = NOW() WHERE id = $1`, u.ID)
 	setAuthCookie(w, r, tok)
 	next := r.FormValue("next")
 	if next == "" {
@@ -320,4 +324,52 @@ func canAccessProtocol(role string, userID int64, owner sql.NullInt64) bool {
 		return true
 	}
 	return userID != 0 && owner.Valid && owner.Int64 == userID
+}
+
+// isOrgAdminUser kaže da li je nalog organizacijski administrator: `partner`
+// u podizvođačkoj organizaciji sa uključenim `users.is_org_admin`.
+//
+// Namerno se čita iz baze, a ne iz JWT-a: pravo se može ukinuti pre isteka
+// tokena (24 h), pa token ne sme da bude izvor istine za ovu dozvolu.
+func isOrgAdminUser(userID int64) bool {
+	if userID == 0 || db == nil {
+		return false
+	}
+	var row struct {
+		Role       string         `db:"role"`
+		IsOrgAdmin bool           `db:"is_org_admin"`
+		Kind       sql.NullString `db:"org_kind"`
+		Status     sql.NullString `db:"status"`
+	}
+	err := db.Get(&row, `SELECT u.role, u.is_org_admin, u.status, o.kind AS org_kind
+		FROM users u LEFT JOIN orgs o ON o.id = u.org_id
+		WHERE u.id = $1`, userID)
+	if err != nil {
+		return false
+	}
+	if row.Status.Valid && row.Status.String != UserStatusActive {
+		return false
+	}
+	return row.IsOrgAdmin &&
+		strings.EqualFold(row.Role, RolePartner) &&
+		row.Kind.Valid && row.Kind.String == OrgKindSubcontractor
+}
+
+// isOrgAdminRequest je ista provera za tekući zahtev (koristi se u šablonima
+// za meni i u handlerima koji prikazuju podatke o organizaciji).
+func isOrgAdminRequest(r *http.Request) bool {
+	c := GetAuthClaims(r)
+	return c != nil && isOrgAdminUser(c.UserID)
+}
+
+// requireOrgAdmin propušta samo organizacijske administratore.
+func requireOrgAdmin(handler http.HandlerFunc) http.HandlerFunc {
+	return requireAuth(func(w http.ResponseWriter, r *http.Request) {
+		c := GetAuthClaims(r)
+		if c == nil || !isOrgAdminUser(c.UserID) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	}, RolePartner)
 }

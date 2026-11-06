@@ -111,8 +111,9 @@ func navContext(r *http.Request) map[string]interface{} {
 		role = c.Role
 	}
 	return map[string]interface{}{
-		"UserRole": role,
-		"IsAdmin":  strings.EqualFold(role, RoleAdmin),
+		"UserRole":   role,
+		"IsAdmin":    strings.EqualFold(role, RoleAdmin),
+		"IsOrgAdmin": isOrgAdminRequest(r),
 	}
 }
 
@@ -149,8 +150,9 @@ func CreateFremcoHandler(w http.ResponseWriter, r *http.Request) {
 		role = claims.Role
 	}
 	data := map[string]interface{}{
-		"UserRole": role,
-		"IsAdmin":  strings.EqualFold(role, "admin"),
+		"UserRole":   role,
+		"IsAdmin":    strings.EqualFold(role, "admin"),
+		"IsOrgAdmin": isOrgAdminRequest(r),
 	}
 	tmpl.Execute(w, data)
 }
@@ -168,8 +170,9 @@ func CreateJettingHandler(w http.ResponseWriter, r *http.Request) {
 		role = claims.Role
 	}
 	data := map[string]interface{}{
-		"UserRole": role,
-		"IsAdmin":  strings.EqualFold(role, "admin"),
+		"UserRole":   role,
+		"IsAdmin":    strings.EqualFold(role, "admin"),
+		"IsOrgAdmin": isOrgAdminRequest(r),
 	}
 	tmpl.Execute(w, data)
 }
@@ -293,8 +296,9 @@ func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
 			role = claims.Role
 		}
 		data := map[string]interface{}{
-			"UserRole": role,
-			"IsAdmin":  strings.EqualFold(role, "admin"),
+			"UserRole":   role,
+			"IsAdmin":    strings.EqualFold(role, "admin"),
+			"IsOrgAdmin": isOrgAdminRequest(r),
 		}
 		tmpl.Execute(w, data)
 		return
@@ -650,8 +654,9 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 		role = claims.Role
 	}
 	data := map[string]interface{}{
-		"UserRole": role,
-		"IsAdmin":  strings.EqualFold(role, "admin"),
+		"UserRole":   role,
+		"IsAdmin":    strings.EqualFold(role, "admin"),
+		"IsOrgAdmin": isOrgAdminRequest(r),
 	}
 	_ = tmpl.Execute(w, data)
 }
@@ -787,6 +792,11 @@ func main() {
 	http.HandleFunc("/login", LoginHandler)
 	http.HandleFunc("/register", RegisterHandler)
 	http.HandleFunc("/logout", LogoutHandler)
+	// Sopstveni nalog (svi prijavljeni) i upravljanje nalozima organizacije
+	// (organizacijski admin). Zaboravljena lozinka ide preko jednokratnog linka.
+	http.HandleFunc("/account", requireAuth(AccountHandler, "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/org/users", requireOrgAdmin(OrgUsersHandler))
+	http.HandleFunc("/reset", ResetPasswordHandler)
 	http.HandleFunc("/download-json", DownloadJSONHandler)
 	// Upload/conversion requires editor+ role
 	http.HandleFunc("/pdf2text", requireAuth(Pdf2TextHandler, "editor", "partner", "admin"))
@@ -1199,7 +1209,8 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			return ""
 		}(),
-		"IsAdmin": isAdmin,
+		"IsAdmin":    isAdmin,
+		"IsOrgAdmin": isOrgAdminRequest(r),
 		// Brisanje: admin/editor brišu sve, partner samo svoje; red dobijen
 		// kroz `protocol_access` partner ne može da obriše.
 		"CurrentUserID": func() int64 {
@@ -1355,7 +1366,8 @@ func ViewProtocolHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			return ""
 		}(),
-		"IsAdmin": isAdmin,
+		"IsAdmin":    isAdmin,
+		"IsOrgAdmin": isOrgAdminRequest(r),
 	}
 	if err := tmpl.Execute(w, data); err != nil {
 		log.Printf("Error rendering protocol-detail template: %v", err)
@@ -1545,6 +1557,7 @@ func ProtocolMeasurementsHandler(w http.ResponseWriter, r *http.Request) {
 		"Limit":           limit,
 		"UserRole":        role,
 		"IsAdmin":         strings.EqualFold(role, "admin"),
+		"IsOrgAdmin":      isOrgAdminRequest(r),
 	}
 
 	err = tmpl.Execute(w, data)
@@ -1904,6 +1917,7 @@ func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
 			return ""
 		}(),
 		"IsAdmin":        isAdmin,
+		"IsOrgAdmin":     isOrgAdminRequest(r),
 		"Users":          filterUsers,
 		"CanFilterUsers": showAll,
 		"SelectedPartnerID": func() int64 {
@@ -2297,8 +2311,9 @@ func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 			role = claims.Role
 		}
 		data := map[string]interface{}{
-			"UserRole": role,
-			"IsAdmin":  strings.EqualFold(role, "admin"),
+			"UserRole":   role,
+			"IsAdmin":    strings.EqualFold(role, "admin"),
+			"IsOrgAdmin": isOrgAdminRequest(r),
 		}
 
 		err = tmpl.Execute(w, data)

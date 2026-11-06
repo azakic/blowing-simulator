@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1976d2" />
+  <title>My users - Wolken-ASM Reports</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Wolken-ASM Reports</a>
+    <input type="checkbox" id="nav-toggle" class="nav-toggle">
+    <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
+    <nav class="nav">
+      <a href="/">Dashboard</a>
+      <a href="/protocols">Protocols</a>
+      <a href="/protocols/length-report">Length Report</a>
+      <a href="/reports/projects">Project Report</a>
+      <a href="/bulk-upload">Bulk Upload</a>
+      {{if .IsOrgAdmin}}<a href="/org/users" class="active">My users</a>{{end}}
+      {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a><a href="/admin/projects">Projects</a>{{end}}
+      {{if .UserRole}}<a href="/account">Account</a><span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+      {{else}}<a href="/login">Login</a>{{end}}
+    </nav>
+  </header>
+
+  <main class="page">
+    <a class="back" href="/">← Dashboard</a>
+    <div class="head">
+      <div>
+        <h1>My users</h1>
+        <p class="sub">Accounts of <strong>{{.Org.Name}}</strong>. You approve registrations, reset passwords and deactivate accounts. Roles, organisations and projects stay with the administrator.</p>
+      </div>
+      <div class="actions">
+        <span class="pill {{if lt .Used .Max}}active{{else}}pending{{end}}">Seats {{.Used}} / {{.Max}}</span>
+      </div>
+    </div>
+
+    {{if .Message}}<div class="msg">{{.Message}}</div>{{end}}
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Registration code</h2>
+        <span class="hint">one code per organisation</span>
+      </div>
+      <div class="panel-body">
+        <p class="sub" style="margin:0 0 .6rem;">Give this code to your people. They register at <code>/register</code>, and the account lands below as <strong>pending</strong> until you approve it. A new code invalidates the old one immediately.</p>
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;">
+          <code style="font-size:1.1rem;letter-spacing:.08em;background:#eef2f7;padding:.45rem .7rem;border-radius:8px;">{{.Org.InviteCode}}</code>
+          <button type="button" class="btn btn-ghost btn-small" data-copy="{{.Org.InviteCode}}">Copy</button>
+          <form method="POST" action="/org/users" style="display:inline;" onsubmit="return confirm('Generate a new code? The current one stops working immediately.');">
+            <input type="hidden" name="action" value="rotate-code" />
+            <button class="btn btn-ghost btn-small" type="submit">New code</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <div class="table-wrap">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Status</th>
+              <th>Last login</th>
+              <th class="num">Protocols</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Users}}
+            <tr>
+              <td data-label="Email">
+                {{.Email}}
+                {{if .IsOrgAdmin}}<span class="pill role-partner">org admin</span>{{end}}
+              </td>
+              <td data-label="Status">
+                {{if and .Status.Valid (eq .Status.String "pending")}}<span class="pill pending">pending</span>
+                {{else if and .Status.Valid (eq .Status.String "disabled")}}<span class="pill" style="background:#eceff1;color:#455a64;">disabled</span>
+                {{else}}<span class="pill active">active</span>{{end}}
+              </td>
+              <td data-label="Last login">
+                {{if .LastLoginAt.Valid}}<span class="muted">{{.LastLoginAt.Time.Format "2006-01-02 15:04"}}</span>
+                {{else}}<span class="muted">never</span>{{end}}
+              </td>
+              <td data-label="Protocols" class="num">{{.Protocols}}</td>
+              <td data-label="Actions">
+                {{if and .Status.Valid (eq .Status.String "pending")}}
+                <form method="POST" action="/org/users" style="display:inline;">
+                  <input type="hidden" name="action" value="approve" />
+                  <input type="hidden" name="id" value="{{.ID}}" />
+                  <button class="btn btn-primary btn-small" type="submit">Approve</button>
+                </form>
+                <form method="POST" action="/org/users" style="display:inline;" onsubmit="return confirm('Reject and delete this request?');">
+                  <input type="hidden" name="action" value="reject" />
+                  <input type="hidden" name="id" value="{{.ID}}" />
+                  <button class="btn btn-danger btn-small" type="submit">Reject</button>
+                </form>
+                {{else}}
+                <form method="POST" action="/org/users" style="display:inline;">
+                  <input type="hidden" name="action" value="reset-link" />
+                  <input type="hidden" name="id" value="{{.ID}}" />
+                  <button class="btn btn-ghost btn-small" type="submit">Reset link</button>
+                </form>
+                {{if and .Status.Valid (eq .Status.String "disabled")}}
+                <form method="POST" action="/org/users" style="display:inline;">
+                  <input type="hidden" name="action" value="enable" />
+                  <input type="hidden" name="id" value="{{.ID}}" />
+                  <button class="btn btn-primary btn-small" type="submit">Enable</button>
+                </form>
+                {{else}}
+                <form method="POST" action="/org/users" style="display:inline;" onsubmit="return confirm('Deactivate this account?');">
+                  <input type="hidden" name="action" value="disable" />
+                  <input type="hidden" name="id" value="{{.ID}}" />
+                  <button class="btn btn-ghost btn-small" type="submit">Disable</button>
+                </form>
+                {{end}}
+                {{end}}
+              </td>
+            </tr>
+            {{else}}
+            <tr><td colspan="5"><div class="empty">No accounts in this organisation yet. Share the registration code above.</div></td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <p class="note">A reset link works once and expires after 24 hours. It is shown here only in the confirmation message — send it to the person through your usual channel, then delete the message.</p>
+  </main>
+
+  <script>
+    document.querySelectorAll('[data-copy]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        navigator.clipboard.writeText(b.getAttribute('data-copy'));
+        b.textContent = 'Copied';
+        setTimeout(function () { b.textContent = 'Copy'; }, 1500);
+      });
+    });
+  </script>
+</body>
+</html>

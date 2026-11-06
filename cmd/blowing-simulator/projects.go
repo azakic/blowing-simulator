@@ -175,6 +175,7 @@ func AdminProjectsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = tmpl.Execute(w, map[string]any{
 		"IsAdmin":        true,
+		"IsOrgAdmin":     isOrgAdminRequest(r),
 		"UserRole":       userRole(r),
 		"Projects":       projects,
 		"Orgs":           orgs,

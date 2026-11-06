@@ -24,6 +24,8 @@ type AdminUser struct {
 	OrgName      sql.NullString `db:"org_name"`
 	Status       sql.NullString `db:"status"`
 	RequestedOrg sql.NullString `db:"requested_org"`
+	IsOrgAdmin   bool           `db:"is_org_admin"`
+	LastLoginAt  sql.NullTime   `db:"last_login_at"`
 	CreatedAt    time.Time      `db:"created_at"`
 	Protocols    int            `db:"protocols"`
 }
@@ -39,7 +41,7 @@ type userEvent struct {
 func listAllUsers() ([]AdminUser, error) {
 	var users []AdminUser
 	err := db.Select(&users, `SELECT u.id, u.email, u.role, u.org_id, o.name AS org_name,
-			u.status, u.requested_org, u.created_at,
+			u.status, u.requested_org, u.is_org_admin, u.last_login_at, u.created_at,
 			(SELECT count(*) FROM protocols p WHERE p.user_id = u.id) AS protocols
 		FROM users u LEFT JOIN orgs o ON o.id = u.org_id
 		ORDER BY (u.status = 'pending') DESC, (u.status = 'disabled'), u.id`)
@@ -189,12 +191,13 @@ func AdminUsersHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = tmpl.Execute(w, map[string]any{
-		"Users":    users,
-		"Orgs":     orgs,
-		"Events":   events,
-		"IsAdmin":  true,
-		"UserRole": userRole(r),
-		"Message":  r.URL.Query().Get("msg"),
+		"Users":      users,
+		"Orgs":       orgs,
+		"Events":     events,
+		"IsAdmin":    true,
+		"IsOrgAdmin": isOrgAdminRequest(r),
+		"UserRole":   userRole(r),
+		"Message":    r.URL.Query().Get("msg"),
 	})
 }
 
@@ -234,6 +237,12 @@ func handleUserAction(r *http.Request) string {
 		if msg := validateRoleOrg(role, kind); msg != "" {
 			return msg
 		}
+		// Organizacijski admin je `partner` sa flagom; flag bez partnerske
+		// uloge ne bi imao smisla (vidi isOrgAdminUser).
+		orgAdmin := r.FormValue("is_org_admin") != ""
+		if orgAdmin && role != RolePartner {
+			return "Organizacijski admin može biti samo partner."
+		}
 		oldRole, _, err := roleOfUser(id)
 		if err != nil {
 			return "Korisnik nije nađen."
@@ -246,14 +255,19 @@ func handleUserAction(r *http.Request) string {
 			return "Greška: " + err.Error()
 		}
 		defer tx.Rollback()
-		if _, err := tx.Exec(`UPDATE users SET role = $1, org_id = $2, updated_at = NOW() WHERE id = $3`,
-			role, sqlNullInt64(orgID), id); err != nil {
+		if _, err := tx.Exec(`UPDATE users SET role = $1, org_id = $2, is_org_admin = $3,
+			updated_at = NOW() WHERE id = $4`,
+			role, sqlNullInt64(orgID), orgAdmin, id); err != nil {
 			return "Greška: " + err.Error()
 		}
 		if err := tx.Commit(); err != nil {
 			return "Greška: " + err.Error()
 		}
-		logUserEvent(actorID, id, "set-access", role+" / "+orgNameByID(orgID))
+		detail := role + " / " + orgNameByID(orgID)
+		if orgAdmin {
+			detail += " / org admin"
+		}
+		logUserEvent(actorID, id, "set-access", detail)
 		return "Rola i organizacija sačuvane."
 
 	case "set-role":
@@ -305,6 +319,17 @@ func handleUserAction(r *http.Request) string {
 		}
 		logUserEvent(actorID, id, "reset-password", "")
 		return "Lozinka promenjena."
+
+	case "reset-link":
+		if _, _, err := roleOfUser(id); err != nil {
+			return "Korisnik nije nađen."
+		}
+		link, err := createPasswordResetLink(id, actorID)
+		if err != nil {
+			return "Greška: " + err.Error()
+		}
+		logUserEvent(actorID, id, "reset-link", "")
+		return "Jednokratni link (važi 24 h): " + absoluteURL(r, link)
 
 	case "approve":
 		role, orgKind, err := roleOfUser(id)

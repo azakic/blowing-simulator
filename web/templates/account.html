@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1976d2" />
+  <title>Account - Wolken-ASM Reports</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Wolken-ASM Reports</a>
+    <input type="checkbox" id="nav-toggle" class="nav-toggle">
+    <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
+    <nav class="nav">
+      <a href="/">Dashboard</a>
+      <a href="/protocols">Protocols</a>
+      <a href="/protocols/length-report">Length Report</a>
+      <a href="/reports/projects">Project Report</a>
+      <a href="/bulk-upload">Bulk Upload</a>
+      {{if .IsOrgAdmin}}<a href="/org/users">My users</a>{{end}}
+      {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a><a href="/admin/projects">Projects</a>{{end}}
+      {{if .UserRole}}<a href="/account" class="active">Account</a><span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+      {{else}}<a href="/login">Login</a>{{end}}
+    </nav>
+  </header>
+
+  <main class="page">
+    <a class="back" href="/">← Dashboard</a>
+    <div class="head">
+      <div>
+        <h1>Account</h1>
+        <p class="sub">Your sign-in details. Roles, organisations and projects are changed by the administrator.</p>
+      </div>
+      {{if .IsOrgAdmin}}<div class="actions"><a class="btn btn-primary btn-small" href="/org/users">My users</a></div>{{end}}
+    </div>
+
+    {{if .Message}}<div class="msg">{{.Message}}</div>{{end}}
+
+    <section class="panel">
+      <div class="panel-head"><h2>Profile</h2></div>
+      <div class="panel-body">
+        <div class="kpis" style="margin:0;">
+          <div class="kpi"><div class="label">Email</div><div class="value" style="font-size:1rem;word-break:break-all;">{{.Account.Email}}</div></div>
+          <div class="kpi"><div class="label">Role</div><div class="value" style="font-size:1rem;">{{.Account.Role}}{{if .Account.IsOrgAdmin}} · org admin{{end}}</div></div>
+          <div class="kpi"><div class="label">Organisation</div><div class="value" style="font-size:1rem;">{{if .Account.OrgName.Valid}}{{.Account.OrgName.String}}{{else}}—{{end}}</div></div>
+          <div class="kpi"><div class="label">Last login</div><div class="value" style="font-size:1rem;">{{if .Account.LastLoginAt.Valid}}{{.Account.LastLoginAt.Time.Format "2006-01-02 15:04"}}{{else}}—{{end}}</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Change password</h2>
+        <span class="hint">at least 8 characters</span>
+      </div>
+      <div class="panel-body">
+        <form method="POST" action="/account">
+          <input type="hidden" name="action" value="change-password" />
+          <div class="form-grid">
+            <label class="field wide">
+              <span>Current password</span>
+              <input name="current_password" type="password" autocomplete="current-password" required />
+            </label>
+            <label class="field">
+              <span>New password</span>
+              <input name="new_password" type="password" autocomplete="new-password" minlength="8" required />
+            </label>
+            <label class="field">
+              <span>Repeat new password</span>
+              <input name="password2" type="password" autocomplete="new-password" minlength="8" required />
+            </label>
+          </div>
+          <div class="actions" style="margin-top:.9rem;">
+            <button class="btn btn-primary" type="submit">Save password</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <p class="note">Forgot the current password? Ask an administrator for a one-time reset link — it works once and expires after 24 hours.</p>
+  </main>
+</body>
+</html>

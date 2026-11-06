@@ -18,8 +18,9 @@
       <a href="/protocols/length-report">Length Report</a>
       <a href="/reports/projects">Project Report</a>
       <a href="/bulk-upload">Bulk Upload</a>
+      {{if .IsOrgAdmin}}<a href="/org/users">My users</a>{{end}}
       {{if .IsAdmin}}<a href="/admin/users" class="active">Users</a><a href="/admin/orgs">Organisations</a><a href="/admin/projects">Projects</a>{{end}}
-      {{if .UserRole}}<span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+      {{if .UserRole}}<a href="/account">Account</a><span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
       {{else}}<a href="/login">Login</a>{{end}}
     </nav>
   </header>
@@ -29,7 +30,7 @@
     <div class="head">
       <div>
         <h1>Users</h1>
-        <p class="sub">New accounts register at <code>/register</code> with an organisation code and arrive as <strong>pending</strong>. Approve them here — set the organisation first, because it decides visibility and the partner's share.</p>
+        <p class="sub">New accounts register at <code>/register</code> with an organisation code and arrive as <strong>pending</strong>. Approve them here — set the organisation first, because it decides visibility and the partner's share. A partner can be marked <strong>org admin</strong>: they then manage their own organisation's accounts at <code>/org/users</code>.</p>
       </div>
     </div>
 
@@ -54,7 +55,10 @@
             {{$u := .}}
             <tr>
               <td data-label="ID">{{.ID}}</td>
-              <td data-label="Email">{{.Email}}</td>
+              <td data-label="Email">
+                {{.Email}}
+                {{if .IsOrgAdmin}}<span class="pill role-partner">org admin</span>{{end}}
+              </td>
               <td data-label="Status">
                 {{if and .Status.Valid (eq .Status.String "pending")}}<span class="pill pending">pending</span>
                 {{else if and .Status.Valid (eq .Status.String "disabled")}}<span class="pill" style="background:#eceff1;color:#455a64;">disabled</span>
@@ -74,12 +78,21 @@
                     <option value="" {{if not $u.OrgID.Valid}}selected{{end}}>— no organisation —</option>
                     {{range $.Orgs}}<option value="{{.ID}}" {{if and $u.OrgID.Valid (eq $u.OrgID.Int64 .ID)}}selected{{end}}>{{.Name}} ({{.Kind}})</option>{{end}}
                   </select>
+                  <label style="display:inline-flex;align-items:center;gap:.3rem;font-size:.75rem;color:#455a64;">
+                    <input type="checkbox" name="is_org_admin" value="1" {{if $u.IsOrgAdmin}}checked{{end}} />
+                    org admin
+                  </label>
                   <button class="btn btn-ghost btn-small" type="submit">Save</button>
                 </form>
                 {{if .RequestedOrg.Valid}}<div class="warn" style="font-size:.75rem;margin-top:.25rem;">Requested: {{.RequestedOrg.String}}</div>{{end}}
               </td>
               <td data-label="Protocols" class="num">{{.Protocols}}</td>
-              <td data-label="Created"><span class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}</span></td>
+              <td data-label="Created">
+                <span class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}</span>
+                <div class="muted" style="font-size:.72rem;">last login:
+                  {{if .LastLoginAt.Valid}}{{.LastLoginAt.Time.Format "2006-01-02 15:04"}}{{else}}never{{end}}
+                </div>
+              </td>
               <td data-label="Actions">
                 {{if and .Status.Valid (eq .Status.String "pending")}}
                 <form method="POST" action="/admin/users" style="display:inline;">
@@ -103,6 +116,14 @@
                   <input type="hidden" name="action" value="disable" />
                   <input type="hidden" name="id" value="{{.ID}}" />
                   <button class="btn btn-ghost btn-small" type="submit">Disable</button>
+                </form>
+                {{end}}
+
+                {{if not (and .Status.Valid (eq .Status.String "pending"))}}
+                <form method="POST" action="/admin/users" style="display:inline;">
+                  <input type="hidden" name="action" value="reset-link" />
+                  <input type="hidden" name="id" value="{{.ID}}" />
+                  <button class="btn btn-ghost btn-small" type="submit">Reset link</button>
                 </form>
                 {{end}}
 

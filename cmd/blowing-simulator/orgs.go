@@ -63,6 +63,19 @@ func ensureOrgSchema(db *sqlx.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_registration_attempts ON registration_attempts(ip, created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_protocols_owner_org ON protocols(owner_org_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_protocols_provider_org ON protocols(service_provider_org_id)`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_org_admin BOOLEAN NOT NULL DEFAULT FALSE`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`,
+		`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS max_users INTEGER NOT NULL DEFAULT 10`,
+		`CREATE TABLE IF NOT EXISTS password_resets (
+			id         SERIAL PRIMARY KEY,
+			user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			token_hash TEXT NOT NULL UNIQUE,
+			created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			expires_at TIMESTAMPTZ NOT NULL,
+			used_at    TIMESTAMPTZ
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

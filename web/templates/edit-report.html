@@ -17,8 +17,9 @@
             <a href="/protocols/length-report">Length Report</a>
             <a href="/reports/projects">Project Report</a>
             <a href="/bulk-upload">Bulk Upload</a>
+            {{if .IsOrgAdmin}}<a href="/org/users">My users</a>{{end}}
             {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a><a href="/admin/projects">Projects</a>{{end}}
-            {{if .UserRole}}<span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+            {{if .UserRole}}<a href="/account">Account</a><span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
             {{else}}<a href="/login">Login</a>{{end}}
         </nav>
     </header>

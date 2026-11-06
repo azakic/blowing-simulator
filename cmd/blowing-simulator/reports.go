@@ -518,6 +518,7 @@ func ProjectReportHandler(w http.ResponseWriter, r *http.Request) {
 		"HasFilter":      f.HasAny(),
 		"UserRole":       userRole(r),
 		"IsAdmin":        isAdminRole(r),
+		"IsOrgAdmin":     isOrgAdminRequest(r),
 	})
 }
 
@@ -592,6 +593,7 @@ func ProjectReportDetailHandler(w http.ResponseWriter, r *http.Request) {
 		"HasFilter":     f.HasAny(),
 		"UserRole":      userRole(r),
 		"IsAdmin":       isAdminRole(r),
+		"IsOrgAdmin":    isOrgAdminRequest(r),
 	}
 	renderTemplate(w, "reports-project.html", data)
 }

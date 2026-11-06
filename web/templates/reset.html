@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>New password - Wolken-ASM Reports</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background:#0b1220; color:#e6edf3; }
+    .container { max-width: 420px; margin: 6rem auto; background:#111a2b; padding: 24px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
+    h1 { font-size: 1.25rem; margin: 0 0 1rem; }
+    label { display:block; font-size: .9rem; margin:.75rem 0 .25rem; color:#9fb3c8; }
+    input { width:100%; padding:10px 12px; border-radius:8px; border:1px solid #26324a; background:#0b1220; color:#e6edf3; }
+    input:focus { outline: 2px solid #2a72f7; border-color:#2a72f7; }
+    .btn { margin-top: 1rem; width:100%; padding:10px 12px; background:#2a72f7; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:600; }
+    .btn:hover { background:#1f5dd0; }
+    .sub { color:#9fb3c8; font-size:.85rem; margin-top: .75rem; text-align:center; }
+    .msg { margin-top: 1rem; padding: 10px 12px; border-radius: 8px; font-size: .9rem; background:#0f2a1a; border-left: 4px solid #2e7d32; }
+    .msg.error { background:#2a1214; border-left-color:#c62828; }
+    a { color:#7bb0ff; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Set a new password</h1>
+    {{if .Done}}
+      <div class="msg">{{.Message}}</div>
+      <div class="sub"><a href="/login">Go to sign in</a></div>
+    {{else if .Message}}
+      <div class="msg {{if .Error}}error{{end}}">{{.Message}}</div>
+      {{if .Token}}
+      <form method="POST" action="/reset">
+        <input type="hidden" name="t" value="{{.Token}}" />
+        <label for="password">New password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required />
+        <label for="password2">Repeat new password</label>
+        <input id="password2" name="password2" type="password" autocomplete="new-password" minlength="8" required />
+        <button class="btn" type="submit">Save password</button>
+      </form>
+      {{else}}
+      <div class="sub"><a href="/login">Back to sign in</a></div>
+      {{end}}
+    {{else}}
+      <div class="sub">Link for <strong>{{.Email}}</strong></div>
+      <form method="POST" action="/reset">
+        <input type="hidden" name="t" value="{{.Token}}" />
+        <label for="password">New password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required />
+        <label for="password2">Repeat new password</label>
+        <input id="password2" name="password2" type="password" autocomplete="new-password" minlength="8" required />
+        <button class="btn" type="submit">Save password</button>
+      </form>
+      <div class="sub">The link works once.</div>
+    {{end}}
+  </div>
+</body>
+</html>
