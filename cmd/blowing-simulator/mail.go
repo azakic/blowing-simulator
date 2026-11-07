@@ -127,7 +127,10 @@ func (m *mailer) Send(to []string, subject, text string) {
 		if err := m.send(to, subject, text); err != nil {
 			// Sadržaj poruke se ne loguje (može sadržati jednokratni link).
 			log.Printf("mail: slanje na %d primaoca nije uspelo: %v", len(to), err)
+			return
 		}
+		// Potvrda da je provajder prihvatio poruku — bez sadržaja i bez adresa.
+		log.Printf("mail: poslato (primalaca: %d, subject: %q)", len(to), subject)
 	}()
 }
 
