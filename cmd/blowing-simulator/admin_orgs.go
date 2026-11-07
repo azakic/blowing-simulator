@@ -20,6 +20,8 @@ type OrgStat struct {
 	Credited   int            `db:"credited"`
 	Company    int            `db:"company"`
 	InviteCode sql.NullString `db:"invite_code"`
+	MaxUsers   int            `db:"max_users"`
+	SeatsUsed  int            `db:"seats_used"`
 	Aliases    []string       `db:"-"`
 }
 
@@ -132,6 +134,24 @@ func handleOrgAction(r *http.Request) string {
 		}
 		return "Tip organizacije promenjen."
 
+	case "set-seats":
+		orgID, _ := strconv.ParseInt(r.FormValue("org_id"), 10, 64)
+		max, err := strconv.Atoi(strings.TrimSpace(r.FormValue("max_users")))
+		if orgID <= 0 || err != nil || max < 1 || max > 1000 {
+			return "Broj mesta mora biti između 1 i 1000."
+		}
+		used, _ := orgSeatUsage(orgID)
+		if max < used {
+			return fmt.Sprintf("Organizacija već koristi %d mesta — limit ne može biti manji.", used)
+		}
+		if _, err := db.Exec(`UPDATE orgs SET max_users = $1 WHERE id = $2`, max, orgID); err != nil {
+			return "Greška: " + err.Error()
+		}
+		if c := GetAuthClaims(r); c != nil {
+			logUserEvent(c.UserID, 0, "set-seats", fmt.Sprintf("%s: %d", orgNameByID(orgID), max))
+		}
+		return fmt.Sprintf("Limit mesta: %d (%s)", max, orgNameByID(orgID))
+
 	case "regenerate-code":
 		orgID, _ := strconv.ParseInt(r.FormValue("org_id"), 10, 64)
 		code, err := regenerateInviteCode(orgID)
@@ -193,6 +213,9 @@ func bulkAssignOrg(r *http.Request) string {
 func orgStats() ([]OrgStat, error) {
 	var out []OrgStat
 	if err := db.Select(&out, `SELECT o.id, o.name, o.kind, o.invite_code,
+			coalesce(o.max_users, 10) AS max_users,
+			(SELECT count(*) FROM users u WHERE u.org_id = o.id
+				AND coalesce(u.status, 'active') = 'active') AS seats_used,
 			(SELECT count(*) FROM protocols p WHERE p.owner_org_id = o.id) AS owned,
 			(SELECT count(*) FROM protocols p WHERE p.service_provider_org_id = o.id) AS credited,
 			(SELECT count(*) FROM protocols p WHERE p.company_org_id = o.id) AS company

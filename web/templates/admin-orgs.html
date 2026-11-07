@@ -46,6 +46,7 @@
               <th class="num">Owned</th>
               <th class="num">Credited</th>
               <th class="num">As company</th>
+              <th class="num">Seats</th>
               <th>Registration code</th>
               <th>Aliases</th>
               <th>Kind / alias</th>
@@ -59,6 +60,16 @@
               <td data-label="Owned (uploaded by)" class="num">{{.Owned}}</td>
               <td data-label="Credited (share)" class="num">{{.Credited}}</td>
               <td data-label="As company" class="num">{{.Company}}</td>
+              <td data-label="Seats" class="num">
+                {{.SeatsUsed}} / {{.MaxUsers}}
+                <form method="POST" action="/admin/orgs" style="display:flex;gap:.25rem;justify-content:flex-end;margin-top:.3rem;">
+                  <input type="hidden" name="action" value="set-seats" />
+                  <input type="hidden" name="org_id" value="{{.ID}}" />
+                  <input name="max_users" type="number" min="1" max="1000" value="{{.MaxUsers}}"
+                         style="width:4.6rem;padding:.25rem .35rem;font-size:.8rem;border:1px solid #cfd8e3;border-radius:6px;" />
+                  <button class="btn btn-ghost btn-small" type="submit">Save</button>
+                </form>
+              </td>
               <td data-label="Registration code">
                 {{if .InviteCode.Valid}}<code class="code">{{.InviteCode.String}}</code>{{else}}<span class="warn">—</span>{{end}}
                 <div style="display:flex;gap:.35rem;margin-top:.35rem;flex-wrap:wrap;">

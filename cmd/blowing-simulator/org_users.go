@@ -277,6 +277,32 @@ func handleOrgUserAction(r *http.Request, scope int64) string {
 		logUserEvent(actorID, id, "org-enable", "")
 		return "Nalog ponovo aktivan."
 
+	case "set-org-admin":
+		makeAdmin := r.FormValue("value") == "1"
+		if makeAdmin {
+			if target.Status != UserStatusActive {
+				return "Samo aktivan nalog može biti organizacijski administrator."
+			}
+		} else if target.IsOrgAdmin && countActiveOrgAdmins(scope, id) == 0 {
+			// Isti guard kao za globalnog admina: organizacija ne sme da ostane
+			// bez osobe koja odobrava naloge.
+			return "Ne možeš ukinuti prava poslednjem organizacijskom administratoru."
+		}
+		res, err := db.Exec(`UPDATE users SET is_org_admin = $1, updated_at = NOW()
+			WHERE id = $2 AND org_id = $3`, makeAdmin, id, scope)
+		if err != nil {
+			return "Greška: " + err.Error()
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return "Korisnik nije nađen."
+		}
+		detail := "uklonjeno"
+		if makeAdmin {
+			detail = "dodeljeno"
+		}
+		logUserEvent(actorID, id, "org-set-org-admin", detail)
+		return "Prava organizacijskog administratora: " + detail + "."
+
 	case "reset-link":
 		link, err := createPasswordResetLink(id, actorID)
 		if err != nil {
