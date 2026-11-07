@@ -139,7 +139,7 @@ func EditReportHandler(w http.ResponseWriter, r *http.Request) {
 
 // Create Fremco Report page handler
 func CreateFremcoHandler(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFiles("web/templates/create-fremco.html")
+	tmpl, err := template.New("create-fremco.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/create-fremco.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -159,7 +159,7 @@ func CreateFremcoHandler(w http.ResponseWriter, r *http.Request) {
 
 // Create Jetting Report page handler
 func CreateJettingHandler(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFiles("web/templates/create-jetting.html")
+	tmpl, err := template.New("create-jetting.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/create-jetting.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -277,7 +277,7 @@ func tempPDFPath(name string) string {
 }
 
 func Pdf2TextHandler(w http.ResponseWriter, r *http.Request) {
-	tmpl := template.New("pdf2text.html").Funcs(template.FuncMap{
+	tmpl := template.New("pdf2text.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).Funcs(template.FuncMap{
 		"formatTime": func(t string) string {
 			t = strings.TrimSpace(t)
 			t = strings.ReplaceAll(t, " ", ".")
@@ -792,23 +792,23 @@ func main() {
 
 	// Javna strana, ali meni i tile-ovi zavise od role → claims ako ih ima.
 	http.HandleFunc("/", withOptionalAuth(IndexHandler))
-	http.HandleFunc("/login", LoginHandler)
-	http.HandleFunc("/register", RegisterHandler)
+	http.HandleFunc("/login", withCSRF(LoginHandler))
+	http.HandleFunc("/register", withCSRF(RegisterHandler))
 	http.HandleFunc("/logout", LogoutHandler)
 	// Sopstveni nalog (svi prijavljeni) i upravljanje nalozima organizacije
 	// (organizacijski admin). Zaboravljena lozinka ide preko jednokratnog linka.
-	http.HandleFunc("/account", requireAuth(AccountHandler, "viewer", "editor", "partner", "admin"))
-	http.HandleFunc("/org/users", requireOrgAdmin(OrgUsersHandler))
-	http.HandleFunc("/reset", ResetPasswordHandler)
+	http.HandleFunc("/account", requireAuth(withCSRF(AccountHandler), "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/org/users", requireOrgAdmin(withCSRF(OrgUsersHandler)))
+	http.HandleFunc("/reset", withCSRF(ResetPasswordHandler))
 	http.HandleFunc("/download-json", DownloadJSONHandler)
 	// Upload/conversion requires editor+ role
-	http.HandleFunc("/pdf2text", requireAuth(Pdf2TextHandler, "editor", "partner", "admin"))
+	http.HandleFunc("/pdf2text", requireAuth(withCSRF(Pdf2TextHandler), "editor", "partner", "admin"))
 	// Forme traže prijavu (i time dobijaju claims za navigaciju).
 	http.HandleFunc("/create-report", requireAuth(CreateReportHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/edit-report", requireAuth(EditReportHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/create-fremco", requireAuth(CreateFremcoHandler, "editor", "partner", "admin"))
 	http.HandleFunc("/create-jetting", requireAuth(CreateJettingHandler, "editor", "partner", "admin"))
-	http.HandleFunc("/submit-jetting-report", SubmitJettingReportHandler)
+	http.HandleFunc("/submit-jetting-report", withCSRF(SubmitJettingReportHandler))
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 	http.HandleFunc("/jetting-report", JettingReportHandler)
 	http.HandleFunc("/export-pdf", ExportPDFHandler)
@@ -817,7 +817,7 @@ func main() {
 	http.HandleFunc("/export-csv", requireAuth(ExportCSVHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols", requireAuth(ProtocolsHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/view", requireAuth(ViewProtocolHandler, "viewer", "editor", "partner", "admin"))
-	http.HandleFunc("/protocols/delete", requireAuth(DeleteProtocolHandler, "editor", "partner", "admin"))
+	http.HandleFunc("/protocols/delete", requireAuth(withCSRF(DeleteProtocolHandler), "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/source", requireAuth(DownloadSourceHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/render", requireAuth(RenderProtocolHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/measurements", requireAuth(ProtocolMeasurementsHandler, "viewer", "editor", "partner", "admin"))
@@ -827,14 +827,14 @@ func main() {
 	http.HandleFunc("/reports/projects.csv", requireAuth(ProjectReportCSVHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/reports/project.csv", requireAuth(ProjectReportDetailCSVHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/protocols/api/get", requireAuth(ProtocolGetAPIHandler, "viewer", "editor", "partner", "admin"))
-	http.HandleFunc("/admin/users", requireAuth(AdminUsersHandler, "admin"))
-	http.HandleFunc("/admin/orgs", requireAuth(AdminOrgsHandler, "admin"))
-	http.HandleFunc("/admin/projects", requireAuth(AdminProjectsHandler, "admin"))
+	http.HandleFunc("/admin/users", requireAuth(withCSRF(AdminUsersHandler), "admin"))
+	http.HandleFunc("/admin/orgs", requireAuth(withCSRF(AdminOrgsHandler), "admin"))
+	http.HandleFunc("/admin/projects", requireAuth(withCSRF(AdminProjectsHandler), "admin"))
 	// Admin utility: backfill ownership for existing protocols (NULL user_id)
 	http.HandleFunc("/admin/backfill-ownership", requireAuth(AdminBackfillOwnershipHandler, "admin"))
 	http.HandleFunc("/admin/reparse", requireAuth(AdminReparseHandler, "admin"))
 	// Bulk upload requires editor+ role
-	http.HandleFunc("/bulk-upload", requireAuth(BulkUploadHandler, "editor", "partner", "admin"))
+	http.HandleFunc("/bulk-upload", requireAuth(withCSRF(BulkUploadHandler), "editor", "partner", "admin"))
 	http.HandleFunc("/debug-pdf", DebugPDFHandler)
 	http.HandleFunc("/health", HealthCheckHandler)
 	// Dashboard stats API (viewer+)
@@ -851,22 +851,22 @@ func main() {
 
 // Protocol represents a protocol record for display
 type Protocol struct {
-	ID              int            `db:"id"`
-	ProtocolType    string         `db:"protocol_type"`
-	SystemName      sql.NullString `db:"system_name"`
-	ProtocolDate    sql.NullString `db:"protocol_date"`
-	StartTime       sql.NullString `db:"start_time"`
-	ProjectNumber   sql.NullString `db:"project_number"`
-	Company         sql.NullString `db:"company"`
-	ServiceProvider sql.NullString `db:"service_provider"`
-	Operator        sql.NullString `db:"operator"`
-	SourceFilename  sql.NullString `db:"source_filename"`
-	CreatedAt       string         `db:"created_at"`
-	UserID          sql.NullInt64  `db:"user_id"`
-	OwnerEmail      sql.NullString `db:"owner_email"`
-	SourceSHA256    sql.NullString `db:"source_sha256"`
-	ParseSource     sql.NullString `db:"parse_source"`
-	ParseWarnings   sql.NullString `db:"parse_warnings"`
+	ID               int             `db:"id"`
+	ProtocolType     string          `db:"protocol_type"`
+	SystemName       sql.NullString  `db:"system_name"`
+	ProtocolDate     sql.NullString  `db:"protocol_date"`
+	StartTime        sql.NullString  `db:"start_time"`
+	ProjectNumber    sql.NullString  `db:"project_number"`
+	Company          sql.NullString  `db:"company"`
+	ServiceProvider  sql.NullString  `db:"service_provider"`
+	Operator         sql.NullString  `db:"operator"`
+	SourceFilename   sql.NullString  `db:"source_filename"`
+	CreatedAt        string          `db:"created_at"`
+	UserID           sql.NullInt64   `db:"user_id"`
+	OwnerEmail       sql.NullString  `db:"owner_email"`
+	SourceSHA256     sql.NullString  `db:"source_sha256"`
+	ParseSource      sql.NullString  `db:"parse_source"`
+	ParseWarnings    sql.NullString  `db:"parse_warnings"`
 	ParsedAt         sql.NullString  `db:"parsed_at"`
 	OrgReview        bool            `db:"org_review"`
 	Address          sql.NullString  `db:"address"`
@@ -1173,7 +1173,7 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 	exportCSVURL := "/protocols?" + csvVals.Encode()
 
 	reNVT := regexp.MustCompile(`(?i)(NVT\s*\w+)`)
-	tmpl := template.New("protocols.html").Funcs(template.FuncMap{
+	tmpl := template.New("protocols.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).Funcs(template.FuncMap{
 		"add": func(a, b int) int { return a + b },
 		"sub": func(a, b int) int { return a - b },
 		"dateOnly": func(dateStr string) string {
@@ -2114,7 +2114,7 @@ func analyzeFilenameHints(filename string) map[string]bool {
 func BulkUploadHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		// Serve the bulk upload page
-		tmpl, err := template.ParseFiles("web/templates/bulk-upload.html")
+		tmpl, err := template.New("bulk-upload.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/bulk-upload.html")
 		if err != nil {
 			http.Error(w, "Error loading template: "+err.Error(), http.StatusInternalServerError)
 			return

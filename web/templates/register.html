@@ -32,6 +32,7 @@
     {{if .Message}}<div class="msg{{if .Error}} error{{end}}">{{.Message}}</div>{{end}}
 
     <form method="POST" action="/register">
+        <input type="hidden" name="csrf_token" value="{{csrfToken}}">
       <label for="code">Registration code</label>
       <input id="code" name="code" autocomplete="off" spellcheck="false" placeholder="e.g. 7KQ4M9XZ2PHT" required />
       <div class="note">Do not have a code? Ask us — we send it together with the contract documents.</div>

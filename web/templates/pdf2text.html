@@ -43,6 +43,7 @@
             <div class="panel-head"><h2>PDF file</h2><span class="hint">max 32 MB</span></div>
             <div class="panel-body">
                 <form action="/pdf2text" method="post" enctype="multipart/form-data" class="filters" style="margin:0;border:0;padding:0;background:transparent;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                     <label class="field" style="flex:3 1 280px;"><span>Select PDF</span>
                         <input type="file" id="pdfFile" name="pdfFile" accept="application/pdf" required />
                     </label>

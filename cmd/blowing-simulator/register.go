@@ -181,7 +181,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func renderRegister(w http.ResponseWriter, r *http.Request, message string, code int) {
-	tmpl, err := template.ParseFiles("web/templates/register.html")
+	tmpl, err := template.New("register.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/register.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return

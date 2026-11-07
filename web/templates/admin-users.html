@@ -64,6 +64,7 @@
               </td>
               <td data-label="Role &amp; organisation">
                 <form method="POST" action="/admin/users" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="set-access" />
                   <input type="hidden" name="id" value="{{$u.ID}}" />
                   <select name="role" style="padding:.3rem .4rem;font-size:.8rem;">
@@ -94,23 +95,27 @@
               <td data-label="Actions">
                 {{if and .Status.Valid (eq .Status.String "pending")}}
                 <form method="POST" action="/admin/users" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="approve" />
                   <input type="hidden" name="id" value="{{.ID}}" />
                   <button class="btn btn-primary btn-small" type="submit">Approve</button>
                 </form>
                 <form method="POST" action="/admin/users" style="display:inline;" onsubmit="return confirm('Reject and delete this pending account?');">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="reject" />
                   <input type="hidden" name="id" value="{{.ID}}" />
                   <button class="btn btn-danger btn-small" type="submit">Reject</button>
                 </form>
                 {{else if and .Status.Valid (eq .Status.String "disabled")}}
                 <form method="POST" action="/admin/users" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="enable" />
                   <input type="hidden" name="id" value="{{.ID}}" />
                   <button class="btn btn-primary btn-small" type="submit">Enable</button>
                 </form>
                 {{else}}
                 <form method="POST" action="/admin/users" style="display:inline;" onsubmit="return confirm('Deactivate this account? The person can no longer sign in.');">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="disable" />
                   <input type="hidden" name="id" value="{{.ID}}" />
                   <button class="btn btn-ghost btn-small" type="submit">Disable</button>
@@ -119,6 +124,7 @@
 
                 {{if not (and .Status.Valid (eq .Status.String "pending"))}}
                 <form method="POST" action="/admin/users" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="reset-link" />
                   <input type="hidden" name="id" value="{{.ID}}" />
                   <button class="btn btn-ghost btn-small" type="submit">Reset link</button>
@@ -129,6 +135,7 @@
                 <div class="muted" style="font-size:.72rem;margin-top:.25rem;">Has protocols — disable instead of deleting.</div>
                 {{else if not (and .Status.Valid (eq .Status.String "pending"))}}
                 <form method="POST" action="/admin/users" style="display:inline;" onsubmit="return confirm('Delete this account permanently?');">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="delete" />
                   <input type="hidden" name="id" value="{{.ID}}" />
                   <button class="btn btn-danger btn-small" type="submit">Delete</button>
@@ -150,6 +157,7 @@
       <div class="panel-head"><h2>New user</h2><span class="hint">password is hashed with bcrypt; account is active immediately</span></div>
       <div class="panel-body">
         <form class="filters" method="POST" action="/admin/users" style="margin:0;border:0;padding:0;background:transparent;">
+            <input type="hidden" name="csrf_token" value="{{csrfToken}}">
           <input type="hidden" name="action" value="create" />
           <label class="field" style="flex:2 1 220px;"><span>Email</span><input name="email" type="email" required /></label>
           <label class="field"><span>Password (min. 8)</span><input name="password" type="password" minlength="8" required /></label>
@@ -170,6 +178,7 @@
       <div class="panel-head"><h2>Reset password</h2><span class="hint">tell the person the new password out of band</span></div>
       <div class="panel-body">
         <form class="filters" method="POST" action="/admin/users" style="margin:0;border:0;padding:0;background:transparent;">
+            <input type="hidden" name="csrf_token" value="{{csrfToken}}">
           <input type="hidden" name="action" value="reset-password" />
           <label class="field"><span>User ID</span><input name="id" type="number" min="1" required /></label>
           <label class="field"><span>New password (min. 8)</span><input name="new_password" type="password" minlength="8" required /></label>

@@ -49,7 +49,7 @@ func AccountHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Account not found", http.StatusNotFound)
 		return
 	}
-	tmpl, err := template.ParseFiles("web/templates/account.html")
+	tmpl, err := template.New("account.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/account.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return

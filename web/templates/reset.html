@@ -29,6 +29,7 @@
       <div class="msg {{if .Error}}error{{end}}">{{.Message}}</div>
       {{if .Token}}
       <form method="POST" action="/reset">
+          <input type="hidden" name="csrf_token" value="{{csrfToken}}">
         <input type="hidden" name="t" value="{{.Token}}" />
         <label for="password">New password</label>
         <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required />
@@ -42,6 +43,7 @@
     {{else}}
       <div class="sub">Link for <strong>{{.Email}}</strong></div>
       <form method="POST" action="/reset">
+          <input type="hidden" name="csrf_token" value="{{csrfToken}}">
         <input type="hidden" name="t" value="{{.Token}}" />
         <label for="password">New password</label>
         <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required />

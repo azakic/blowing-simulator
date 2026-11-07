@@ -126,6 +126,7 @@
     <main class="doc">
         <a class="doc-back" href="/">← Dashboard</a>
         <form method="post" action="/submit-jetting-report">
+            <input type="hidden" name="csrf_token" value="{{csrfToken}}">
             <table>
                 <tr>
                     <th colspan="3" class="section-header">Jetting Report</th>

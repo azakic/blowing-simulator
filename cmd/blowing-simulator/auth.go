@@ -235,7 +235,7 @@ func urlQuery(s string) string {
 
 func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		tmpl, err := template.ParseFiles("web/templates/login.html")
+		tmpl, err := template.New("login.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/login.html")
 		if err != nil {
 			http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 			return

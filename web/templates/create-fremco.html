@@ -33,6 +33,7 @@
         </div>
 
         <form method="post" action="/submit-fremco">
+            <input type="hidden" name="csrf_token" value="{{csrfToken}}">
             <section class="panel">
                 <div class="panel-head"><h2>Header</h2></div>
                 <div class="panel-body">

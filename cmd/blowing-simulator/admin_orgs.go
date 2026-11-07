@@ -64,7 +64,7 @@ func AdminOrgsHandler(w http.ResponseWriter, r *http.Request) {
 		count(*) FILTER (WHERE company_org_id IS NULL)
 		FROM protocols`).Scan(&missingOwner, &missingProvider, &missingCompany)
 
-	tmpl, err := template.ParseFiles("web/templates/admin-orgs.html")
+	tmpl, err := template.New("admin-orgs.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/admin-orgs.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return

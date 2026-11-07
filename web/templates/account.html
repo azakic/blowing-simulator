@@ -54,6 +54,7 @@
       </div>
       <div class="panel-body">
         <form method="POST" action="/account">
+            <input type="hidden" name="csrf_token" value="{{csrfToken}}">
           <input type="hidden" name="action" value="change-password" />
           <div class="form-grid">
             <label class="field wide">

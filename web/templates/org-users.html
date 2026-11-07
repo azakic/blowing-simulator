@@ -48,6 +48,7 @@
           <code style="font-size:1.1rem;letter-spacing:.08em;background:#eef2f7;padding:.45rem .7rem;border-radius:8px;">{{.Org.InviteCode}}</code>
           <button type="button" class="btn btn-ghost btn-small" data-copy="{{.Org.InviteCode}}">Copy</button>
           <form method="POST" action="/org/users" style="display:inline;" onsubmit="return confirm('Generate a new code? The current one stops working immediately.');">
+              <input type="hidden" name="csrf_token" value="{{csrfToken}}">
             <input type="hidden" name="action" value="rotate-code" />
             <button class="btn btn-ghost btn-small" type="submit">New code</button>
           </form>
@@ -87,29 +88,34 @@
               <td data-label="Actions">
                 {{if and .Status.Valid (eq .Status.String "pending")}}
                 <form method="POST" action="/org/users" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="approve" />
                   <input type="hidden" name="id" value="{{.ID}}" />
                   <button class="btn btn-primary btn-small" type="submit">Approve</button>
                 </form>
                 <form method="POST" action="/org/users" style="display:inline;" onsubmit="return confirm('Reject and delete this request?');">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="reject" />
                   <input type="hidden" name="id" value="{{.ID}}" />
                   <button class="btn btn-danger btn-small" type="submit">Reject</button>
                 </form>
                 {{else}}
                 <form method="POST" action="/org/users" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="reset-link" />
                   <input type="hidden" name="id" value="{{.ID}}" />
                   <button class="btn btn-ghost btn-small" type="submit">Reset link</button>
                 </form>
                 {{if and .Status.Valid (eq .Status.String "disabled")}}
                 <form method="POST" action="/org/users" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="enable" />
                   <input type="hidden" name="id" value="{{.ID}}" />
                   <button class="btn btn-primary btn-small" type="submit">Enable</button>
                 </form>
                 {{else}}
                 <form method="POST" action="/org/users" style="display:inline;" onsubmit="return confirm('Deactivate this account?');">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="disable" />
                   <input type="hidden" name="id" value="{{.ID}}" />
                   <button class="btn btn-ghost btn-small" type="submit">Disable</button>
@@ -118,6 +124,7 @@
                 {{if and .Status.Valid (eq .Status.String "active")}}
                   {{if .IsOrgAdmin}}
                   <form method="POST" action="/org/users" style="display:inline;" onsubmit="return confirm('Remove organisation admin rights from this account?');">
+                      <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                     <input type="hidden" name="action" value="set-org-admin" />
                     <input type="hidden" name="id" value="{{.ID}}" />
                     <input type="hidden" name="value" value="0" />
@@ -125,6 +132,7 @@
                   </form>
                   {{else}}
                   <form method="POST" action="/org/users" style="display:inline;" onsubmit="return confirm('Give this account organisation admin rights?');">
+                      <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                     <input type="hidden" name="action" value="set-org-admin" />
                     <input type="hidden" name="id" value="{{.ID}}" />
                     <input type="hidden" name="value" value="1" />

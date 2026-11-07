@@ -57,6 +57,7 @@
               <td data-label="Status">
                 <span class="pill {{if eq .Status "active"}}active{{else}}pending{{end}}">{{.Status}}</span>
                 <form method="POST" action="/admin/projects" style="margin-top:.35rem;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="set-status" />
                   <input type="hidden" name="project_id" value="{{.ID}}" />
                   <input type="hidden" name="status" value="{{if eq .Status "active"}}closed{{else}}active{{end}}" />
@@ -68,6 +69,7 @@
                 {{range index $.OrgsByProject $p.ID}}
                 <span class="chip">{{.Name}} <span class="muted">({{.Role}})</span>
                   <form method="POST" action="/admin/projects" style="display:inline;">
+                      <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                     <input type="hidden" name="action" value="remove-org" />
                     <input type="hidden" name="project_id" value="{{$p.ID}}" />
                     <input type="hidden" name="org_id" value="{{.OrgID}}" />
@@ -81,6 +83,7 @@
                 {{range index $.UsersByProject $p.ID}}
                 <span class="chip">{{.Email}}
                   <form method="POST" action="/admin/projects" style="display:inline;">
+                      <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                     <input type="hidden" name="action" value="remove-user" />
                     <input type="hidden" name="project_id" value="{{$p.ID}}" />
                     <input type="hidden" name="user_id" value="{{.UserID}}" />
@@ -92,6 +95,7 @@
               </td>
               <td data-label="Assign">
                 <form method="POST" action="/admin/projects" style="display:flex;gap:.3rem;margin-bottom:.35rem;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="add-org" />
                   <input type="hidden" name="project_id" value="{{.ID}}" />
                   <select name="org_id" style="padding:.3rem .4rem;font-size:.8rem;">
@@ -105,6 +109,7 @@
                   <button class="btn btn-ghost btn-small" type="submit">+ company</button>
                 </form>
                 <form method="POST" action="/admin/projects" style="display:flex;gap:.3rem;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="add-user" />
                   <input type="hidden" name="project_id" value="{{.ID}}" />
                   <select name="user_id" style="padding:.3rem .4rem;font-size:.8rem;">
@@ -127,6 +132,7 @@
       <div class="panel-head"><h2>New project</h2><span class="hint">protocols with the same project number are linked automatically</span></div>
       <div class="panel-body">
         <form class="filters" method="POST" action="/admin/projects" style="margin:0;border:0;padding:0;background:transparent;">
+            <input type="hidden" name="csrf_token" value="{{csrfToken}}">
           <input type="hidden" name="action" value="create" />
           <label class="field"><span>Project number</span><input name="number" placeholder="SM209214964" required /></label>
           <label class="field" style="flex:2 1 260px;"><span>Name (optional)</span><input name="name" placeholder="Oldenburger Koppel" /></label>

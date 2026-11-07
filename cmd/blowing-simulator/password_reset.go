@@ -125,7 +125,7 @@ func ResetPasswordHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func renderReset(w http.ResponseWriter, r *http.Request, token, email, message string, code int) {
-	tmpl, err := template.ParseFiles("web/templates/reset.html")
+	tmpl, err := template.New("reset.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/reset.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return

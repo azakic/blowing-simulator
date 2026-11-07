@@ -137,6 +137,7 @@
                                 {{end}}
                                 {{if or $.CanDeleteAny (and .UserID.Valid (eq .UserID.Int64 $.CurrentUserID))}}
                                 <form method="POST" action="/protocols/delete" style="display:inline;" onsubmit="return confirm('Delete this protocol? This cannot be undone.');">
+                                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                                     <input type="hidden" name="id" value="{{.ID}}">
                                     <button type="submit" class="btn btn-danger btn-small">Delete</button>
                                 </form>

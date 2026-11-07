@@ -178,7 +178,7 @@ func OrgUsersHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	used, max := orgSeatUsage(scope)
 
-	tmpl, err := template.ParseFiles("web/templates/org-users.html")
+	tmpl, err := template.New("org-users.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/org-users.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return

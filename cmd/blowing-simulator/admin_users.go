@@ -185,7 +185,7 @@ func AdminUsersHandler(w http.ResponseWriter, r *http.Request) {
 	orgs, _ := listOrgs()
 	events, _ := listUserEvents(20)
 
-	tmpl, err := template.ParseFiles("web/templates/admin-users.html")
+	tmpl, err := template.New("admin-users.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/admin-users.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return

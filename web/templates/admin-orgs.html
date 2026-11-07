@@ -61,6 +61,7 @@
               <td data-label="Seats" class="num">
                 {{.SeatsUsed}} / {{.MaxUsers}}
                 <form method="POST" action="/admin/orgs" style="display:flex;gap:.25rem;justify-content:flex-end;margin-top:.3rem;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="set-seats" />
                   <input type="hidden" name="org_id" value="{{.ID}}" />
                   <input name="max_users" type="number" min="1" max="1000" value="{{.MaxUsers}}"
@@ -75,6 +76,7 @@
                   <button class="btn btn-ghost btn-small" type="button" onclick="navigator.clipboard.writeText('{{.InviteCode.String}}')">Copy</button>
                   {{end}}
                   <form method="POST" action="/admin/orgs" onsubmit="return confirm('Generate a new code? The old one stops working.');">
+                      <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                     <input type="hidden" name="action" value="regenerate-code" />
                     <input type="hidden" name="org_id" value="{{.ID}}" />
                     <button class="btn btn-danger btn-small" type="submit">{{if .InviteCode.Valid}}New code{{else}}Generate code{{end}}</button>
@@ -86,6 +88,7 @@
               </td>
               <td data-label="Kind / alias">
                 <form method="POST" action="/admin/orgs" style="display:flex;gap:.35rem;margin-bottom:.35rem;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="set-kind" />
                   <input type="hidden" name="org_id" value="{{.ID}}" />
                   <select name="kind" style="padding:.3rem .4rem;font-size:.8rem;">
@@ -96,6 +99,7 @@
                   <button class="btn btn-ghost btn-small" type="submit">Save</button>
                 </form>
                 <form method="POST" action="/admin/orgs" style="display:flex;gap:.35rem;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                   <input type="hidden" name="action" value="add-alias" />
                   <input type="hidden" name="org_id" value="{{.ID}}" />
                   <input name="alias" placeholder="new alias" style="padding:.3rem .4rem;font-size:.8rem;border:1px solid #cfd8e3;border-radius:6px;" />
@@ -113,6 +117,7 @@
       <div class="panel-head"><h2>New organisation</h2><span class="hint">the name is stored as an alias too</span></div>
       <div class="panel-body">
         <form class="filters" method="POST" action="/admin/orgs" style="margin:0;border:0;padding:0;background:transparent;">
+            <input type="hidden" name="csrf_token" value="{{csrfToken}}">
           <input type="hidden" name="action" value="create" />
           <label class="field" style="flex:2 1 240px;"><span>Name</span><input name="name" placeholder="e.g. M.A.X. Bauservice GmbH" required /></label>
           <label class="field"><span>Kind</span>
@@ -131,6 +136,7 @@
       <div class="panel-head"><h2>Assign organisation to protocols</h2><span class="hint">bulk update</span></div>
       <div class="panel-body">
         <form class="filters" method="POST" action="/admin/orgs" style="margin:0;border:0;padding:0;background:transparent;">
+            <input type="hidden" name="csrf_token" value="{{csrfToken}}">
           <input type="hidden" name="action" value="bulk-assign" />
           <label class="field" style="flex:2 1 220px;"><span>Organisation</span>
             <select name="org_id">

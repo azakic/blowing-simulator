@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1976d2">
+    <meta name="csrf-token" content="{{csrfToken}}">
     <title>Bulk Upload - Wolken-ASM Reports</title>
     <link rel="stylesheet" href="/static/app.css">
     <style>
@@ -298,6 +299,9 @@
         
         async function uploadAllFiles(options) {
             const formData = new FormData();
+
+            // CSRF: token iz meta taga (double-submit cookie).
+            formData.append('csrf_token', document.querySelector('meta[name="csrf-token"]').content);
             
             // Add all files to form data
             selectedFiles.forEach(file => {
