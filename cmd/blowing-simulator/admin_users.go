@@ -77,6 +77,13 @@ func validateRoleOrg(role, orgKind string) string {
 	return ""
 }
 
+// loadUserByID vraća dovoljno podataka za mintJWT (id, email, role).
+func loadUserByID(id int64) (User, error) {
+	var u User
+	err := db.Get(&u, `SELECT id, email, role FROM users WHERE id = $1`, id)
+	return u, err
+}
+
 func roleOfUser(id int64) (string, string, error) {
 	var row struct {
 		Role string         `db:"role"`
@@ -166,6 +173,9 @@ func resetUserPassword(id int64, newPassword string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("korisnik nije nađen")
 	}
+	// Svaka promena lozinke obara postojeće sesije (self-service strana posle
+	// toga izda novi token, vidi account.go).
+	invalidateUserSessions(id)
 	return nil
 }
 

@@ -39,7 +39,7 @@ func AccountHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodPost {
-		msg := handleAccountAction(r)
+		msg := handleAccountAction(w, r)
 		http.Redirect(w, r, "/account?msg="+url.QueryEscape(msg), http.StatusFound)
 		return
 	}
@@ -65,7 +65,7 @@ func AccountHandler(w http.ResponseWriter, r *http.Request) {
 
 // handleAccountAction menja samo lozinku sopstvenog naloga. Rola i
 // organizacija se ne mogu menjati odavde.
-func handleAccountAction(r *http.Request) string {
+func handleAccountAction(w http.ResponseWriter, r *http.Request) string {
 	c := GetAuthClaims(r)
 	if c == nil {
 		return "Sesija je istekla. Prijavi se ponovo."
@@ -89,6 +89,13 @@ func handleAccountAction(r *http.Request) string {
 	}
 	if err := resetUserPassword(c.UserID, r.FormValue("new_password")); err != nil {
 		return "Greška: " + err.Error()
+	}
+	// resetUserPassword je opozvao sve sesije; ova (koja je lozinku i
+	// promenila) odmah dobija novi token da ne bi izbacila sama sebe.
+	if u, err := loadUserByID(c.UserID); err == nil {
+		if tok, err := mintJWT(&u); err == nil {
+			setAuthCookie(w, r, tok)
+		}
 	}
 	logUserEvent(c.UserID, c.UserID, "self-password", "")
 	return "Lozinka je promenjena."

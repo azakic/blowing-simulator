@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -111,6 +112,7 @@ func mintJWT(u *User) (string, error) {
 		Email:  u.Email,
 		Role:   u.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        newCSRFToken(), // jti: slučajan ID tokena (za opoziv)
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
@@ -173,6 +175,11 @@ func requireAuth(handler http.HandlerFunc, allowedRoles ...string) http.HandlerF
 		}
 		claims, err := parseJWT(c.Value)
 		if err != nil {
+			clearAuthCookie(w)
+			http.Redirect(w, r, "/login?next="+urlQuery(r.URL.String()), http.StatusFound)
+			return
+		}
+		if !sessionStillValid(claims) {
 			clearAuthCookie(w)
 			http.Redirect(w, r, "/login?next="+urlQuery(r.URL.String()), http.StatusFound)
 			return
@@ -252,14 +259,22 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing credentials", http.StatusBadRequest)
 		return
 	}
+	ip := clientIP(r)
+	if blocked, retry := loginBlocked(ip, email); blocked {
+		w.Header().Set("Retry-After", strconv.Itoa(int(retry.Seconds())+1))
+		http.Error(w, "Too many failed sign-in attempts. Try again later.", http.StatusTooManyRequests)
+		return
+	}
 	var u User
 	err := db.Get(&u, `SELECT id, email, password_hash, role, status, requested_org, created_at
 		FROM users WHERE lower(email) = lower($1)`, email)
 	if err != nil {
+		recordLoginFailure(ip, email)
 		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
 		return
 	}
 	if err := checkPassword(u.PasswordHash, pw); err != nil {
+		recordLoginFailure(ip, email)
 		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
 		return
 	}
@@ -275,6 +290,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	// Poslednja prijava je jedini podatak koji partner vidi o svom čoveku —
 	// ne logujemo IP ni user-agent.
 	_, _ = db.Exec(`UPDATE users SET last_login_at = NOW() WHERE id = $1`, u.ID)
+	resetLoginFailures(ip, email)
 	setAuthCookie(w, r, tok)
 	next := r.FormValue("next")
 	if next == "" {
@@ -284,6 +300,12 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func LogoutHandler(w http.ResponseWriter, r *http.Request) {
+	// Opoziv važi do isteka tokena; bez toga bi kopija kolačića radila još 24 h.
+	if c, err := r.Cookie("auth_token"); err == nil && c.Value != "" {
+		if claims, err := parseJWT(c.Value); err == nil {
+			denySession(claims)
+		}
+	}
 	clearAuthCookie(w)
 	http.Redirect(w, r, "/login", http.StatusFound)
 }

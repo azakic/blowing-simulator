@@ -747,6 +747,10 @@ func main() {
 		log.Fatal("Auth initialization failed:", err)
 	}
 
+	// Brute-force zaštita i opoziv sesija: Redis ako je konfigurisan,
+	// inače memorija (vidi authguard.go).
+	authGuardState = initAuthGuard()
+
 	// Ensure ownership column exists for per-user protocol scoping
 	if err := ensureOwnershipColumn(db); err != nil {
 		log.Fatal("Failed to ensure ownership column:", err)
