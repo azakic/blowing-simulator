@@ -122,3 +122,31 @@ func TestMailerEnabledSMTP(t *testing.T) {
 		t.Fatal("smtp bez lozinke mora biti isključen")
 	}
 }
+
+func TestMailerEnabledSMTPRelay(t *testing.T) {
+	t.Setenv("MAIL_PROVIDER", "smtp")
+	t.Setenv("MAIL_FROM", "Wolken-ASM Reports <noreply@wolken-asm.de>")
+	t.Setenv("MAIL_SMTP_USER", "")
+	t.Setenv("MAIL_SMTP_PASS", "")
+	t.Setenv("MAIL_SMTP_AUTH", "none")
+	if m := NewMailerFromEnv(); !m.Enabled() {
+		t.Fatal("relay mod (MAIL_SMTP_AUTH=none) mora biti uključen bez lozinke")
+	}
+	t.Setenv("MAIL_SMTP_AUTH", "")
+	if m := NewMailerFromEnv(); m.Enabled() {
+		t.Fatal("bez AUTH=none i bez lozinke mailer mora biti isključen")
+	}
+}
+
+func TestEnvelopeAddress(t *testing.T) {
+	cases := map[string]string{
+		"Wolken-ASM Reports <noreply@wolken-asm.de>": "noreply@wolken-asm.de",
+		"noreply@wolken-asm.de":                      "noreply@wolken-asm.de",
+		"  <a@b.de>  ":                               "a@b.de",
+	}
+	for in, want := range cases {
+		if got := envelopeAddress(in); got != want {
+			t.Errorf("envelopeAddress(%q) = %q, očekivano %q", in, got, want)
+		}
+	}
+}

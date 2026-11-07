@@ -30,6 +30,7 @@ import (
 //	MAIL_SMTP_ADDR  smtp.gmail.com:587 (STARTTLS)
 //	MAIL_SMTP_USER  adresa naloga koji šalje (mora biti From ili njegov alias)
 //	MAIL_SMTP_PASS  Google app password (2FA mora biti uključen)
+//	MAIL_SMTP_AUTH  "none" → SMTP relay sa IP allowlist-om (bez lozinke)
 //	MAIL_API_KEY    Resend ključ (samo za MAIL_PROVIDER=resend)
 //	MAIL_ADMIN_TO   opciono: fiksni primaoci za admin obaveštenja (CSV);
 //	                ako nije postavljeno, koriste se svi aktivni admini
@@ -38,16 +39,17 @@ import (
 const defaultMailAPIBase = "https://api.resend.com"
 
 type mailer struct {
-	provider string
-	apiKey   string
-	from     string
-	apiBase  string
-	appURL   string
-	adminTo  []string
-	smtpAddr string
-	smtpUser string
-	smtpPass string
-	client   *http.Client
+	provider   string
+	apiKey     string
+	from       string
+	apiBase    string
+	appURL     string
+	adminTo    []string
+	smtpAddr   string
+	smtpUser   string
+	smtpPass   string
+	smtpNoAuth bool
+	client     *http.Client
 }
 
 var mail *mailer
@@ -55,15 +57,16 @@ var mail *mailer
 // NewMailerFromEnv vraća mailer ili nil kada slanje nije konfigurisano.
 func NewMailerFromEnv() *mailer {
 	m := &mailer{
-		provider: strings.ToLower(strings.TrimSpace(os.Getenv("MAIL_PROVIDER"))),
-		apiKey:   strings.TrimSpace(os.Getenv("MAIL_API_KEY")),
-		from:     strings.TrimSpace(os.Getenv("MAIL_FROM")),
-		apiBase:  strings.TrimRight(strings.TrimSpace(os.Getenv("MAIL_API_BASE")), "/"),
-		appURL:   strings.TrimRight(strings.TrimSpace(os.Getenv("APP_BASE_URL")), "/"),
-		smtpAddr: strings.TrimSpace(os.Getenv("MAIL_SMTP_ADDR")),
-		smtpUser: strings.TrimSpace(os.Getenv("MAIL_SMTP_USER")),
-		smtpPass: os.Getenv("MAIL_SMTP_PASS"),
-		client:   &http.Client{Timeout: 10 * time.Second},
+		provider:   strings.ToLower(strings.TrimSpace(os.Getenv("MAIL_PROVIDER"))),
+		apiKey:     strings.TrimSpace(os.Getenv("MAIL_API_KEY")),
+		from:       strings.TrimSpace(os.Getenv("MAIL_FROM")),
+		apiBase:    strings.TrimRight(strings.TrimSpace(os.Getenv("MAIL_API_BASE")), "/"),
+		appURL:     strings.TrimRight(strings.TrimSpace(os.Getenv("APP_BASE_URL")), "/"),
+		smtpAddr:   strings.TrimSpace(os.Getenv("MAIL_SMTP_ADDR")),
+		smtpUser:   strings.TrimSpace(os.Getenv("MAIL_SMTP_USER")),
+		smtpPass:   os.Getenv("MAIL_SMTP_PASS"),
+		smtpNoAuth: strings.EqualFold(strings.TrimSpace(os.Getenv("MAIL_SMTP_AUTH")), "none"),
+		client:     &http.Client{Timeout: 10 * time.Second},
 	}
 	if m.provider == "" {
 		m.provider = "smtp"
@@ -83,7 +86,15 @@ func NewMailerFromEnv() *mailer {
 		log.Printf("mail: disabled (%s: nedostaje konfiguracija) — no e-mail will be sent", m.provider)
 		return nil
 	}
-	log.Printf("mail: enabled via %s, from %q", m.provider, m.from)
+	mode := "app password"
+	if m.smtpNoAuth {
+		mode = "SMTP relay (no auth, IP allowlist)"
+	}
+	if strings.EqualFold(m.provider, "smtp") {
+		log.Printf("mail: enabled via smtp (%s), from %q", mode, m.from)
+	} else {
+		log.Printf("mail: enabled via %s, from %q", m.provider, m.from)
+	}
 	return m
 }
 
@@ -94,6 +105,9 @@ func (m *mailer) Enabled() bool {
 		return false
 	}
 	if strings.EqualFold(m.provider, "smtp") {
+		if m.smtpNoAuth {
+			return true // SMTP relay: identifikacija je IP allowlist, ne lozinka
+		}
 		return m.smtpUser != "" && m.smtpPass != ""
 	}
 	return m.apiKey != ""
@@ -159,12 +173,33 @@ func (m *mailer) sendSMTP(to []string, subject, text string) error {
 	if err != nil {
 		return fmt.Errorf("neispravan MAIL_SMTP_ADDR: %w", err)
 	}
-	auth := smtp.PlainAuth("", m.smtpUser, m.smtpPass, host)
+	var auth smtp.Auth
+	envelopeFrom := m.smtpUser
+	if m.smtpNoAuth {
+		// SMTP relay: server nas pušta po IP adresi; From mora biti iz našeg
+		// domena (Admin konzola: SMTP relay → "Only addresses in my domains").
+		envelopeFrom = envelopeAddress(m.from)
+		if envelopeFrom == "" {
+			return fmt.Errorf("neispravan MAIL_FROM: %q", m.from)
+		}
+	} else {
+		auth = smtp.PlainAuth("", m.smtpUser, m.smtpPass, host)
+	}
 	msg := buildMessage(m.from, to, subject, text)
-	if err := smtp.SendMail(m.smtpAddr, auth, m.smtpUser, to, msg); err != nil {
+	if err := smtp.SendMail(m.smtpAddr, auth, envelopeFrom, to, msg); err != nil {
 		return err
 	}
 	return nil
+}
+
+// envelopeAddress izvlači adresu iz `Ime <adresa>` ili vraća očišćen unos.
+func envelopeAddress(from string) string {
+	if i := strings.LastIndex(from, "<"); i >= 0 {
+		if j := strings.LastIndex(from, ">"); j > i {
+			return strings.TrimSpace(from[i+1 : j])
+		}
+	}
+	return strings.TrimSpace(from)
 }
 
 // sendResend šalje preko https://resend.com/docs/api-reference/emails/send-email
