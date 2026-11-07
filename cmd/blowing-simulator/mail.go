@@ -2,11 +2,15 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"mime"
+	"net"
 	"net/http"
+	"net/smtp"
 	"os"
 	"strings"
 	"time"
@@ -21,9 +25,12 @@ import (
 //
 // Konfiguracija (env):
 //
-//	MAIL_PROVIDER   resend (default)
-//	MAIL_API_KEY    API ključ provajdera — bez njega je slanje isključeno
-//	MAIL_FROM       "Wolken-ASM Reports <noreply@mail.wolken-asm.de>"
+//	MAIL_PROVIDER   smtp | resend   (default: smtp)
+//	MAIL_FROM       "Wolken-ASM Reports <noreply@wolken-asm.de>"
+//	MAIL_SMTP_ADDR  smtp.gmail.com:587 (STARTTLS)
+//	MAIL_SMTP_USER  adresa naloga koji šalje (mora biti From ili njegov alias)
+//	MAIL_SMTP_PASS  Google app password (2FA mora biti uključen)
+//	MAIL_API_KEY    Resend ključ (samo za MAIL_PROVIDER=resend)
 //	MAIL_ADMIN_TO   opciono: fiksni primaoci za admin obaveštenja (CSV);
 //	                ako nije postavljeno, koriste se svi aktivni admini
 //	APP_BASE_URL    npr. https://ha.wolken-asm.de (za linkove u porukama)
@@ -37,6 +44,9 @@ type mailer struct {
 	apiBase  string
 	appURL   string
 	adminTo  []string
+	smtpAddr string
+	smtpUser string
+	smtpPass string
 	client   *http.Client
 }
 
@@ -50,10 +60,16 @@ func NewMailerFromEnv() *mailer {
 		from:     strings.TrimSpace(os.Getenv("MAIL_FROM")),
 		apiBase:  strings.TrimRight(strings.TrimSpace(os.Getenv("MAIL_API_BASE")), "/"),
 		appURL:   strings.TrimRight(strings.TrimSpace(os.Getenv("APP_BASE_URL")), "/"),
+		smtpAddr: strings.TrimSpace(os.Getenv("MAIL_SMTP_ADDR")),
+		smtpUser: strings.TrimSpace(os.Getenv("MAIL_SMTP_USER")),
+		smtpPass: os.Getenv("MAIL_SMTP_PASS"),
 		client:   &http.Client{Timeout: 10 * time.Second},
 	}
 	if m.provider == "" {
-		m.provider = "resend"
+		m.provider = "smtp"
+	}
+	if m.smtpAddr == "" {
+		m.smtpAddr = "smtp.gmail.com:587"
 	}
 	if m.apiBase == "" {
 		m.apiBase = defaultMailAPIBase
@@ -63,16 +79,24 @@ func NewMailerFromEnv() *mailer {
 			m.adminTo = append(m.adminTo, a)
 		}
 	}
-	if m.apiKey == "" || m.from == "" {
-		log.Println("mail: disabled (MAIL_API_KEY / MAIL_FROM not set) — no e-mail will be sent")
+	if !m.Enabled() {
+		log.Printf("mail: disabled (%s: nedostaje konfiguracija) — no e-mail will be sent", m.provider)
 		return nil
 	}
 	log.Printf("mail: enabled via %s, from %q", m.provider, m.from)
 	return m
 }
 
+// Enabled: `smtp` traži nalog i app password, `resend` traži API ključ. U oba
+// slučaja `MAIL_FROM` je obavezan.
 func (m *mailer) Enabled() bool {
-	return m != nil && m.apiKey != "" && m.from != ""
+	if m == nil || m.from == "" {
+		return false
+	}
+	if strings.EqualFold(m.provider, "smtp") {
+		return m.smtpUser != "" && m.smtpPass != ""
+	}
+	return m.apiKey != ""
 }
 
 // Send šalje poruku u pozadini: registracija i admin akcije ne smeju da čekaju
@@ -94,10 +118,53 @@ func (m *mailer) Send(to []string, subject, text string) {
 }
 
 func (m *mailer) send(to []string, subject, text string) error {
-	if strings.EqualFold(m.provider, "resend") {
+	switch strings.ToLower(m.provider) {
+	case "smtp":
+		return m.sendSMTP(to, subject, text)
+	case "resend":
 		return m.sendResend(to, subject, text)
 	}
 	return fmt.Errorf("nepoznat MAIL_PROVIDER %q", m.provider)
+}
+
+// buildMessage pravi MIME poruku (text/plain, UTF-8). Telo je base64 jer
+// poruke sadrže naša slova (č/ć/ž/š/đ).
+func buildMessage(from string, to []string, subject, text string) []byte {
+	var b bytes.Buffer
+	b.WriteString("From: " + from + "\r\n")
+	b.WriteString("To: " + strings.Join(to, ", ") + "\r\n")
+	b.WriteString("Subject: " + mime.QEncoding.Encode("utf-8", subject) + "\r\n")
+	b.WriteString("Date: " + time.Now().Format(time.RFC1123Z) + "\r\n")
+	b.WriteString("MIME-Version: 1.0\r\n")
+	b.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
+	b.WriteString("Content-Transfer-Encoding: base64\r\n")
+	b.WriteString("Auto-Submitted: auto-generated\r\n\r\n")
+
+	enc := base64.StdEncoding.EncodeToString([]byte(text))
+	for len(enc) > 76 {
+		b.WriteString(enc[:76] + "\r\n")
+		enc = enc[76:]
+	}
+	if enc != "" {
+		b.WriteString(enc + "\r\n")
+	}
+	return b.Bytes()
+}
+
+// sendSMTP šalje preko STARTTLS (587). Port 25 se ne koristi — OCI ga blokira.
+// Envelope sender je nalog koji se autentifikuje; From header sme biti njegov
+// alias (Google to proverava).
+func (m *mailer) sendSMTP(to []string, subject, text string) error {
+	host, _, err := net.SplitHostPort(m.smtpAddr)
+	if err != nil {
+		return fmt.Errorf("neispravan MAIL_SMTP_ADDR: %w", err)
+	}
+	auth := smtp.PlainAuth("", m.smtpUser, m.smtpPass, host)
+	msg := buildMessage(m.from, to, subject, text)
+	if err := smtp.SendMail(m.smtpAddr, auth, m.smtpUser, to, msg); err != nil {
+		return err
+	}
+	return nil
 }
 
 // sendResend šalje preko https://resend.com/docs/api-reference/emails/send-email

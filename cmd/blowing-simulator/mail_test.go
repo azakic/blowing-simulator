@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -75,5 +76,49 @@ func TestNotifyResetLinkDisabled(t *testing.T) {
 	mail = nil
 	if notifyResetLink(1, "/reset?t=x") {
 		t.Fatal("bez mailera notifyResetLink mora vratiti false")
+	}
+}
+
+func TestBuildMessage(t *testing.T) {
+	msg := string(buildMessage("Wolken-ASM Reports <noreply@wolken-asm.de>",
+		[]string{"a@b.de", "c@d.de"}, "Nova registracija čeka odobrenje",
+		"Telo: čšđžć\n"))
+	for _, want := range []string{
+		"From: Wolken-ASM Reports <noreply@wolken-asm.de>\r\n",
+		"To: a@b.de, c@d.de\r\n",
+		"Subject: =?utf-8?",
+		"Content-Type: text/plain; charset=utf-8\r\n",
+		"Content-Transfer-Encoding: base64\r\n",
+		"Auto-Submitted: auto-generated\r\n",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("poruci nedostaje %q\n---\n%s", want, msg)
+		}
+	}
+	parts := strings.SplitN(msg, "\r\n\r\n", 2)
+	if len(parts) != 2 {
+		t.Fatal("nema tela poruke")
+	}
+	raw := strings.ReplaceAll(parts[1], "\r\n", "")
+	decoded, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		t.Fatalf("base64: %v", err)
+	}
+	if string(decoded) != "Telo: čšđžć\n" {
+		t.Errorf("telo = %q", string(decoded))
+	}
+}
+
+func TestMailerEnabledSMTP(t *testing.T) {
+	t.Setenv("MAIL_PROVIDER", "smtp")
+	t.Setenv("MAIL_FROM", "Wolken-ASM Reports <noreply@wolken-asm.de>")
+	t.Setenv("MAIL_SMTP_USER", "info@wolken-asm.de")
+	t.Setenv("MAIL_SMTP_PASS", "app-password")
+	if m := NewMailerFromEnv(); !m.Enabled() {
+		t.Fatal("smtp sa nalogom i lozinkom mora biti uključen")
+	}
+	t.Setenv("MAIL_SMTP_PASS", "")
+	if m := NewMailerFromEnv(); m.Enabled() {
+		t.Fatal("smtp bez lozinke mora biti isključen")
 	}
 }
