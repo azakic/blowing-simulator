@@ -240,6 +240,7 @@ func handleOrgUserAction(r *http.Request, scope int64) string {
 			return "Greška: " + err.Error()
 		}
 		logUserEvent(actorID, id, "org-approve", orgNameByID(scope))
+		notifyAccountApproved(id)
 		return "Nalog odobren."
 
 	case "reject":
@@ -309,6 +310,9 @@ func handleOrgUserAction(r *http.Request, scope int64) string {
 			return "Greška: " + err.Error()
 		}
 		logUserEvent(actorID, id, "org-reset-link", "")
+		if notifyResetLink(id, link) {
+			return "Jednokratni link je poslat na email korisnika (važi 24 h)."
+		}
 		return "Jednokratni link (važi 24 h): " + absoluteURL(r, link)
 	}
 	return "Nepoznata akcija."

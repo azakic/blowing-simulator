@@ -175,6 +175,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	logUserEvent(0, newID, "register", role)
+	notifyNewRegistration(email, orgNameByID(orgID), orgID)
 
 	renderRegister(w, r, "Registracija primljena. Nalog čeka odobrenje administratora.", http.StatusOK)
 }

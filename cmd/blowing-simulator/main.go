@@ -739,6 +739,9 @@ func main() {
 
 	log.Println("Successfully connected to database")
 
+	// E-pošta je opciona (vidi mail.go): bez MAIL_API_KEY ništa se ne šalje.
+	mail = NewMailerFromEnv()
+
 	// Initialize auth (users table + default admin)
 	if err := initAuth(db); err != nil {
 		log.Fatal("Auth initialization failed:", err)

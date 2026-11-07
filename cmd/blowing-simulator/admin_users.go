@@ -329,6 +329,9 @@ func handleUserAction(r *http.Request) string {
 			return "Greška: " + err.Error()
 		}
 		logUserEvent(actorID, id, "reset-link", "")
+		if notifyResetLink(id, link) {
+			return "Jednokratni link je poslat na email korisnika (važi 24 h)."
+		}
 		return "Jednokratni link (važi 24 h): " + absoluteURL(r, link)
 
 	case "approve":
@@ -343,6 +346,7 @@ func handleUserAction(r *http.Request) string {
 			return "Greška: " + err.Error()
 		}
 		logUserEvent(actorID, id, "approve", "")
+		notifyAccountApproved(id)
 		return "Nalog odobren."
 
 	case "reject":
