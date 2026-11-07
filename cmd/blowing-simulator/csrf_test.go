@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -135,5 +137,52 @@ func TestCSRFAllowsSafeMethods(t *testing.T) {
 		if !called {
 			t.Fatalf("%s ne sme da traži token", m)
 		}
+	}
+}
+
+func TestCSRFAcceptsMultipartToken(t *testing.T) {
+	called := false
+	h := withCSRF(func(w http.ResponseWriter, r *http.Request) { called = true })
+
+	tok := strings.Repeat("f", 64)
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	if err := mw.WriteField(csrfFormField, tok); err != nil {
+		t.Fatal(err)
+	}
+	mw.WriteField("autoSave", "false")
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/bulk-upload", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: tok})
+	h(rec, req)
+
+	if !called || rec.Code != http.StatusOK {
+		t.Fatalf("multipart token mora proći (called=%v code=%d)", called, rec.Code)
+	}
+}
+
+func TestCSRFRejectsMultipartWithoutToken(t *testing.T) {
+	called := false
+	h := withCSRF(func(w http.ResponseWriter, r *http.Request) { called = true })
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	mw.WriteField("autoSave", "false")
+	mw.Close()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/bulk-upload", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: strings.Repeat("f", 64)})
+	h(rec, req)
+
+	if called || rec.Code != http.StatusForbidden {
+		t.Fatalf("multipart bez tokena mora 403 (called=%v code=%d)", called, rec.Code)
 	}
 }
