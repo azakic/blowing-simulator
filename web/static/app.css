@@ -62,6 +62,35 @@ body {
 .head h1 { margin: 0; font-size: 1.5rem; line-height: 1.2; }
 .head .sub { margin: .25rem 0 0; color: var(--muted); font-size: .88rem; max-width: 62ch; }
 
+/* ---------- tabovi ---------- */
+.tabs {
+    display: inline-flex;
+    gap: .3rem;
+    background: #e9f0f8;
+    padding: .25rem;
+    border-radius: 10px;
+    margin-bottom: 1.1rem;
+    border: 1px solid var(--line);
+}
+.tabs a {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .45rem .95rem;
+    border-radius: 8px;
+    font-size: .88rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-decoration: none;
+    transition: all .15s ease;
+}
+.tabs a:hover { color: var(--ink); }
+.tabs a.active {
+    background: var(--surface);
+    color: var(--blue);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+}
+
 /* ---------- KPI kartice ---------- */
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; margin-bottom: 1.1rem; }
 .kpi { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--blue); border-radius: 10px; padding: .7rem .9rem; }

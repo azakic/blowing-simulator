@@ -14,8 +14,6 @@
         <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
         <nav class="nav">
             <a href="/">Dashboard</a>
-            <a href="/protocols">Protocols</a>
-            <a href="/protocols/length-report">Length Report</a>
             <a href="/reports/projects" class="active">Project Report</a>
             <a href="/bulk-upload">Bulk Upload</a>
             {{if .IsOrgAdmin}}<a href="/org/users">My users</a>{{end}}
@@ -35,7 +33,13 @@
             </div>
             <div class="actions">
                 <a class="btn btn-export" href="{{.ExportURL}}">⬇ Export CSV</a>
+                <a class="btn btn-primary" href="/bulk-upload">⬆ Import protocols</a>
             </div>
+        </div>
+
+        <div class="tabs" role="tablist">
+            <a href="/reports/projects" class="active">🏗️ By Projects</a>
+            <a href="/protocols">📄 All Protocols</a>
         </div>
 
         <section class="kpis">

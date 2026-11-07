@@ -14,8 +14,6 @@
         <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
         <nav class="nav">
             <a href="/" class="active">Dashboard</a>
-            <a href="/protocols">Protocols</a>
-            <a href="/protocols/length-report">Length Report</a>
             <a href="/reports/projects">Project Report</a>
             <a href="/bulk-upload">Bulk Upload</a>
             {{if .IsOrgAdmin}}<a href="/org/users">My users</a>{{end}}
@@ -49,20 +47,15 @@
             <div class="panel-head"><h2>Reports</h2><span class="hint">read-only views over all protocols</span></div>
             <div class="panel-body">
                 <div class="tiles">
-                    <a class="tile" href="/protocols">
-                        <span class="icon">📄</span>
-                        <span class="t">Protocols</span>
-                        <span class="d">Search, filter and open any protocol</span>
-                    </a>
-                    <a class="tile" href="/protocols/length-report">
-                        <span class="icon">📏</span>
-                        <span class="t">Length Report</span>
-                        <span class="d">Cable lengths by date and format</span>
-                    </a>
                     <a class="tile" href="/reports/projects">
                         <span class="icon">🏗️</span>
-                        <span class="t">Project Report</span>
-                        <span class="d">Fremco + Jetting merged, with each organisation's share</span>
+                        <span class="t">Project Report — By Projects</span>
+                        <span class="d">Fremco + Jetting merged by project, with each organisation's share</span>
+                    </a>
+                    <a class="tile" href="/protocols">
+                        <span class="icon">📄</span>
+                        <span class="t">Project Report — All Protocols</span>
+                        <span class="d">Search all protocols, cable lengths, NVT, addresses and CSV export</span>
                     </a>
                 </div>
             </div>

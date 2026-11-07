@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1976d2">
-    <title>Protocols - Wolken-ASM Reports</title>
+    <title>All Protocols — Project Report - Wolken-ASM Reports</title>
     <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
@@ -14,9 +14,7 @@
         <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
         <nav class="nav">
             <a href="/">Dashboard</a>
-            <a href="/protocols" class="active">Protocols</a>
-            <a href="/protocols/length-report">Length Report</a>
-            <a href="/reports/projects">Project Report</a>
+            <a href="/reports/projects" class="active">Project Report</a>
             <a href="/bulk-upload">Bulk Upload</a>
             {{if .IsOrgAdmin}}<a href="/org/users">My users</a>{{end}}
             {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a><a href="/admin/projects">Projects</a>{{end}}
@@ -30,23 +28,30 @@
 
         <div class="head">
             <div>
-                <h1>Protocols</h1>
-                <p class="sub">Searchable database of imported Fremco and Jetting protocols.</p>
+                <h1>Project Report — All Protocols</h1>
+                <p class="sub">Complete searchable database of Fremco and Jetting protocols with cable lengths, NVT, addresses and CSV export.</p>
             </div>
             <div class="actions">
+                <a class="btn btn-export" href="{{.ExportURL}}">⬇ Export CSV</a>
                 <a class="btn btn-primary" href="/bulk-upload">⬆ Import protocols</a>
             </div>
         </div>
 
+        <div class="tabs" role="tablist">
+            <a href="/reports/projects">🏗️ By Projects</a>
+            <a href="/protocols" class="active">📄 All Protocols</a>
+        </div>
+
         <section class="kpis">
-            <div class="kpi"><div class="label">Total protocols</div><div class="value">{{.TotalCount}}</div></div>
-            <div class="kpi"><div class="label">Filtered</div><div class="value">{{.ResultCount}}</div></div>
-            <div class="kpi"><div class="label">Last import</div><div class="value" style="font-size:.95rem;">{{if .LastImport}}{{.LastImport}}{{else}}—{{end}}</div></div>
+            <div class="kpi"><div class="label">Protocols</div><div class="value">{{.TotalCount}}</div></div>
+            <div class="kpi"><div class="label">Total length</div><div class="value">{{printf "%.1f" .TotalLength}} <span style="font-size:.7rem;font-weight:600;color:var(--muted);">m</span></div></div>
+            <div class="kpi"><div class="label">Max length</div><div class="value">{{printf "%.1f" .MaxLength}} <span style="font-size:.7rem;font-weight:600;color:var(--muted);">m</span></div></div>
+            <div class="kpi"><div class="label">Average length</div><div class="value">{{printf "%.1f" .AvgLength}} <span style="font-size:.7rem;font-weight:600;color:var(--muted);">m</span></div></div>
         </section>
 
         <form class="filters" method="GET" action="/protocols">
             <label class="field" style="flex:2 1 260px;"><span>Search</span>
-                <input type="text" name="search" placeholder="Company, service provider, filename or project number" value="{{.Search}}">
+                <input type="text" name="search" placeholder="Project #, NVT, address, company or filename…" value="{{.Search}}">
             </label>
             <label class="field"><span>Type</span>
                 <select name="type">
@@ -70,26 +75,25 @@
             </label>
             <label class="field"><span>From</span><input type="date" name="date_from" value="{{.DateFrom}}"></label>
             <label class="field"><span>To</span><input type="date" name="date_to" value="{{.DateTo}}"></label>
-            <button class="btn btn-primary" type="submit">Search</button>
-            {{if or .Search (ne .Type "")}}<a class="btn btn-ghost" href="/protocols">Clear</a>{{end}}
+            <button class="btn btn-primary" type="submit">Filter</button>
+            {{if .HasFilter}}<a class="btn btn-ghost" href="/protocols">Clear</a>{{end}}
         </form>
 
         <div class="table-wrap">
             {{if .Protocols}}
             <div class="table-scroll">
-                <table>
+                <table id="protocolsTable">
                     <thead>
                         <tr>
-                            <th class="sortable" onclick="sortTable('ID')">ID</th>
-                            <th class="sortable" onclick="sortTable('ProtocolType')">Type</th>
-                            <th class="sortable" onclick="sortTable('ProtocolDate')">Date</th>
-                            <th class="sortable" onclick="sortTable('StartTime')">Time</th>
-                            <th class="sortable" onclick="sortTable('SystemName')">System</th>
-                            <th class="sortable" onclick="sortTable('Company')">Company</th>
-                            <th class="sortable" onclick="sortTable('ServiceProvider')">Service provider</th>
-                            <th class="sortable" onclick="sortTable('ProjectNumber')">Project #</th>
-                            <th class="sortable" onclick="sortTable('SourceFilename')">Filename</th>
-                            <th class="sortable" onclick="sortTable('CreatedAt')">Created</th>
+                            <th class="sortable" onclick="sortTable(0)">ID</th>
+                            <th class="sortable" onclick="sortTable(1)">Type</th>
+                            <th class="sortable" onclick="sortTable(2)">Date</th>
+                            <th class="sortable" onclick="sortTable(3)">Project #</th>
+                            <th class="sortable" onclick="sortTable(4)">NVT / Section</th>
+                            <th class="sortable" onclick="sortTable(5)">Address</th>
+                            <th class="sortable num" onclick="sortTable(6)">Distance (m)</th>
+                            <th class="sortable" onclick="sortTable(7)">Company / Provider</th>
+                            <th class="sortable" onclick="sortTable(8)">Filename</th>
                             {{if .IsAdmin}}<th>Owner</th>{{end}}
                             <th>Actions</th>
                         </tr>
@@ -97,28 +101,43 @@
                     <tbody>
                         {{range .Protocols}}
                         <tr>
-                            <td data-label="ID">{{.ID}}</td>
+                            <td data-label="ID"><a class="id-link" href="/protocols/view?id={{.ID}}">#{{.ID}}</a></td>
                             <td data-label="Type"><span class="pill {{.ProtocolType}}">{{.ProtocolType}}</span></td>
-                            <td data-label="Date">{{if .ProtocolDate.Valid}}{{dateOnly .ProtocolDate.String}}{{else}}<span class="muted">—</span>{{end}}</td>
-                            <td data-label="Time">{{if .StartTime.Valid}}{{timeOnly .StartTime.String}}{{else}}<span class="muted">—</span>{{end}}</td>
-                            <td data-label="System">{{if .SystemName.Valid}}{{.SystemName.String}}{{else}}<span class="muted">—</span>{{end}}</td>
-                            <td data-label="Company">{{if .Company.Valid}}{{.Company.String}}{{else}}<span class="muted">—</span>{{end}}</td>
-                            <td data-label="Service provider">{{if .ServiceProvider.Valid}}{{.ServiceProvider.String}}{{else}}<span class="muted">—</span>{{end}}</td>
-                            <td data-label="Project #">{{if .ProjectNumber.Valid}}{{.ProjectNumber.String}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Date">
+                                {{if .ProtocolDate.Valid}}{{dateOnly .ProtocolDate.String}}{{else}}<span class="muted">—</span>{{end}}
+                                {{if .StartTime.Valid}}<span class="muted" style="font-size:.78rem;"> {{timeOnly .StartTime.String}}</span>{{end}}
+                            </td>
+                            <td data-label="Project #">
+                                {{if and .ProjectNumber.Valid (ne .ProjectNumber.String "")}}
+                                <a class="project-link" href="/reports/project?project={{.ProjectNumber.String}}">{{.ProjectNumber.String}}</a>
+                                {{else}}<span class="muted">—</span>{{end}}
+                            </td>
+                            <td data-label="NVT / Section">
+                                {{if and .SectionNVT.Valid (ne .SectionNVT.String "")}}{{.SectionNVT.String}}{{else if .SourceFilename.Valid}}{{$nvt := extractNVT .SourceFilename.String}}{{if $nvt}}{{$nvt}}{{else}}<span class="muted">—</span>{{end}}{{else}}<span class="muted">—</span>{{end}}
+                            </td>
+                            <td data-label="Address">{{if and .Address.Valid (ne .Address.String "")}}{{.Address.String}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Distance (m)" class="num">{{if .Distance.Valid}}{{printf "%.1f" .Distance.Float64}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Company / Provider">
+                                {{if and .Company.Valid (ne .Company.String "")}}<div>{{.Company.String}}</div>{{end}}
+                                {{if and .ServiceProvider.Valid (ne .ServiceProvider.String "")}}<div class="muted" style="font-size:.8rem;">↳ {{.ServiceProvider.String}}</div>{{end}}
+                                {{if and (not .Company.Valid) (not .ServiceProvider.Valid)}}<span class="muted">—</span>{{end}}
+                            </td>
                             <td data-label="Filename">
                                 {{if .SourceFilename.Valid}}<span title="{{.SourceFilename.String}}">{{.SourceFilename.String}}</span>{{else}}<span class="muted">—</span>{{end}}
-                                {{if and .ParseWarnings.Valid (ne .ParseWarnings.String "[]")}}<span title="{{.ParseWarnings.String}}" style="color:#e0a800;cursor:help;">⚠</span>{{end}}
+                                {{if and .ParseWarnings.Valid (ne .ParseWarnings.String "[]") (ne .ParseWarnings.String "")}}<span title="{{.ParseWarnings.String}}" style="color:#e0a800;cursor:help;">⚠</span>{{end}}
                                 {{if .OrgReview}}<span title="Uploaded by a partner account, but the document credits a different company — review the organisation" style="color:#c62828;cursor:help;">⚑</span>{{end}}
                             </td>
-                            <td data-label="Created">{{.CreatedAt}}</td>
                             {{if $.IsAdmin}}
                             <td data-label="Owner">{{if .OwnerEmail.Valid}}{{.OwnerEmail.String}}{{else}}<span class="muted">—</span>{{end}}</td>
                             {{end}}
-                            <td data-label="Actions">
+                            <td data-label="Actions" style="white-space:nowrap;">
                                 <a class="btn btn-ghost btn-small" href="/protocols/view?id={{.ID}}">View</a>
+                                {{if gt .MeasurementCount 0}}
+                                <a class="btn btn-ghost btn-small" href="/protocols/measurements?id={{.ID}}">Data</a>
+                                {{end}}
                                 {{if or $.CanDeleteAny (and .UserID.Valid (eq .UserID.Int64 $.CurrentUserID))}}
                                 <form method="POST" action="/protocols/delete" style="display:inline;" onsubmit="return confirm('Delete this protocol? This cannot be undone.');">
-                                    <input type="hidden" name="id" value="{{.ID}}" />
+                                    <input type="hidden" name="id" value="{{.ID}}">
                                     <button type="submit" class="btn btn-danger btn-small">Delete</button>
                                 </form>
                                 {{end}}
@@ -129,7 +148,7 @@
                 </table>
             </div>
             {{else}}
-            <p class="empty">{{if or .Search (ne .Type "")}}No protocols match these filters.{{else}}No protocols yet — import a PDF to get started.{{end}}</p>
+            <p class="empty">{{if .HasFilter}}No protocols match these filters.{{else}}No protocols yet — import a PDF to get started.{{end}}</p>
             {{end}}
 
             {{if gt .TotalPages 1}}
@@ -145,11 +164,25 @@
     </main>
 
     <script>
-        function sortTable(column) {
-            const params = new URLSearchParams(window.location.search);
-            params.set('sort', column);
-            params.set('order', params.get('order') === 'asc' ? 'desc' : 'asc');
-            window.location.search = params.toString();
+        let sortDirection = {};
+        function sortTable(colIndex) {
+            const table = document.getElementById("protocolsTable");
+            if (!table) return;
+            const tbody = table.querySelector("tbody");
+            const rows = Array.from(tbody.querySelectorAll("tr"));
+            const asc = sortDirection[colIndex] !== true;
+            sortDirection[colIndex] = asc;
+            rows.sort((a, b) => {
+                const aText = (a.cells[colIndex]?.innerText || "").trim();
+                const bText = (b.cells[colIndex]?.innerText || "").trim();
+                const aNum = parseFloat(aText.replace("#", ""));
+                const bNum = parseFloat(bText.replace("#", ""));
+                if (!isNaN(aNum) && !isNaN(bNum) && (colIndex === 0 || colIndex === 6)) {
+                    return asc ? aNum - bNum : bNum - aNum;
+                }
+                return asc ? aText.localeCompare(bText) : bText.localeCompare(aText);
+            });
+            rows.forEach(r => tbody.appendChild(r));
         }
     </script>
 </body>

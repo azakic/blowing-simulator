@@ -867,8 +867,12 @@ type Protocol struct {
 	SourceSHA256    sql.NullString `db:"source_sha256"`
 	ParseSource     sql.NullString `db:"parse_source"`
 	ParseWarnings   sql.NullString `db:"parse_warnings"`
-	ParsedAt        sql.NullString `db:"parsed_at"`
-	OrgReview       bool           `db:"org_review"`
+	ParsedAt         sql.NullString  `db:"parsed_at"`
+	OrgReview        bool            `db:"org_review"`
+	Address          sql.NullString  `db:"address"`
+	SectionNVT       sql.NullString  `db:"section_nvt"`
+	Distance         sql.NullFloat64 `db:"distance"`
+	MeasurementCount int             `db:"measurement_count"`
 }
 
 // NullTime represents a time.Time that may be null
@@ -946,37 +950,28 @@ type LengthReportData struct {
 	CreatedAt        string          `db:"created_at"`
 }
 
-// ProtocolsHandler displays list of imported protocols with search functionality
+// ProtocolsHandler displays list of imported protocols with search, length metrics, and CSV export
 func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
-	// Get search parameters
-	search := r.URL.Query().Get("search")
-	protocolType := r.URL.Query().Get("type")
-	dateFrom := r.URL.Query().Get("date_from")
-	dateTo := r.URL.Query().Get("date_to")
-	partnerIDStr := r.URL.Query().Get("partner_id")
+	search := strings.TrimSpace(r.URL.Query().Get("search"))
+	protocolType := strings.TrimSpace(r.URL.Query().Get("type"))
+	company := strings.TrimSpace(r.URL.Query().Get("company"))
+	dateFrom := strings.TrimSpace(r.URL.Query().Get("date_from"))
+	if dateFrom == "" {
+		dateFrom = strings.TrimSpace(r.URL.Query().Get("start_date"))
+	}
+	dateTo := strings.TrimSpace(r.URL.Query().Get("date_to"))
+	if dateTo == "" {
+		dateTo = strings.TrimSpace(r.URL.Query().Get("end_date"))
+	}
+	partnerIDStr := strings.TrimSpace(r.URL.Query().Get("partner_id"))
 	if partnerIDStr == "" {
-		partnerIDStr = r.URL.Query().Get("user_id") // novi naziv; partner_id ostaje alias
+		partnerIDStr = strings.TrimSpace(r.URL.Query().Get("user_id"))
 	}
 
-	// Base query (include owner email for admin display)
-	query := `
-		SELECT p.id, p.protocol_type, p.system_name, p.protocol_date, p.start_time,
-			   p.project_number, p.company, p.service_provider, p.operator,
-			   p.source_filename, p.created_at::text, p.user_id,
-			   u.email AS owner_email,
-			   coalesce(p.parse_warnings::text, '') AS parse_warnings,
-			   p.org_review
-		FROM protocols p
-		LEFT JOIN users u ON u.id = p.user_id
-		WHERE 1=1`
-	args := []interface{}{}
-	arg := 0
-
-	// Ownership filter: partners and non-admins always see only their data; admins see their own unless scope=all
-	// Vidljivost: samo partner vidi isključivo svoje; admin/editor/viewer vide sve.
 	claims := GetAuthClaims(r)
 	isAdmin := claims != nil && strings.EqualFold(claims.Role, RoleAdmin)
 	showAll := claims != nil && seesAllProtocols(claims.Role)
+
 	var selectedPartnerID int64
 	var haveSelectedPartner bool
 	if showAll && partnerIDStr != "" {
@@ -985,160 +980,199 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 			haveSelectedPartner = true
 		}
 	}
+
+	where := "WHERE 1=1"
+	var whereArgs []interface{}
+	arg := 0
+
 	if haveSelectedPartner {
 		arg++
-		query += fmt.Sprintf(" AND user_id = $%d", arg)
-		args = append(args, selectedPartnerID)
+		where += fmt.Sprintf(" AND p.user_id = $%d", arg)
+		whereArgs = append(whereArgs, selectedPartnerID)
 	} else if !showAll && claims != nil {
-		// Partner vidi: svoje, eksplicitno dodeljeno i sve protokole svoje
-		// organizacije — bilo koji nalog te firme ih je uploadovao, ili ih
-		// dokument pripisuje njoj kao podizvođaču (OWNERSHIP.md).
 		arg++
-		args = append(args, claims.UserID)
+		whereArgs = append(whereArgs, claims.UserID)
 		cond := fmt.Sprintf(`(p.user_id = $%[1]d OR EXISTS (
 			SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $%[1]d)`, arg)
 		if orgID := userOrgID(claims.UserID); orgID != 0 {
 			arg++
-			args = append(args, orgID)
+			whereArgs = append(whereArgs, orgID)
 			cond += fmt.Sprintf(" OR p.owner_org_id = $%[1]d OR p.service_provider_org_id = $%[1]d", arg)
 		}
-		query += " AND " + cond + ")"
+		where += " AND " + cond + ")"
 	}
 
 	if search != "" {
 		arg++
-		query += fmt.Sprintf(" AND (COALESCE(company,'') ILIKE $%d OR COALESCE(service_provider,'') ILIKE $%d OR COALESCE(source_filename,'') ILIKE $%d OR COALESCE(project_number,'') ILIKE $%d)", arg, arg, arg, arg)
-		args = append(args, "%"+search+"%")
+		where += fmt.Sprintf(` AND (
+			COALESCE(p.company,) ILIKE $%[1]d OR
+			COALESCE(p.service_provider,) ILIKE $%[1]d OR
+			COALESCE(p.source_filename,) ILIKE $%[1]d OR
+			COALESCE(p.project_number,) ILIKE $%[1]d OR
+			COALESCE(p.address,) ILIKE $%[1]d OR
+			COALESCE(p.section_nvt,) ILIKE $%[1]d
+		)`, arg)
+		whereArgs = append(whereArgs, "%"+search+"%")
+	}
+	if company != "" {
+		arg++
+		where += fmt.Sprintf(" AND (COALESCE(p.company,) ILIKE $%[1]d OR COALESCE(p.service_provider,) ILIKE $%[1]d)", arg)
+		whereArgs = append(whereArgs, "%"+company+"%")
 	}
 	if protocolType != "" && protocolType != "all" {
 		arg++
-		query += fmt.Sprintf(" AND protocol_type = $%d", arg)
-		args = append(args, protocolType)
+		where += fmt.Sprintf(" AND p.protocol_type = $%d", arg)
+		whereArgs = append(whereArgs, protocolType)
 	}
 	if dateFrom != "" {
 		arg++
-		query += fmt.Sprintf(" AND protocol_date >= $%d", arg)
-		args = append(args, dateFrom)
+		where += fmt.Sprintf(" AND p.protocol_date >= $%d", arg)
+		whereArgs = append(whereArgs, dateFrom)
 	}
 	if dateTo != "" {
 		arg++
-		query += fmt.Sprintf(" AND protocol_date <= $%d", arg)
-		args = append(args, dateTo)
+		where += fmt.Sprintf(" AND p.protocol_date <= $%d", arg)
+		whereArgs = append(whereArgs, dateTo)
 	}
 
-	// Count query mirrors filters (run before pagination)
-	countQuery := "SELECT COUNT(*) FROM protocols WHERE 1=1"
-	countArgs := []interface{}{}
-	cArg := 0
-	if haveSelectedPartner {
-		cArg++
-		countQuery += fmt.Sprintf(" AND user_id = $%d", cArg)
-		countArgs = append(countArgs, selectedPartnerID)
-	} else if !showAll && claims != nil {
-		cArg++
-		countArgs = append(countArgs, claims.UserID)
-		cond := fmt.Sprintf(`(protocols.user_id = $%[1]d OR EXISTS (
-			SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = protocols.id AND pa.user_id = $%[1]d)`, cArg)
-		if orgID := userOrgID(claims.UserID); orgID != 0 {
-			cArg++
-			countArgs = append(countArgs, orgID)
-			cond += fmt.Sprintf(" OR protocols.owner_org_id = $%[1]d OR protocols.service_provider_org_id = $%[1]d", cArg)
+	baseSelect := `
+		SELECT p.id, p.protocol_type, p.system_name, p.protocol_date, p.start_time,
+		       p.project_number, p.company, p.service_provider, p.operator,
+		       p.source_filename, p.created_at::text, p.user_id,
+		       u.email AS owner_email,
+		       coalesce(p.parse_warnings::text, ) AS parse_warnings,
+		       p.org_review,
+		       p.address,
+		       p.section_nvt,
+		       COALESCE((SELECT s.total_distance FROM protocol_summary s WHERE s.protocol_id = p.id),
+		                (SELECT MAX(m.length_m) FROM protocol_measurements m WHERE m.protocol_id = p.id)) AS distance,
+		       (SELECT COUNT(*) FROM protocol_measurements m WHERE m.protocol_id = p.id) AS measurement_count
+		FROM protocols p
+		LEFT JOIN users u ON u.id = p.user_id
+		` + where
+
+	// Server-side CSV export of all matching protocols
+	if r.URL.Query().Get("format") == "csv" {
+		var allProtocols []Protocol
+		csvQuery := baseSelect + " ORDER BY p.protocol_date DESC NULLS LAST, p.created_at DESC"
+		if err := db.Select(&allProtocols, csvQuery, whereArgs...); err != nil {
+			http.Error(w, "Error exporting protocols: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
-		countQuery += " AND " + cond + ")"
-	}
-	if search != "" {
-		cArg++
-		countQuery += fmt.Sprintf(" AND (COALESCE(company,'') ILIKE $%d OR COALESCE(service_provider,'') ILIKE $%d OR COALESCE(source_filename,'') ILIKE $%d OR COALESCE(project_number,'') ILIKE $%d)", cArg, cArg, cArg, cArg)
-		countArgs = append(countArgs, "%"+search+"%")
-	}
-	if protocolType != "" && protocolType != "all" {
-		cArg++
-		countQuery += fmt.Sprintf(" AND protocol_type = $%d", cArg)
-		countArgs = append(countArgs, protocolType)
-	}
-	if dateFrom != "" {
-		cArg++
-		countQuery += fmt.Sprintf(" AND protocol_date >= $%d", cArg)
-		countArgs = append(countArgs, dateFrom)
-	}
-	if dateTo != "" {
-		cArg++
-		countQuery += fmt.Sprintf(" AND protocol_date <= $%d", cArg)
-		countArgs = append(countArgs, dateTo)
-	}
-	var totalCount int
-	if err := db.Get(&totalCount, countQuery, countArgs...); err != nil {
-		totalCount = 0
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="protocols-report.csv"`)
+		cw := csv.NewWriter(w)
+		_ = cw.Write([]string{
+			"ID", "Type", "Date", "Time", "Project", "Section / NVT", "Address",
+			"Company", "Service Provider", "Operator", "Distance (m)", "Points", "Filename",
+		})
+		for _, p := range allProtocols {
+			distStr := ""
+			if p.Distance.Valid {
+				distStr = fmt.Sprintf("%.1f", p.Distance.Float64)
+			}
+			dateStr := p.ProtocolDate.String
+			if strings.Contains(dateStr, "T") {
+				dateStr = strings.Split(dateStr, "T")[0]
+			}
+			_ = cw.Write([]string{
+				strconv.Itoa(p.ID),
+				p.ProtocolType,
+				dateStr,
+				p.StartTime.String,
+				p.ProjectNumber.String,
+				p.SectionNVT.String,
+				p.Address.String,
+				p.Company.String,
+				p.ServiceProvider.String,
+				p.Operator.String,
+				distStr,
+				strconv.Itoa(p.MeasurementCount),
+				p.SourceFilename.String,
+			})
+		}
+		cw.Flush()
+		return
 	}
 
-	// Pagination calculation
+	// Summary KPIs across all matching protocols
+	summaryQuery := `
+		WITH filtered AS (
+			SELECT COALESCE((SELECT s.total_distance FROM protocol_summary s WHERE s.protocol_id = p.id),
+			                (SELECT MAX(m.length_m) FROM protocol_measurements m WHERE m.protocol_id = p.id), 0) AS dist
+			FROM protocols p
+			` + where + `
+		)
+		SELECT COUNT(*),
+		       COALESCE(SUM(dist), 0),
+		       COALESCE(MAX(dist), 0),
+		       COALESCE(AVG(NULLIF(dist, 0)), 0)
+		FROM filtered`
+	var totalCount int
+	var totalLength, maxLength, avgLength float64
+	if err := db.QueryRow(summaryQuery, whereArgs...).Scan(&totalCount, &totalLength, &maxLength, &avgLength); err != nil {
+		log.Printf("Protocols summary query error: %v", err)
+	}
+
+	// Pagination
 	page := 1
-	pageSize := 20
+	pageSize := 25
 	if p := r.URL.Query().Get("page"); p != "" {
 		if pi, err := strconv.Atoi(p); err == nil && pi > 0 {
 			page = pi
 		}
 	}
-
-	// Apply pagination to query
 	offset := (page - 1) * pageSize
-	arg++
-	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", arg)
-	args = append(args, pageSize)
-	arg++
-	query += fmt.Sprintf(" OFFSET $%d", arg)
-	args = append(args, offset)
+	queryArgs := append([]interface{}{}, whereArgs...)
+	limitArg := len(queryArgs) + 1
+	offsetArg := len(queryArgs) + 2
+	queryArgs = append(queryArgs, pageSize, offset)
+	query := baseSelect + fmt.Sprintf(" ORDER BY p.protocol_date DESC NULLS LAST, p.created_at DESC LIMIT $%d OFFSET $%d", limitArg, offsetArg)
 
 	var protocols []Protocol
-	if err := db.Select(&protocols, query, args...); err != nil {
+	if err := db.Select(&protocols, query, queryArgs...); err != nil {
 		http.Error(w, "Error fetching protocols: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Compute LastImport timestamp (formatted, no fractional seconds)
-	var lastImport sql.NullString
-	if haveSelectedPartner {
-		_ = db.Get(&lastImport, "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols WHERE user_id = $1", selectedPartnerID)
-	} else if showAll {
-		_ = db.Get(&lastImport, "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols")
-	} else if claims != nil {
-		lq := `SELECT to_char(MAX(p.created_at), 'YYYY-MM-DD HH24:MI:SS') FROM protocols p
-			WHERE (p.user_id = $1 OR EXISTS (SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $1)`
-		largs := []interface{}{claims.UserID}
-		if orgID := userOrgID(claims.UserID); orgID != 0 {
-			lq += " OR p.owner_org_id = $2 OR p.service_provider_org_id = $2"
-			largs = append(largs, orgID)
-		}
-		_ = db.Get(&lastImport, lq+")", largs...)
-	}
 	totalPages := (totalCount + pageSize - 1) / pageSize
 	pageNumbers := []int{}
 	for i := 1; i <= totalPages; i++ {
 		pageNumbers = append(pageNumbers, i)
 	}
 
-	// Build query string for link preservation
-	queryString := ""
+	// Build query string for pagination and CSV export
+	qVals := url.Values{}
 	if search != "" {
-		queryString += "&search=" + url.QueryEscape(search)
+		qVals.Set("search", search)
 	}
 	if protocolType != "" && protocolType != "all" {
-		queryString += "&type=" + url.QueryEscape(protocolType)
+		qVals.Set("type", protocolType)
 	}
-	if company := r.URL.Query().Get("company"); company != "" {
-		queryString += "&company=" + url.QueryEscape(company)
+	if company != "" {
+		qVals.Set("company", company)
 	}
 	if showAll && partnerIDStr != "" {
-		queryString += "&partner_id=" + url.QueryEscape(partnerIDStr)
+		qVals.Set("partner_id", partnerIDStr)
 	}
 	if dateFrom != "" {
-		queryString += "&date_from=" + url.QueryEscape(dateFrom)
+		qVals.Set("date_from", dateFrom)
 	}
 	if dateTo != "" {
-		queryString += "&date_to=" + url.QueryEscape(dateTo)
+		qVals.Set("date_to", dateTo)
 	}
+	queryString := ""
+	if enc := qVals.Encode(); enc != "" {
+		queryString = "&" + enc
+	}
+	csvVals := url.Values{}
+	for k, v := range qVals {
+		csvVals[k] = v
+	}
+	csvVals.Set("format", "csv")
+	exportCSVURL := "/protocols?" + csvVals.Encode()
 
-	// Render template with helpers for date/time formatting
+	reNVT := regexp.MustCompile(`(?i)(NVT\s*\w+)`)
 	tmpl := template.New("protocols.html").Funcs(template.FuncMap{
 		"add": func(a, b int) int { return a + b },
 		"sub": func(a, b int) int { return a - b },
@@ -1150,17 +1184,8 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 				dateStr = strings.Split(dateStr, "T")[0]
 			}
 			parts := strings.Split(dateStr, "-")
-			if len(parts) == 3 {
-				// Expecting YYYY-MM-DD -> DD.MM.YYYY
-				if len(parts[0]) == 4 {
-					return parts[2] + "." + parts[1] + "." + parts[0]
-				}
-			}
-			// Fallback: try to extract DD.MM.YYYY from any string
-			re := regexp.MustCompile(`(\d{2})[.\-/](\d{2})[.\-/](\d{4})`)
-			match := re.FindStringSubmatch(dateStr)
-			if len(match) == 4 {
-				return match[1] + "." + match[2] + "." + match[3]
+			if len(parts) == 3 && len(parts[0]) == 4 {
+				return parts[2] + "." + parts[1] + "." + parts[0]
 			}
 			return dateStr
 		},
@@ -1168,7 +1193,6 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 			if s == "" {
 				return ""
 			}
-			// Extract HH:MM
 			re := regexp.MustCompile(`(\d{2}):(\d{2})`)
 			match := re.FindStringSubmatch(s)
 			if len(match) >= 3 {
@@ -1176,14 +1200,19 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			return s
 		},
+		"extractNVT": func(filename string) string {
+			if m := reNVT.FindStringSubmatch(filename); len(m) > 1 {
+				return m[1]
+			}
+			return ""
+		},
 	})
 	tmpl, err := tmpl.ParseFiles("web/templates/protocols.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// Lista korisnika za filter (partneri i naši radnici) — samo za interne role.
-	// Partner je ne vidi: on ionako vidi isključivo svoje.
+
 	type simpleUser struct {
 		ID    int64  `db:"id"`
 		Email string `db:"email"`
@@ -1192,8 +1221,10 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 	var filterUsers []simpleUser
 	if showAll {
 		_ = db.Select(&filterUsers, `SELECT id, email, role FROM users
-			ORDER BY CASE WHEN role = 'partner' THEN 1 ELSE 0 END, role, email`)
+			ORDER BY CASE WHEN role = partner THEN 1 ELSE 0 END, role, email`)
 	}
+
+	hasFilter := search != "" || (protocolType != "" && protocolType != "all") || company != "" || dateFrom != "" || dateTo != "" || haveSelectedPartner
 
 	data := map[string]interface{}{
 		"Protocols":   protocols,
@@ -1201,6 +1232,11 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		"Type":        protocolType,
 		"TotalCount":  totalCount,
 		"ResultCount": len(protocols),
+		"TotalLength": totalLength,
+		"MaxLength":   maxLength,
+		"AvgLength":   avgLength,
+		"ExportURL":   exportCSVURL,
+		"HasFilter":   hasFilter,
 		"QueryString": queryString,
 		"TotalPages":  totalPages,
 		"Page":        page,
@@ -1214,8 +1250,6 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 		}(),
 		"IsAdmin":    isAdmin,
 		"IsOrgAdmin": isOrgAdminRequest(r),
-		// Brisanje: admin/editor brišu sve, partner samo svoje; red dobijen
-		// kroz `protocol_access` partner ne može da obriše.
 		"CurrentUserID": func() int64 {
 			c := GetAuthClaims(r)
 			if c != nil {
@@ -1238,10 +1272,9 @@ func ProtocolsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			return 0
 		}(),
-		"Company":    r.URL.Query().Get("company"),
-		"DateFrom":   dateFrom,
-		"DateTo":     dateTo,
-		"LastImport": lastImport.String,
+		"Company":  company,
+		"DateFrom": dateFrom,
+		"DateTo":   dateTo,
 	}
 	if err := tmpl.Execute(w, data); err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
@@ -1691,251 +1724,30 @@ func AdminBackfillOwnershipHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// LengthReportHandler displays length reports with date filtering and format selection
+// LengthReportHandler redirects legacy /protocols/length-report links to the unified /protocols view.
 func LengthReportHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("LengthReportHandler called with URL: %s, Query: %s", r.URL.Path, r.URL.RawQuery)
-
-	// Get filter parameters
-	startDate := r.URL.Query().Get("start_date")
-	endDate := r.URL.Query().Get("end_date")
-	includeFremco := r.URL.Query().Get("fremco") == "on" || r.URL.Query().Get("fremco") == "true"
-	includeJetting := r.URL.Query().Get("jetting") == "on" || r.URL.Query().Get("jetting") == "true"
-	partnerIDStr := r.URL.Query().Get("partner_id")
-	if partnerIDStr == "" {
-		partnerIDStr = r.URL.Query().Get("user_id") // novi naziv; partner_id ostaje alias
+	q := url.Values{}
+	if v := r.URL.Query().Get("start_date"); v != "" {
+		q.Set("date_from", v)
 	}
-
-	// Default to both if none selected
-	if !includeFremco && !includeJetting {
-		includeFremco = true
-		includeJetting = true
+	if v := r.URL.Query().Get("end_date"); v != "" {
+		q.Set("date_to", v)
 	}
-
-	// Build query
-	query := `
-		SELECT 
-			p.id as protocol_id,
-			p.protocol_type,
-			p.protocol_date,
-			p.company,
-			p.service_provider,
-			p.source_filename,
-			p.address,
-			COALESCE(MAX(m.length_m), 0) as max_length,
-			COALESCE(MIN(m.length_m), 0) as min_length,
-			COALESCE(AVG(m.length_m), 0) as avg_length,
-			COUNT(m.id) as measurement_count,
-			COALESCE(SUM(m.length_m), 0) as total_length,
-			p.created_at::text
-		FROM protocols p
-		LEFT JOIN protocol_measurements m ON p.id = m.protocol_id
-		WHERE 1=1`
-
-	args := []interface{}{}
-	argCount := 0
-
-	claims := GetAuthClaims(r)
-	isAdmin := claims != nil && strings.EqualFold(claims.Role, RoleAdmin)
-	showAll := claims != nil && seesAllProtocols(claims.Role)
-
-	// Add date filters
-	if startDate != "" {
-		argCount++
-		query += fmt.Sprintf(" AND p.protocol_date >= $%d", argCount)
-		args = append(args, startDate)
+	if v := r.URL.Query().Get("partner_id"); v != "" {
+		q.Set("partner_id", v)
 	}
-
-	if endDate != "" {
-		argCount++
-		query += fmt.Sprintf(" AND p.protocol_date <= $%d", argCount)
-		args = append(args, endDate)
+	fremco := r.URL.Query().Get("fremco") == "on" || r.URL.Query().Get("fremco") == "true"
+	jetting := r.URL.Query().Get("jetting") == "on" || r.URL.Query().Get("jetting") == "true"
+	if fremco && !jetting {
+		q.Set("type", "fremco")
+	} else if jetting && !fremco {
+		q.Set("type", "jetting")
 	}
-
-	// Add format filters
-	var formatConditions []string
-	if includeFremco {
-		formatConditions = append(formatConditions, "p.protocol_type = 'fremco'")
+	target := "/protocols"
+	if enc := q.Encode(); enc != "" {
+		target += "?" + enc
 	}
-	if includeJetting {
-		formatConditions = append(formatConditions, "p.protocol_type = 'jetting'")
-	}
-
-	if len(formatConditions) > 0 {
-		query += " AND (" + strings.Join(formatConditions, " OR ") + ")"
-	}
-
-	// Ownership filter: partners ALWAYS see only their own data (no scope override)
-	var selectedPartnerID int64
-	var haveSelectedPartner bool
-	if showAll && partnerIDStr != "" {
-		if v, err := strconv.ParseInt(partnerIDStr, 10, 64); err == nil && v > 0 {
-			selectedPartnerID = v
-			haveSelectedPartner = true
-		}
-	}
-	if haveSelectedPartner {
-		argCount++
-		query += fmt.Sprintf(" AND p.user_id = $%d", argCount)
-		args = append(args, selectedPartnerID)
-	} else if !showAll && claims != nil {
-		argCount++
-		args = append(args, claims.UserID)
-		cond := fmt.Sprintf(`(p.user_id = $%[1]d OR EXISTS (
-			SELECT 1 FROM protocol_access pa WHERE pa.protocol_id = p.id AND pa.user_id = $%[1]d)`, argCount)
-		if orgID := userOrgID(claims.UserID); orgID != 0 {
-			argCount++
-			args = append(args, orgID)
-			cond += fmt.Sprintf(" OR p.owner_org_id = $%[1]d OR p.service_provider_org_id = $%[1]d", argCount)
-		}
-		query += " AND " + cond + ")"
-	}
-
-	query += `
-		GROUP BY p.id, p.protocol_type, p.protocol_date, p.company, 
-		         p.service_provider, p.source_filename, p.created_at
-		ORDER BY p.protocol_date DESC, p.created_at DESC`
-
-	// Execute query
-	var reports []LengthReportData
-	err := db.Select(&reports, query, args...)
-	if err != nil {
-		http.Error(w, "Error fetching length report: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Calculate totals
-	var totalMeasurementCount int // Count of all measurement records
-	var totalMaxLengthSum float64 // Sum of maximum lengths from each protocol
-	var totalProtocols = len(reports)
-	var maxLengthOverall float64
-
-	for _, report := range reports {
-		totalMeasurementCount += report.MeasurementCount
-		if report.MaxLength.Valid && report.MaxLength.Float64 > maxLengthOverall {
-			maxLengthOverall = report.MaxLength.Float64
-		}
-		// Add up the maximum length from each protocol
-		if report.MaxLength.Valid {
-			totalMaxLengthSum += report.MaxLength.Float64
-		}
-	}
-
-	// Overall average is average of maximum lengths from each protocol
-	var overallAverage float64
-	if totalProtocols > 0 {
-		// Calculate average of max lengths (same as totalMaxLengthSum / number of protocols)
-		overallAverage = totalMaxLengthSum / float64(totalProtocols)
-	}
-
-	// Render template
-	funcMap := template.FuncMap{
-		"dateFormat": func(dateStr string) string {
-			// Remove time part if present
-			if strings.Contains(dateStr, "T") {
-				dateStr = strings.Split(dateStr, "T")[0]
-			}
-			// Handle YYYY-MM-DD
-			if matched, _ := regexp.MatchString(`^\d{4}-\d{2}-\d{2}$`, dateStr); matched {
-				parts := strings.Split(dateStr, "-")
-				return parts[2] + "." + parts[1] + "." + parts[0]
-			}
-			// Handle DD.MM.YYYY
-			if matched, _ := regexp.MatchString(`^\d{2}\.\d{2}\.\d{4}$`, dateStr); matched {
-				return dateStr
-			}
-			// Handle DD-MM-YYYY
-			if matched, _ := regexp.MatchString(`^\d{2}-\d{2}-\d{4}$`, dateStr); matched {
-				parts := strings.Split(dateStr, "-")
-				return parts[0] + "." + parts[1] + "." + parts[2]
-			}
-			// Handle MM/DD/YYYY
-			if matched, _ := regexp.MatchString(`^\d{2}/\d{2}/\d{4}$`, dateStr); matched {
-				parts := strings.Split(dateStr, "/")
-				return parts[1] + "." + parts[0] + "." + parts[2]
-			}
-			// If only DD, MM, or YYYY, return as is
-			if matched, _ := regexp.MatchString(`^\d{2}$`, dateStr); matched {
-				return dateStr
-			}
-			// Fallback: try to extract DD.MM.YYYY from any string
-			re := regexp.MustCompile(`(\d{2})[.\-/](\d{2})[.\-/](\d{4})`)
-			match := re.FindStringSubmatch(dateStr)
-			if len(match) == 4 {
-				return match[1] + "." + match[2] + "." + match[3]
-			}
-			return dateStr
-		},
-		"dateOnly": func(dateStr string) string {
-			// Accepts date in YYYY-MM-DD or RFC3339, returns DD.MM.YYYY (no time)
-			if len(dateStr) >= 10 {
-				if strings.Contains(dateStr, "T") {
-					dateStr = strings.Split(dateStr, "T")[0]
-				}
-				parts := strings.Split(dateStr, "-")
-				if len(parts) == 3 {
-					return parts[2] + "." + parts[1] + "." + parts[0]
-				}
-			}
-			return dateStr
-		},
-		"extractNVT": func(filename string) string {
-			// Extract NVT number from filename, e.g. "NVT 1V2800" or similar
-			re := regexp.MustCompile(`(?i)(NVT\s*\w+)`)
-			match := re.FindStringSubmatch(filename)
-			if len(match) > 1 {
-				return match[1]
-			}
-			return ""
-		},
-	}
-	tmpl := template.Must(template.New("length-report.html").Funcs(funcMap).ParseFiles("web/templates/length-report.html"))
-	// Lista korisnika za filter (partneri i naši radnici) — samo za interne role.
-	// Partner je ne vidi: on ionako vidi isključivo svoje.
-	type simpleUser struct {
-		ID    int64  `db:"id"`
-		Email string `db:"email"`
-		Role  string `db:"role"`
-	}
-	var filterUsers []simpleUser
-	if showAll {
-		_ = db.Select(&filterUsers, `SELECT id, email, role FROM users
-			ORDER BY CASE WHEN role = 'partner' THEN 1 ELSE 0 END, role, email`)
-	}
-
-	data := map[string]interface{}{
-		"Reports":           reports,
-		"StartDate":         startDate,
-		"EndDate":           endDate,
-		"IncludeFremco":     includeFremco,
-		"IncludeJetting":    includeJetting,
-		"TotalProtocols":    totalProtocols,
-		"TotalMeasurements": totalMaxLengthSum, // Now shows sum of max lengths
-		"MaxLengthOverall":  maxLengthOverall,
-		"OverallAverage":    overallAverage,
-		"UserRole": func() string {
-			c := GetAuthClaims(r)
-			if c != nil {
-				return c.Role
-			}
-			return ""
-		}(),
-		"IsAdmin":        isAdmin,
-		"IsOrgAdmin":     isOrgAdminRequest(r),
-		"Users":          filterUsers,
-		"CanFilterUsers": showAll,
-		"SelectedPartnerID": func() int64 {
-			if haveSelectedPartner {
-				return selectedPartnerID
-			}
-			return 0
-		}(),
-	}
-
-	err = tmpl.Execute(w, data)
-	if err != nil {
-		http.Error(w, "Error rendering template: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 
 // Helper function to get environment variable with default
