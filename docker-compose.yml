@@ -4,6 +4,11 @@ services:
   db:
     image: postgres:15
     restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_DB: blowing_simulator
       POSTGRES_USER: blowing
@@ -14,6 +19,12 @@ services:
       - pgdata:/var/lib/postgresql/data
   app:
     build: .
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       - db
     environment:

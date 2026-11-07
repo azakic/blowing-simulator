@@ -71,9 +71,13 @@ Once running, you can:
 
 1. **Upload PDFs**: Process Fremco and Jetting protocol PDFs (single files)
 2. **Bulk Upload**: Process multiple PDFs or entire directories at `/bulk-upload`
-3. **View Protocols**: Browse all imported protocols at `/protocols`
-4. **Search & Filter**: Find protocols by company, filename, or type
-5. **Length Reports**: Analyze cable lengths over time at `/protocols/length-report`
+3. **Project Report — All Protocols**: Browse, search and filter every imported
+   protocol with cable lengths, NVT and addresses at `/protocols`
+4. **Search & Filter**: Find protocols by project number, NVT, address, company,
+   service provider or filename
+5. **Project Report — By Projects**: Grouped Fremco + Jetting reports with each
+   organisation's share at `/reports/projects`
+
 6. **View Details**: See complete protocol information including equipment specs
 7. **Browse Measurements**: View detailed measurement data with pagination
 8. **Export Data**: Download data as JSON/CSV for external analysis
@@ -324,7 +328,7 @@ New accounts register at **`/register`** with an organisation invite code and
 stay `pending` until an admin approves them (`/admin/users`).
 
 **Internal filtering.** `admin`, `editor` and `viewer` also get a user filter
-on `/protocols` and `/protocols/length-report`: the dropdown lists **all**
+on `/protocols`: the dropdown lists **all**
 users with their role (`[partner] firma@example.com`, `[editor]
 ana@wolken.de`, …) and filters by `protocols.user_id`. The parameter is
 `user_id` (`partner_id` is kept as an alias for old links). A partner never
@@ -718,7 +722,7 @@ docker compose logs -f
 | `/protocols` | GET | Searchable protocol database with filtering |
 | `/protocols/view?id=X` | GET | Detailed protocol information and metadata |
 | `/protocols/measurements?id=X` | GET | Paginated measurement data viewer |
-| `/protocols/length-report` | GET | Length analysis report with date/format filtering |
+| `/protocols/length-report` | GET | Legacy link — redirects to `/protocols` (date/type params are mapped) |
 | `/protocols/source?id=X` | GET | Redirect na presigned URL originalnog PDF-a (15 min) |
 | `/protocols/render?id=X` | GET | Generiše PDF iz podataka u bazi (round-trip layout) |
 | `/protocols/api/get?id=X` | GET | Protokol kao JSON |
@@ -807,23 +811,22 @@ type SimpleMeasurement struct {
 - **Real-time Processing**: Live feedback during PDF processing
 - **Export Options**: JSON, CSV download buttons
 
-### Length Report (`/protocols/length-report`)
-- **Date Range Filtering**: Select start and end dates for analysis period
-- **Format Selection**: Choose Fremco, Jetting, or both protocol types using checkboxes
-- **Summary Statistics**: 
-  - Total protocols in selected date range
-  - Total measurements across all protocols
-  - Maximum length value found in dataset
-  - Average length across all measurements
-- **Detailed Protocol Table**: Shows per-protocol statistics including:
-  - Protocol date, type (color-coded), company, service provider
-  - Min/Max/Average length measurements per protocol
-  - Measurement count per protocol
-  - Source filename and action buttons
-- **CSV Export**: One-click export of length report data for external analysis
-- **Smart Defaults**: Automatically sets to last 30 days if no date range specified
+### Project Report — All Protocols (`/protocols`)
+Merged view of the former *Protocols* and *Length Report* pages.
+- **Search**: project number, NVT / section, address, company, service provider
+  and source filename in a single box
+- **Filters**: protocol type (Fremco / Jetting), document company, uploader
+  (`partner_id`, internal roles only), date range
+- **Summary KPIs**: protocol count, total length, max length, average length
+  (computed server-side over the whole filtered set, not just the page)
+- **Table**: ID, type, date/time, project number (links to the project report),
+  NVT / section, address, distance in metres, company / service provider,
+  filename (with parse-warning and organisation-review flags), owner and
+  actions (View, Data, Delete)
+- **CSV Export**: `/protocols?format=csv` exports every protocol matching the
+  active filters, including the distance column
 
-### Project Report (`/reports/projects`)
+### Project Report — By Projects (`/reports/projects`)
 - **Cross-format grouping**: Fremco and Jetting protocols of the same job are
   merged by `project_number` — the only key shared by both PDF formats.
 - **Aggregates per project**: protocol count (per type), period, total distance,
@@ -949,7 +952,7 @@ For questions, issues, or contributions:
 
 ### Recent Updates (v2.1.0)
 - ✅ **Bulk PDF Upload**: Process directories and multiple files simultaneously
-- ✅ **Length Report Analysis**: Statistical analysis of cable lengths with date/format filtering
+- ✅ **Length Report Analysis**: Statistical analysis of cable lengths with date/format filtering (now part of the unified `/protocols` view)
 - ✅ **Enhanced Protocol Management**: Improved search, filtering, and pagination
 - ✅ **CSV Export**: Export length reports and protocol data for external analysis
 - ✅ **Progress Tracking**: Real-time progress bars for bulk operations
