@@ -32,6 +32,34 @@ func TestValidTaskPriority(t *testing.T) {
 	}
 }
 
+func TestParseTaskFilterDefaultsToMine(t *testing.T) {
+	r := httptest.NewRequest("GET", "/tasks", nil)
+	f := parseTaskFilter(r)
+	if !f.Mine {
+		t.Error("bez parametra mine, zadaci treba da budu samo moji (Mine=true)")
+	}
+	if qs := f.queryString(); !contains(qs, "mine=1") {
+		t.Errorf("queryString %q ne sadrži mine=1", qs)
+	}
+}
+
+func TestParseTaskFilterMineOff(t *testing.T) {
+	r := httptest.NewRequest("GET", "/tasks?mine=0", nil)
+	f := parseTaskFilter(r)
+	if f.Mine {
+		t.Error("mine=0 mora isključiti filter")
+	}
+	if qs := f.queryString(); !contains(qs, "mine=0") {
+		t.Errorf("queryString %q ne sadrži mine=0", qs)
+	}
+
+	// Forma šalje hidden mine=0 i checkbox mine=1 kada je filter uključen.
+	r = httptest.NewRequest("GET", "/tasks?mine=0&mine=1", nil)
+	if f := parseTaskFilter(r); !f.Mine {
+		t.Error("kada postoji mine=1 u formi, filter mora biti uključen")
+	}
+}
+
 func TestParseTaskFilter(t *testing.T) {
 	r := httptest.NewRequest("GET", "/tasks?status=open&project=SM209214964&mine=1&org=2", nil)
 	f := parseTaskFilter(r)

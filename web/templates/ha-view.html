@@ -32,6 +32,7 @@
             <div>
                 <h1>HaP #{{.HA.ID}} · {{.HA.Address}}{{if .HA.City}}, {{.HA.City}}{{end}}</h1>
                 <p class="sub">{{.HA.ClientFirstName}} {{.HA.ClientLastName}} · {{.HA.ProtocolDate}} · Monteur: {{.HA.Monteur}}{{if .HA.Pruefer}} · Prüfer: {{.HA.Pruefer}}{{end}}</p>
+                {{if .HA.TaskID.Valid}}<p class="sub">From <a class="link" href="/tasks/view?id={{.HA.TaskID.Int64}}">task #{{.HA.TaskID.Int64}}</a></p>{{end}}
             </div>
             <div class="actions">
                 <a class="btn btn-primary" href="/ha/pdf?id={{.HA.ID}}">⬇ Create HaP (PDF)</a>

@@ -32,6 +32,7 @@
             <div>
                 <h1>{{if .IsEdit}}Edit HaP #{{.HA.ID}}{{else}}New HA protocol{{end}}</h1>
                 <p class="sub">Hausanschlussprotokoll (Westnetz 1.5.1) — fill everything you have; photos are optional but expected in the field.</p>
+                {{if .HA.TaskID.Valid}}<p class="sub">Linked to <a class="link" href="/tasks/view?id={{.HA.TaskID.Int64}}">task #{{.HA.TaskID.Int64}}</a> — the task stays "in progress" until "Die Arbeiten wurden vollständig abgeschlossen" is checked.</p>{{end}}
             </div>
         </div>
 
@@ -42,6 +43,7 @@
               id="ha-form">
             <input type="hidden" name="csrf_token" value="{{csrfToken}}">
             {{if .IsEdit}}<input type="hidden" name="id" value="{{.HA.ID}}">{{end}}
+            {{if .HA.TaskID.Valid}}<input type="hidden" name="task_id" value="{{.HA.TaskID.Int64}}">{{end}}
 
             <section class="panel">
                 <div class="panel-head"><h2>Auftragnehmer / Anschluss / Anschlussnehmer</h2></div>

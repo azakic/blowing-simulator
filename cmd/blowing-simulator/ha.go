@@ -253,13 +253,73 @@ func HANewHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		id, msg := createHA(r, claims)
 		if id == 0 {
-			renderHAForm(w, r, claims, haRow{}, false, msg)
+			pre := haPrefillFromTask(r, 0)
+			if v := strings.TrimSpace(r.FormValue("address")); v != "" {
+				pre.Address = v
+			}
+			renderHAForm(w, r, claims, pre, false, msg)
 			return
 		}
 		http.Redirect(w, r, "/ha/view?id="+strconv.FormatInt(id, 10)+"&msg="+url.QueryEscape(msg), http.StatusFound)
 		return
 	}
-	renderHAForm(w, r, claims, haRow{}, false, "")
+	renderHAForm(w, r, claims, haPrefillFromTask(r, 0), false, "")
+}
+
+// haPrefillFromTask priprema HaP formu kada se pravi iz zadatka
+// (/ha/new?task_id=N): povezuje zadatak, projekat i organizaciju i preuzima
+// adresu, da se isti podaci ne prepisuju ručno.
+func haPrefillFromTask(r *http.Request, taskID int64) haRow {
+	var h haRow
+	if taskID <= 0 {
+		taskID, _ = strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("task_id")), 10, 64)
+	}
+	if taskID <= 0 && r.Method == http.MethodPost {
+		taskID, _ = strconv.ParseInt(strings.TrimSpace(r.FormValue("task_id")), 10, 64)
+	}
+	if taskID <= 0 {
+		return h
+	}
+	t, err := loadTask(taskID)
+	if err != nil || !canSeeTask(r, t) {
+		return h
+	}
+	h.TaskID = sql.NullInt64{Int64: t.ID, Valid: true}
+	if t.ProjectID > 0 {
+		h.ProjectID = sql.NullInt64{Int64: t.ProjectID, Valid: true}
+	}
+	h.OrgID = t.OrgID
+	h.Address = t.Address
+	h.ProjectNumber = t.Project
+	return h
+}
+
+// syncTaskFromHA drži zadatak u "in progress" dok god postoji HaP koji nije
+// označen kao potpuno završen; kada su svi HaP-ovi zadatka kompletni, zadatak
+// prelazi u "done". Ako se oznaka skine, zadatak se vraća u "in progress".
+func syncTaskFromHA(taskID int64) {
+	if taskID <= 0 {
+		return
+	}
+	var st struct {
+		Total      int `db:"total"`
+		Incomplete int `db:"incomplete"`
+	}
+	if err := db.Get(&st, `SELECT count(*) AS total,
+			count(*) FILTER (WHERE NOT check_complete) AS incomplete
+		FROM ha_protocols WHERE task_id = $1`, taskID); err != nil {
+		return
+	}
+	if st.Total == 0 {
+		return
+	}
+	if st.Incomplete == 0 {
+		_, _ = db.Exec(`UPDATE tasks SET status = 'done', completed_at = NOW(), updated_at = NOW()
+			WHERE id = $1 AND status <> 'cancelled'`, taskID)
+		return
+	}
+	_, _ = db.Exec(`UPDATE tasks SET status = 'in_progress', completed_at = NULL, updated_at = NOW()
+		WHERE id = $1 AND status IN ('open','in_progress','done')`, taskID)
 }
 
 func renderHAForm(w http.ResponseWriter, r *http.Request, claims *AuthClaims, h haRow, isEdit bool, message string) {
@@ -358,9 +418,21 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 		return 0, "Invalid date."
 	}
 
-	var taskID, projectID int64
+	var taskID, projectID, taskOrgID int64
 	if v, err := strconv.ParseInt(r.FormValue("task_id"), 10, 64); err == nil && v > 0 {
 		taskID = v
+	}
+	if taskID > 0 {
+		t, err := loadTask(taskID)
+		if err != nil {
+			return 0, "Task not found."
+		}
+		if !canSeeTask(r, t) {
+			return 0, "You are not allowed to link that task."
+		}
+		if t.OrgID.Valid {
+			taskOrgID = t.OrgID.Int64
+		}
 	}
 	if v, err := strconv.ParseInt(r.FormValue("project_id"), 10, 64); err == nil && v > 0 {
 		projectID = v
@@ -370,6 +442,9 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 		if v, err := strconv.ParseInt(r.FormValue("org_id"), 10, 64); err == nil && v > 0 {
 			orgID = v
 		}
+	}
+	if orgID == 0 && taskOrgID > 0 {
+		orgID = taskOrgID
 	}
 
 	var id int64
@@ -410,6 +485,8 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 	if err != nil {
 		return 0, "Could not save: " + err.Error()
 	}
+	// Zadatak iz kog je HaP nastao ostaje "in progress" dok HaP nije kompletan.
+	syncTaskFromHA(taskID)
 
 	saved, failed := saveHAPhotos(r, id)
 	logUserEvent(claims.UserID, 0, "hap-create", fmt.Sprintf("hap %d", id))
@@ -638,6 +715,7 @@ func updateHA(r *http.Request, h haRow) string {
 		return "Could not save: " + err.Error()
 	}
 	saved, failed := saveHAPhotos(r, h.ID)
+	syncTaskFromHA(h.TaskID.Int64)
 	if saved == 0 && failed == 0 {
 		return "HaP saved."
 	}

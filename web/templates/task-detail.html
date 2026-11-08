@@ -135,6 +135,41 @@
 
         <section class="panel">
             <div class="panel-head">
+                <h2>HA protocols</h2>
+                <span class="hint">{{len .HAs}} linked — HaP created from this task</span>
+            </div>
+            <div class="panel-body">
+                {{if .HAs}}
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr><th>#</th><th>Address</th><th>Date</th><th>State</th><th></th></tr></thead>
+                        <tbody>
+                            {{range .HAs}}
+                            <tr>
+                                <td data-label="#"><a class="id-link" href="/ha/view?id={{.ID}}">#{{.ID}}</a></td>
+                                <td data-label="Address">{{.Address}}{{if .City}}, {{.City}}{{end}}</td>
+                                <td data-label="Date">{{.ProtocolDate}}</td>
+                                <td data-label="State">{{if .CheckComplete}}<span class="pill done">complete</span>{{else}}<span class="pill in_progress">in progress</span>{{end}}</td>
+                                <td data-label=""><a class="btn btn-ghost btn-small" href="/ha/view?id={{.ID}}">Open</a></td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+                {{else}}
+                <p class="muted" style="margin:0;">No HaP yet. Start one from this task — the task stays in progress until the HaP is complete.</p>
+                {{end}}
+                {{if .CanManage}}
+                <form method="GET" action="/ha/new" style="margin-top:.9rem;">
+                    <input type="hidden" name="task_id" value="{{.Task.ID}}">
+                    <button class="btn btn-primary btn-small" type="submit">+ New HaP from this task</button>
+                </form>
+                {{end}}
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-head">
                 <h2>Protocols</h2>
                 <span class="hint">{{len .Linked}} linked — the evidence that the work is done</span>
             </div>

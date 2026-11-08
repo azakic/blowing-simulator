@@ -159,6 +159,8 @@ func (f taskFilter) queryString() string {
 	}
 	if f.Mine {
 		v.Set("mine", "1")
+	} else {
+		v.Set("mine", "0")
 	}
 	if f.OrgID != 0 {
 		v.Set("org", strconv.FormatInt(f.OrgID, 10))
@@ -168,10 +170,21 @@ func (f taskFilter) queryString() string {
 
 func parseTaskFilter(r *http.Request) taskFilter {
 	q := r.URL.Query()
+	// Podrazumevano prikazujemo samo zadatke dodeljene prijavljenom korisniku.
+	// `mine=0` (odčekiran checkbox u formi) prikazuje i tuđe zadatke.
+	mine := true
+	if vals, ok := q["mine"]; ok {
+		mine = false
+		for _, v := range vals {
+			if v == "1" {
+				mine = true
+			}
+		}
+	}
 	f := taskFilter{
 		Status:  strings.TrimSpace(q.Get("status")),
 		Project: strings.TrimSpace(q.Get("project")),
-		Mine:    q.Get("mine") == "1",
+		Mine:    mine,
 	}
 	if v, err := strconv.ParseInt(strings.TrimSpace(q.Get("org")), 10, 64); err == nil && v > 0 {
 		f.OrgID = v
@@ -286,8 +299,15 @@ func TasksHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodPost {
-		msg := handleTaskAction(r)
-		http.Redirect(w, r, "/tasks?msg="+url.QueryEscape(msg), http.StatusFound)
+		msg, target := handleTaskAction(r)
+		sep := "?"
+		if target == "" {
+			target = "/tasks"
+		} else if strings.Contains(target, "?") {
+			sep = "&"
+		}
+		target += sep + "msg=" + url.QueryEscape(msg)
+		http.Redirect(w, r, target, http.StatusFound)
 		return
 	}
 
@@ -448,56 +468,62 @@ func TasksHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleTaskAction(r *http.Request) string {
+func handleTaskAction(r *http.Request) (msg, target string) {
 	claims := GetAuthClaims(r)
 	if claims == nil {
-		return "Your session has expired."
+		return "Your session has expired.", ""
 	}
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
 
 	switch r.FormValue("action") {
 	case "create":
-		return createTask(r, claims)
+		newID, msg := createTask(r, claims)
+		if newID > 0 {
+			// Sa podrazumevanim filterom "Only mine" novi zadatak dodeljen
+			// nekome drugom ne bi bio u listi — zato idemo na njegov detalj.
+			return msg, "/tasks/view?id=" + strconv.FormatInt(newID, 10)
+		}
+		return msg, ""
 
 	case "set-status":
 		t, err := loadTask(id)
 		if err != nil {
-			return "Task not found."
+			return "Task not found.", ""
 		}
 		if !canChangeTaskStatus(r, t) {
-			return "You are not allowed to change this task."
+			return "You are not allowed to change this task.", ""
 		}
 		status := r.FormValue("status")
 		if !validTaskStatus(status) {
-			return "Unknown status."
+			return "Unknown status.", ""
 		}
-		return applyTaskStatus(id, status)
+		return applyTaskStatus(id, status), ""
 
 	case "delete":
 		t, err := loadTask(id)
 		if err != nil {
-			return "Task not found."
+			return "Task not found.", ""
 		}
 		if !canManageTask(r, t) {
-			return "You are not allowed to delete this task."
+			return "You are not allowed to delete this task.", ""
 		}
 		if _, err := db.Exec(`DELETE FROM tasks WHERE id = $1`, id); err != nil {
-			return "Error: " + err.Error()
+			return "Error: " + err.Error(), ""
 		}
 		logUserEvent(claims.UserID, 0, "task-delete", fmt.Sprintf("task %d", id))
-		return "Task deleted."
+		return "Task deleted.", ""
 	}
-	return "Unknown action."
+	return "Unknown action.", ""
 }
 
-func createTask(r *http.Request, claims *AuthClaims) string {
+func createTask(r *http.Request, claims *AuthClaims) (int64, string) {
 	projectID, _ := strconv.ParseInt(r.FormValue("project_id"), 10, 64)
 	if !canCreateTask(r, projectID) {
-		return "You are not allowed to create tasks on that project."
+		return 0, "You are not allowed to create tasks on that project."
 	}
 	title := strings.TrimSpace(r.FormValue("title"))
 	if title == "" {
-		return "Task title is required."
+		return 0, "Task title is required."
 	}
 	if len(title) > 200 {
 		title = title[:200]
@@ -522,14 +548,14 @@ func createTask(r *http.Request, claims *AuthClaims) string {
 	var userID int64
 	if v, err := strconv.ParseInt(r.FormValue("user_id"), 10, 64); err == nil && v > 0 {
 		userID = v
-		if !userBelongsToOrg(userID, orgID) {
-			return "The selected user is not in that organisation."
+		if !userAssignable(userID) {
+			return 0, "The selected user is not active."
 		}
 	}
 
 	due, dueTime, msg := parseDue(r)
 	if msg != "" {
-		return msg
+		return 0, msg
 	}
 
 	var newID int64
@@ -543,13 +569,13 @@ func createTask(r *http.Request, claims *AuthClaims) string {
 		strings.TrimSpace(r.FormValue("address")), strings.TrimSpace(r.FormValue("nvt")),
 		due, dueTime, claims.UserID)
 	if err != nil {
-		return "Error: " + err.Error()
+		return 0, "Error: " + err.Error()
 	}
 	logUserEvent(claims.UserID, userID, "task-create", fmt.Sprintf("task %d project %d", newID, projectID))
 	if userID > 0 {
 		notifyTaskAssigned(userID, newID)
 	}
-	return "Task created."
+	return newID, "Task created."
 }
 
 func applyTaskStatus(id int64, status string) string {
@@ -562,15 +588,16 @@ func applyTaskStatus(id int64, status string) string {
 	return "Task status changed."
 }
 
-func userBelongsToOrg(userID, orgID int64) bool {
+// userAssignable proverava samo da korisnik postoji i da je aktivan.
+// Organizacija zadatka i korisnika ne moraju da se poklapaju: staff često
+// dodeljuje zadatke kolegama bez organizacije, a vidljivost je već rešena
+// pravilom "dodeljeni korisnik vidi svoj zadatak" (canSeeTask).
+func userAssignable(userID int64) bool {
 	if userID <= 0 {
 		return true
 	}
-	if orgID <= 0 {
-		return true // bez organizacije: bilo koji aktivan korisnik
-	}
 	var n int
-	if err := db.Get(&n, `SELECT count(*) FROM users WHERE id = $1 AND org_id = $2`, userID, orgID); err != nil {
+	if err := db.Get(&n, `SELECT count(*) FROM users WHERE id = $1 AND coalesce(status,'active') = 'active'`, userID); err != nil {
 		return false
 	}
 	return n > 0
@@ -609,6 +636,18 @@ func TaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/tasks/view?id="+strconv.FormatInt(t.ID, 10)+"&msg="+url.QueryEscape(msg), http.StatusFound)
 		return
 	}
+
+	type linkedHA struct {
+		ID            int64  `db:"id"`
+		Address       string `db:"address"`
+		City          string `db:"city"`
+		ProtocolDate  string `db:"protocol_date"`
+		CheckComplete bool   `db:"check_complete"`
+	}
+	var linkedHAs []linkedHA
+	_ = db.Select(&linkedHAs, `SELECT id, address, coalesce(city,'') AS city,
+			to_char(protocol_date,'YYYY-MM-DD') AS protocol_date, check_complete
+		FROM ha_protocols WHERE task_id = $1 ORDER BY id DESC`, t.ID)
 
 	type linkedProtocol struct {
 		ID       int    `db:"id"`
@@ -667,6 +706,7 @@ func TaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 	_ = tmpl.Execute(w, map[string]any{
 		"Task":       t,
 		"Linked":     linked,
+		"HAs":        linkedHAs,
 		"Orgs":       orgs,
 		"Users":      users,
 		"Statuses":   statuses,
@@ -731,8 +771,8 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 		var userID int64
 		if v, err := strconv.ParseInt(r.FormValue("user_id"), 10, 64); err == nil && v > 0 {
 			userID = v
-			if !userBelongsToOrg(userID, orgID) {
-				return "The selected user is not in that organisation."
+			if !userAssignable(userID) {
+				return "The selected user is not active."
 			}
 		}
 

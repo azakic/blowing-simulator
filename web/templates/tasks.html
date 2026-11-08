@@ -64,6 +64,7 @@
             <label class="field" style="flex:0 0 auto;">
                 <span>Assigned</span>
                 <label style="display:flex;align-items:center;gap:.4rem;height:2.1rem;font-size:.88rem;cursor:pointer;">
+                    <input type="hidden" name="mine" value="0">
                     <input type="checkbox" name="mine" value="1" {{if .Filter.Mine}}checked{{end}} style="width:auto;"> Only mine
                 </label>
             </label>
