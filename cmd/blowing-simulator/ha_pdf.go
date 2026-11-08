@@ -50,6 +50,9 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte) ([]byte,
 	pdf.AddPage()
 	pdf.SetLineWidth(0.25)
 
+	// Core fontovi su cp1252; bez translatora "ü" postaje "Ã¼".
+	tr := pdf.UnicodeTranslatorFromDescriptor("")
+
 	x0 := haMarginX
 	y := 20.0
 
@@ -57,13 +60,13 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte) ([]byte,
 	pdf.SetFont("Helvetica", "B", 17)
 	pdf.SetTextColor(0, 60, 47)
 	pdf.SetXY(x0, 8)
-	pdf.CellFormat(20, 8, "west", "", 0, "L", false, 0, "")
+	pdf.CellFormat(20, 8, tr("west"), "", 0, "L", false, 0, "")
 	pdf.SetTextColor(141, 198, 63)
-	pdf.CellFormat(18, 8, "netz", "", 0, "L", false, 0, "")
+	pdf.CellFormat(18, 8, tr("netz"), "", 0, "L", false, 0, "")
 	pdf.SetTextColor(0, 0, 0)
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(x0, 8)
-	pdf.CellFormat(haTableW, 8, "Hausanschlussprotokoll", "", 0, "C", false, 0, "")
+	pdf.CellFormat(haTableW, 8, tr("Hausanschlussprotokoll"), "", 0, "C", false, 0, "")
 
 	// --- kolone ---
 	colW := []float64{85, 45, 35, 25}
@@ -75,7 +78,7 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte) ([]byte,
 		pdf.SetFont("Helvetica", "", 6.5)
 		for i, l := range labels {
 			pdf.SetXY(x+1, y+0.9)
-			pdf.CellFormat(colW[i]-2, labelH-0.9, l, "", 0, "L", false, 0, "")
+			pdf.CellFormat(colW[i]-2, labelH-0.9, tr(l), "", 0, "L", false, 0, "")
 			x += colW[i]
 		}
 		y += labelH
@@ -83,7 +86,7 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte) ([]byte,
 		pdf.SetFont("Helvetica", "B", 9)
 		for i, v := range values {
 			pdf.SetXY(x+1, y+0.5)
-			pdf.CellFormat(colW[i]-2, valueH-0.8, v, "", 0, "L", false, 0, "")
+			pdf.CellFormat(colW[i]-2, valueH-0.8, tr(v), "", 0, "L", false, 0, "")
 			x += colW[i]
 		}
 		y += valueH
@@ -123,11 +126,11 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte) ([]byte,
 	leftRow := func(label, value string) {
 		pdf.SetFont("Helvetica", "", 7.5)
 		pdf.SetXY(x0, ly)
-		pdf.CellFormat(leftLabelW, rowH, label, "", 0, "R", false, 0, "")
+		pdf.CellFormat(leftLabelW, rowH, tr(label), "", 0, "R", false, 0, "")
 		if value != "" {
 			pdf.SetFont("Helvetica", "B", 8.5)
 			pdf.SetXY(x0+leftLabelW+2, ly)
-			pdf.CellFormat(midX-(x0+leftLabelW+2)-2, rowH, value, "1", 0, "L", false, 0, "")
+			pdf.CellFormat(midX-(x0+leftLabelW+2)-2, rowH, tr(value), "1", 0, "L", false, 0, "")
 		}
 		ly += rowH
 	}
@@ -136,16 +139,16 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte) ([]byte,
 	leftRow("Zugehöriger GVS", h.GVS)
 	pdf.SetFont("Helvetica", "", 7.5)
 	pdf.SetXY(x0, ly)
-	pdf.CellFormat(leftLabelW, rowH, "Rohr", "", 0, "R", false, 0, "")
-	drawColorSwatches(pdf, x0+leftLabelW+2, ly+0.35, midX-(x0+leftLabelW+2)-3, sel)
+	pdf.CellFormat(leftLabelW, rowH, tr("Rohr"), "", 0, "R", false, 0, "")
+	drawColorSwatches(pdf, x0+leftLabelW+2, ly+0.35, midX-(x0+leftLabelW+2)-3, nil, 12)
 	ly += rowH
 	pdf.SetXY(x0, ly)
-	pdf.CellFormat(leftLabelW, rowH, "Röhrchenfarbe", "", 0, "R", false, 0, "")
-	drawColorSwatches(pdf, x0+leftLabelW+2, ly+0.35, midX-(x0+leftLabelW+2)-3, nil)
+	pdf.CellFormat(leftLabelW, rowH, tr("Röhrchenfarbe"), "", 0, "R", false, 0, "")
+	drawColorSwatches(pdf, x0+leftLabelW+2, ly+0.35, midX-(x0+leftLabelW+2)-3, nil, 12)
 	ly += rowH
 	pdf.SetXY(x0, ly)
-	pdf.CellFormat(leftLabelW, rowH, "Mehrfarbig!->", "", 0, "R", false, 0, "")
-	drawColorSwatches(pdf, x0+leftLabelW+2, ly+0.35, midX-(x0+leftLabelW+2)-3, nil)
+	pdf.CellFormat(leftLabelW, rowH, tr("Mehrfarbig!->"), "", 0, "R", false, 0, "")
+	drawColorSwatches(pdf, x0+leftLabelW+2, ly+0.35, midX-(x0+leftLabelW+2)-3, nil, 12)
 	ly += rowH
 	leftRow("Kasette B-Seite", h.KassetteB)
 	leftRow("Splitter (MUX) Nummer", h.MuxNumber)
@@ -156,20 +159,23 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte) ([]byte,
 	rightRow := func(label, value string) {
 		pdf.SetFont("Helvetica", "", 7.5)
 		pdf.SetXY(rightX, ry)
-		pdf.CellFormat(rightLabelW, rowH, label, "", 0, "R", false, 0, "")
+		pdf.CellFormat(rightLabelW, rowH, tr(label), "", 0, "R", false, 0, "")
 		if value != "" {
 			pdf.SetFont("Helvetica", "B", 8.5)
 			pdf.SetXY(rightX+rightLabelW+1, ry)
-			pdf.CellFormat(x0+haTableW-rightX-rightLabelW-2, rowH, value, "1", 0, "L", false, 0, "")
+			pdf.CellFormat(x0+haTableW-rightX-rightLabelW-2, rowH, tr(value), "1", 0, "L", false, 0, "")
 		}
 		ry += rowH
 	}
 	rightRow("Spleiße:", intOrEmpty(h.Splices)+" Stück")
 	pdf.SetFont("Helvetica", "", 7.5)
 	pdf.SetXY(rightX, ry)
-	pdf.CellFormat(rightLabelW, rowH, "Genutzte Faserfarben:", "", 0, "R", false, 0, "")
-	drawColorSwatches(pdf, rightX+rightLabelW+1, ry+0.2, x0+haTableW-rightX-rightLabelW-2, sel)
+	pdf.CellFormat(rightLabelW, rowH, tr("Genutzte Faserfarben:"), "", 0, "R", false, 0, "")
+	swRows := drawColorSwatches(pdf, rightX+rightLabelW+1, ry+0.2, x0+haTableW-rightX-rightLabelW-2, sel, 6)
 	ry += rowH
+	if swRows > 1 {
+		ry += float64(swRows-1) * 4.4
+	}
 	rightRow("GF Kabel Charge:", h.CableCharge)
 	length := ""
 	if h.CableLength.Valid {
@@ -184,29 +190,29 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte) ([]byte,
 	const capH, photoH = 4.6, 44.0
 	halfW := haTableW / 2
 
-	photoCell := func(kind, caption string, px float64) {
+	photoCell := func(kind, caption string, px, top float64) {
 		pdf.SetFont("Helvetica", "", 7)
-		pdf.SetXY(px+1, y+0.9)
-		pdf.CellFormat(halfW-2, capH-1, caption, "", 0, "L", false, 0, "")
-		drawImageFit(pdf, "ph-"+kind, images[kind], px+2, y+capH+1, halfW-4, photoH-3)
+		pdf.SetXY(px+1, top+0.9)
+		pdf.CellFormat(halfW-2, capH-1, tr(caption), "", 0, "L", false, 0, "")
+		drawImageFit(pdf, "ph-"+kind, images[kind], px+2, top+capH+1, halfW-4, photoH-4)
 		if p := findPhoto(photos, kind); p != nil {
-			if c := photoCaption(p); c != "" {
+			if c := photoCaption(p); c != "" && tr(c) != "" {
 				pdf.SetFont("Helvetica", "", 5.6)
 				pdf.SetTextColor(90, 90, 90)
-				pdf.SetXY(px+2, y+photoH-3.2)
-				pdf.CellFormat(halfW-4, 3, c, "", 0, "L", false, 0, "")
+				pdf.SetXY(px+2, top+capH+photoH-3.4)
+				pdf.CellFormat(halfW-4, 3, tr(c), "", 0, "L", false, 0, "")
 				pdf.SetTextColor(0, 0, 0)
 			}
 		}
 	}
 
 	photoBlock := func(lk, lc, rk, rc string) {
-		y += capH
-		photoCell(lk, lc, x0)
-		photoCell(rk, rc, x0+halfW)
-		y += photoH
+		top := y
+		photoCell(lk, lc, x0, top)
+		photoCell(rk, rc, x0+halfW, top)
+		y = top + capH + photoH
 		pdf.Line(x0, y, x0+haTableW, y)
-		pdf.Line(x0+halfW, y-photoH, x0+halfW, y)
+		pdf.Line(x0+halfW, top, x0+halfW, y)
 	}
 	photoBlock("bild1", "Bild 1      Hausanschluss gesamt", "bild2", "Bild 2      APL offen")
 	photoBlock("bild3", "Bild 3      APL geschlossen/Foto mit Aufkleber", "bild4", "Bild 4      Foto ONT")
@@ -231,17 +237,17 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte) ([]byte,
 		if c.on {
 			pdf.SetFont("Helvetica", "B", 10)
 			pdf.SetXY(x0+12.3, cy-1.0)
-			pdf.CellFormat(4, 5, "X", "", 0, "C", false, 0, "")
+			pdf.CellFormat(4, 5, tr("X"), "", 0, "C", false, 0, "")
 		}
 		pdf.SetFont("Helvetica", "", 7.5)
 		pdf.SetXY(x0+20, cy+0.3)
-		pdf.CellFormat(halfW-22, 4, c.text, "", 0, "L", false, 0, "")
+		pdf.CellFormat(halfW-22, 4, tr(c.text), "", 0, "L", false, 0, "")
 		cy += 5.6
 	}
 
 	pdf.SetFont("Helvetica", "", 7)
 	pdf.SetXY(x0+halfW+2, checkTop+1.2)
-	pdf.CellFormat(halfW-4, 4, "ONT Aufkleber:", "", 0, "L", false, 0, "")
+	pdf.CellFormat(halfW-4, 4, tr("ONT Aufkleber:"), "", 0, "L", false, 0, "")
 	drawImageFit(pdf, "ont", images["ont_label"], x0+halfW+2, checkTop+5.5, halfW-4, checkH-7)
 
 	y = checkTop + checkH
@@ -254,22 +260,25 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte) ([]byte,
 
 	pdf.SetFont("Helvetica", "", 7)
 	pdf.SetXY(x0+2, sigTop+1.2)
-	pdf.CellFormat(30, 4, "Unterschriften:", "", 0, "L", false, 0, "")
+	pdf.CellFormat(30, 4, tr("Unterschriften:"), "", 0, "L", false, 0, "")
 	drawImageFit(pdf, "sig-m", images["sig_monteur"], x0+2, sigTop+5.5, 55, sigH-9)
 	drawImageFit(pdf, "sig-p", images["sig_pruefer"], x0+60, sigTop+5.5, 45, sigH-9)
 	pdf.SetFont("Helvetica", "", 6.5)
 	pdf.SetXY(x0+2, sigTop+sigH-4)
-	pdf.CellFormat(40, 3, "Monteur", "", 0, "L", false, 0, "")
+	pdf.CellFormat(40, 3, tr("Monteur"), "", 0, "L", false, 0, "")
 	pdf.SetXY(x0+60, sigTop+sigH-4)
-	pdf.CellFormat(40, 3, "Prüfer:", "", 0, "L", false, 0, "")
+	pdf.CellFormat(40, 3, tr("Prüfer:"), "", 0, "L", false, 0, "")
 
 	pdf.SetFont("Helvetica", "", 7)
 	pdf.SetXY(x0+halfW+2, sigTop+1.2)
-	pdf.CellFormat(40, 4, "APL Aufkleber:", "", 0, "L", false, 0, "")
+	pdf.CellFormat(40, 4, tr("APL Aufkleber:"), "", 0, "L", false, 0, "")
 	pdf.SetXY(x0+halfW+62, sigTop+1.2)
-	pdf.CellFormat(30, 4, "Licht test", "", 0, "L", false, 0, "")
+	pdf.CellFormat(30, 4, tr("Licht test"), "", 0, "L", false, 0, "")
 	drawImageFit(pdf, "apl", images["apl_label"], x0+halfW+2, sigTop+5.5, 55, sigH-8)
 	drawImageFit(pdf, "light", images["light_test"], x0+halfW+62, sigTop+5.5, 35, sigH-8)
+
+	// Spoljni okvir tabele — od zaglavlja do kraja bloka potpisa.
+	pdf.Rect(x0, 20, haTableW, (sigTop+sigH)-20, "D")
 
 	// --- footer ---
 	footTop := 282.0
@@ -277,10 +286,10 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte) ([]byte,
 	footerRow := func(label string, lx, lw float64, value string, vx, vw float64) {
 		pdf.SetFont("Helvetica", "", 6.5)
 		pdf.SetXY(lx, footTop+1)
-		pdf.CellFormat(lw, 4, label, "", 0, "L", false, 0, "")
+		pdf.CellFormat(lw, 4, tr(label), "", 0, "L", false, 0, "")
 		pdf.SetFont("Helvetica", "B", 6.5)
 		pdf.SetXY(vx, footTop+1)
-		pdf.CellFormat(vw, 4, value, "", 0, "L", false, 0, "")
+		pdf.CellFormat(vw, 4, tr(value), "", 0, "L", false, 0, "")
 	}
 	footerRow("Dateiname:", x0+1, 20, "Hausanschlussprotokoll", x0+22, 70)
 	footerRow("", x0+150, 14, "Seite 1 von 1", x0+164, 26)
@@ -350,18 +359,21 @@ func drawImageFit(pdf *gofpdf.Fpdf, name string, data []byte, x, y, w, h float64
 	pdf.ImageOptions(name, x+(w-iw)/2, y+(h-ih)/2, iw, ih, false, opts, 0, "")
 }
 
-func drawColorSwatches(pdf *gofpdf.Fpdf, x, y, maxW float64, selected []string) {
+func drawColorSwatches(pdf *gofpdf.Fpdf, x, y, maxW float64, selected []string, perRow int) int {
 	sel := map[string]bool{}
 	for _, s := range selected {
 		sel[strings.TrimSpace(s)] = true
 	}
 	const sz, gap = 3.6, 1.2
-	const perRow = 6
+	if perRow <= 0 {
+		perRow = 6
+	}
+	rows := 0
 	for i, c := range haFiberColors {
 		col, row := i%perRow, i/perRow
 		cx := x + float64(col)*(sz+gap)
 		cy := y + float64(row)*(sz+0.8)
-		if float64(col)*(sz+gap)+sz > maxW {
+		if cx+sz > x+maxW {
 			continue
 		}
 		if sel[c.Key] {
@@ -370,8 +382,12 @@ func drawColorSwatches(pdf *gofpdf.Fpdf, x, y, maxW float64, selected []string) 
 			pdf.SetFillColor(255, 255, 255)
 		}
 		pdf.Rect(cx, cy, sz, sz, "FD")
+		if row+1 > rows {
+			rows = row + 1
+		}
 	}
 	pdf.SetDrawColor(0, 0, 0)
+	return rows
 }
 
 func splitColors(s string) []string {
