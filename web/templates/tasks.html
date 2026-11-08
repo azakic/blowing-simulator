@@ -108,8 +108,17 @@
                     </label>
                     <label class="field"><span>Due date</span><input type="date" name="due_date"></label>
                     <label class="field"><span>Time (24 h)</span>
-                        <input type="text" name="due_time" inputmode="numeric" maxlength="5"
-                               placeholder="09.30" autocomplete="off">
+                        <div style="display:flex;gap:.35rem;align-items:center;">
+                            <select name="due_hour" aria-label="Hour" style="flex:1 1 0;">
+                                <option value="">hh</option>
+                                {{range hours}}<option value="{{.}}">{{.}}</option>{{end}}
+                            </select>
+                            <span style="color:var(--muted);font-weight:700;">:</span>
+                            <select name="due_min" aria-label="Minute" style="flex:1 1 0;">
+                                <option value="">mm</option>
+                                {{range minutes}}<option value="{{.}}">{{.}}</option>{{end}}
+                            </select>
+                        </div>
                     </label>
                     <label class="field" style="flex:2 1 220px;"><span>Address</span><input type="text" name="address" placeholder="Street, no., city"></label>
                     <label class="field"><span>NVT</span><input type="text" name="nvt" placeholder="NVT 1V3400"></label>

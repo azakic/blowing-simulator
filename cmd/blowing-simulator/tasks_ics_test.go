@@ -128,3 +128,51 @@ func TestParseDueValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestParseDueHourMinuteSelects(t *testing.T) {
+	cases := []struct {
+		hour, min string
+		want      string
+		wantErr   bool
+	}{
+		{"07", "05", "07:05", false},
+		{"07", "", "07:00", false}, // minut se podrazumeva 00
+		{"", "05", "", true},       // minut bez sata nema smisla
+		{"23", "59", "23:59", false},
+	}
+	for _, c := range cases {
+		r := newFormRequest(map[string]string{"due_date": "2026-11-21", "due_hour": c.hour, "due_min": c.min})
+		_, clock, msg := parseDue(r)
+		if c.wantErr {
+			if msg == "" {
+				t.Errorf("%q/%q: očekivana greška", c.hour, c.min)
+			}
+			continue
+		}
+		if msg != "" {
+			t.Errorf("%q/%q: neočekivana greška %q", c.hour, c.min, msg)
+		}
+		if clock != c.want {
+			t.Errorf("%q/%q: dobijeno %q, očekivano %q", c.hour, c.min, clock, c.want)
+		}
+	}
+}
+
+func TestHourMinHelpers(t *testing.T) {
+	if got := hourOf("09:30"); got != "09" {
+		t.Errorf("hourOf = %q", got)
+	}
+	if got := minOf("09:30"); got != "30" {
+		t.Errorf("minOf = %q", got)
+	}
+	if hourOf("") != "" || minOf("") != "" {
+		t.Error("prazno vreme mora dati prazne delove")
+	}
+	hs, ms := hourValues(), minuteValues()
+	if len(hs) != 24 || hs[0] != "00" || hs[23] != "23" {
+		t.Errorf("hourValues = %v", hs)
+	}
+	if len(ms) != 60 || ms[0] != "00" || ms[59] != "59" {
+		t.Errorf("minuteValues = %v", ms)
+	}
+}

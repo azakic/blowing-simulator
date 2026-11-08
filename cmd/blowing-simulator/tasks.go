@@ -418,7 +418,13 @@ func TasksHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tmpl, err := template.New("tasks.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).
-		Funcs(template.FuncMap{"dotTime": dotTime}).
+		Funcs(template.FuncMap{
+			"dotTime": dotTime,
+			"hours":   hourValues,
+			"minutes": minuteValues,
+			"hourOf":  hourOf,
+			"minOf":   minOf,
+		}).
 		ParseFiles("web/templates/tasks.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
@@ -646,7 +652,13 @@ func TaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tmpl, err := template.New("task-detail.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).
-		Funcs(template.FuncMap{"dotTime": dotTime}).
+		Funcs(template.FuncMap{
+			"dotTime": dotTime,
+			"hours":   hourValues,
+			"minutes": minuteValues,
+			"hourOf":  hourOf,
+			"minOf":   minOf,
+		}).
 		ParseFiles("web/templates/task-detail.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
@@ -795,11 +807,58 @@ func protocolVisibleToUser(claims *AuthClaims, protocolID int) bool {
 // dotTime prikazuje vreme nemačkom notacijom (09:30 → 09.30).
 func dotTime(s string) string { return strings.ReplaceAll(s, ":", ".") }
 
+// hourValues/minuteValues pune padajuće liste u formama (00–23 / 00–59).
+// Dva native <select>-a su mobilno prijateljska (točkić) i garantuju 24 h.
+func hourValues() []string {
+	out := make([]string, 24)
+	for i := range out {
+		out[i] = fmt.Sprintf("%02d", i)
+	}
+	return out
+}
+
+func minuteValues() []string {
+	out := make([]string, 60)
+	for i := range out {
+		out[i] = fmt.Sprintf("%02d", i)
+	}
+	return out
+}
+
+// hourOf/minOf izvlače delove iz "HH:MM" (prazno ako nema vremena).
+func hourOf(clock string) string {
+	if len(clock) >= 2 {
+		return clock[:2]
+	}
+	return ""
+}
+
+func minOf(clock string) string {
+	if len(clock) >= 5 {
+		return clock[3:5]
+	}
+	return ""
+}
+
 // parseDue čita datum i vreme roka iz forme. Vreme je `HH:MM` (HTML time),
 // a vraća se kao `HH:MM` koji PostgreSQL prihvata za TIME.
 func parseDue(r *http.Request) (date, clock, errMsg string) {
 	date = strings.TrimSpace(r.FormValue("due_date"))
-	clock = strings.TrimSpace(r.FormValue("due_time"))
+
+	// Forme šalju dva select-a (sat + minut); stariji klijenti mogu i `due_time`.
+	hour := strings.TrimSpace(r.FormValue("due_hour"))
+	minute := strings.TrimSpace(r.FormValue("due_min"))
+	if hour != "" || minute != "" {
+		if hour == "" {
+			return "", "", "Choose an hour as well."
+		}
+		if minute == "" {
+			minute = "00"
+		}
+		clock = hour + ":" + minute
+	} else {
+		clock = strings.TrimSpace(r.FormValue("due_time"))
+	}
 	if date != "" {
 		if _, err := time.Parse("2006-01-02", date); err != nil {
 			return "", "", "Due date is not valid."

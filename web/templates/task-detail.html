@@ -89,9 +89,19 @@
                     </label>
                     <label class="field"><span>Due date</span><input type="date" name="due_date" value="{{if .Task.DueDate.Valid}}{{.Task.DueDate.String}}{{end}}"></label>
                     <label class="field"><span>Time (24 h)</span>
-                        <input type="text" name="due_time" inputmode="numeric" maxlength="5"
-                               placeholder="09.30" autocomplete="off"
-                               value="{{if .Task.DueTime.Valid}}{{dotTime .Task.DueTime.String}}{{end}}">
+                        <div style="display:flex;gap:.35rem;align-items:center;">
+                            <select name="due_hour" aria-label="Hour" style="flex:1 1 0;">
+                                <option value="">hh</option>
+                                {{$h := ""}}{{$m := ""}}
+                                {{if .Task.DueTime.Valid}}{{$h = hourOf .Task.DueTime.String}}{{$m = minOf .Task.DueTime.String}}{{end}}
+                                {{range hours}}<option value="{{.}}" {{if eq . $h}}selected{{end}}>{{.}}</option>{{end}}
+                            </select>
+                            <span style="color:var(--muted);font-weight:700;">:</span>
+                            <select name="due_min" aria-label="Minute" style="flex:1 1 0;">
+                                <option value="">mm</option>
+                                {{range minutes}}<option value="{{.}}" {{if eq . $m}}selected{{end}}>{{.}}</option>{{end}}
+                            </select>
+                        </div>
                     </label>
                     {{if .IsStaff}}
                     <label class="field"><span>Organisation</span>
