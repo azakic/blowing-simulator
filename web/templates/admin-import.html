@@ -46,6 +46,7 @@
           <div class="kpi"><div class="label">Rows parsed</div><div class="value">{{.Result.Rows}}</div></div>
           <div class="kpi"><div class="label">New</div><div class="value">{{.Result.Imported}}</div></div>
           <div class="kpi"><div class="label">Updated</div><div class="value">{{.Result.Updated}}</div></div>
+          <div class="kpi"><div class="label">Unchanged</div><div class="value">{{.Result.Unchanged}}</div></div>
           <div class="kpi"><div class="label">Skipped</div><div class="value">{{.Result.Skipped}}</div></div>
           <div class="kpi"><div class="label">Failed</div><div class="value">{{if .Result.Failed}}<span style="color:#c62828;">{{.Result.Failed}}</span>{{else}}0{{end}}</div></div>
         </div>
@@ -93,6 +94,7 @@
               <th class="num">Rows</th>
               <th class="num">New</th>
               <th class="num">Updated</th>
+              <th class="num">Unchanged</th>
               <th class="num">Skipped</th>
               <th class="num">Failed</th>
               <th>By</th>
@@ -107,13 +109,14 @@
               <td data-label="Rows" class="num">{{.Total}}</td>
               <td data-label="New" class="num">{{.Imported}}</td>
               <td data-label="Updated" class="num">{{.Updated}}</td>
+              <td data-label="Unchanged" class="num">{{.Unchanged}}</td>
               <td data-label="Skipped" class="num">{{.Skipped}}</td>
               <td data-label="Failed" class="num">{{.Failed}}</td>
               <td data-label="By">{{if .UserEmail.Valid}}{{.UserEmail.String}}{{else}}<span class="muted">—</span>{{end}}</td>
               <td data-label="When">{{.CreatedAt}}</td>
             </tr>
             {{else}}
-            <tr><td colspan="9" class="muted">No imports yet.</td></tr>
+            <tr><td colspan="10" class="muted">No imports yet.</td></tr>
             {{end}}
           </tbody>
         </table>

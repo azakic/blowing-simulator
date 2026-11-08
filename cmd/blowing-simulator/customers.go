@@ -68,6 +68,7 @@ func ensureCustomerSchema(db *sqlx.DB) error {
 			imported_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
 			created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)`,
+		`ALTER TABLE ha_customer_imports ADD COLUMN IF NOT EXISTS unchanged INTEGER NOT NULL DEFAULT 0`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
@@ -103,6 +104,7 @@ type customerImportResult struct {
 	Rows           int
 	Imported       int
 	Updated        int
+	Unchanged      int
 	Skipped        int
 	Failed         int
 	Errors         []string
@@ -570,13 +572,14 @@ func AdminImportHandler(w http.ResponseWriter, r *http.Request) {
 		Total     int            `db:"total"`
 		Imported  int            `db:"imported"`
 		Updated   int            `db:"updated"`
+		Unchanged int            `db:"unchanged"`
 		Skipped   int            `db:"skipped"`
 		Failed    int            `db:"failed"`
 		CreatedAt string         `db:"created_at"`
 		UserEmail sql.NullString `db:"user_email"`
 	}
 	if err := db.Select(&recent, `SELECT i.id, i.filename, i.total, i.imported, i.updated,
-			i.skipped, i.failed, to_char(i.created_at,'YYYY-MM-DD HH24:MI') AS created_at,
+			i.unchanged, i.skipped, i.failed, to_char(i.created_at,'YYYY-MM-DD HH24:MI') AS created_at,
 			u.email AS user_email
 		FROM ha_customer_imports i
 		LEFT JOIN users u ON u.id = i.imported_by
@@ -674,6 +677,12 @@ func importCustomers(r *http.Request) *customerImportResult {
 					kunde=EXCLUDED.kunde, phone=EXCLUDED.phone, mobile=EXCLUDED.mobile,
 					nvt_key=EXCLUDED.nvt_key, source=EXCLUDED.source,
 					imported_by=EXCLUDED.imported_by, updated_at=NOW()
+				WHERE ha_customers.address IS DISTINCT FROM EXCLUDED.address
+					OR ha_customers.nvt IS DISTINCT FROM EXCLUDED.nvt
+					OR ha_customers.kunde IS DISTINCT FROM EXCLUDED.kunde
+					OR ha_customers.phone IS DISTINCT FROM EXCLUDED.phone
+					OR ha_customers.mobile IS DISTINCT FROM EXCLUDED.mobile
+					OR ha_customers.nvt_key IS DISTINCT FROM EXCLUDED.nvt_key
 				RETURNING (xmax = 0) AS inserted`,
 				row.Address, row.NVT, row.Kunde, row.Phone, row.Mobile,
 				nvtKey, addrKey, res.Filename, userID)
@@ -685,11 +694,18 @@ func importCustomers(r *http.Request) *customerImportResult {
 				DO UPDATE SET phone=EXCLUDED.phone, mobile=EXCLUDED.mobile,
 					source=EXCLUDED.source, imported_by=EXCLUDED.imported_by,
 					updated_at=NOW()
+				WHERE ha_customers.phone IS DISTINCT FROM EXCLUDED.phone
+					OR ha_customers.mobile IS DISTINCT FROM EXCLUDED.mobile
 				RETURNING (xmax = 0) AS inserted`,
 				row.Address, row.NVT, row.Kunde, row.Phone, row.Mobile,
 				nvtKey, addrKey, res.Filename, userID)
 		}
 		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				// DO UPDATE ... WHERE nije pogodio: podaci su isti.
+				res.Unchanged++
+				continue
+			}
 			res.addError(i+1, err)
 			continue
 		}
@@ -705,13 +721,13 @@ func importCustomers(r *http.Request) *customerImportResult {
 		return res
 	}
 	_, _ = db.Exec(`INSERT INTO ha_customer_imports
-			(filename, total, imported, updated, skipped, failed, imported_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-		res.Filename, res.Rows, res.Imported, res.Updated, res.Skipped, res.Failed, userID)
+			(filename, total, imported, updated, unchanged, skipped, failed, imported_by)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+		res.Filename, res.Rows, res.Imported, res.Updated, res.Unchanged, res.Skipped, res.Failed, userID)
 	if claims != nil {
 		logUserEvent(claims.UserID, 0, "customers-import",
-			fmt.Sprintf("%s: rows=%d new=%d updated=%d failed=%d",
-				res.Filename, res.Rows, res.Imported, res.Updated, res.Failed))
+			fmt.Sprintf("%s: rows=%d new=%d updated=%d unchanged=%d failed=%d",
+				res.Filename, res.Rows, res.Imported, res.Updated, res.Unchanged, res.Failed))
 	}
 	return res
 }
