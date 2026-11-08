@@ -795,6 +795,11 @@ func main() {
 	if err := ensureHASchema(db); err != nil {
 		log.Fatal("Failed to ensure HA schema:", err)
 	}
+	// Direktorijum klijenata (Adresse/NVT/Kunde/Telefon/Mobil) za prediktivno
+	// popunjavanje HaP forme; import je dozvoljen samo administratoru.
+	if err := ensureCustomerSchema(db); err != nil {
+		log.Fatal("Failed to ensure customer schema:", err)
+	}
 	if err := backfillProjects(db); err != nil {
 		log.Fatal("Failed to backfill projects:", err)
 	}
@@ -842,6 +847,7 @@ func main() {
 	http.HandleFunc("/admin/users", requireAuth(withCSRF(AdminUsersHandler), "admin"))
 	http.HandleFunc("/admin/orgs", requireAuth(withCSRF(AdminOrgsHandler), "admin"))
 	http.HandleFunc("/admin/projects", requireAuth(withCSRF(AdminProjectsHandler), "admin"))
+	http.HandleFunc("/admin/import", requireAuth(withCSRF(AdminImportHandler), "admin"))
 	// Zadaci sa terena (faza 2 projekata) — svi prijavljeni vide svoj opseg.
 	http.HandleFunc("/tasks", requireAuth(withCSRF(TasksHandler), "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/tasks/view", requireAuth(withCSRF(TaskDetailHandler), "viewer", "editor", "partner", "admin"))
@@ -855,6 +861,7 @@ func main() {
 	http.HandleFunc("/ha/photo", requireAuth(HAPhotoHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/ha/pdf", requireAuth(HAPDFHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/ha/delete", requireAuth(withCSRF(HADeleteHandler), "editor", "partner", "admin"))
+	http.HandleFunc("/ha/lookup", requireAuth(HALookupHandler, "viewer", "editor", "partner", "admin"))
 	// Admin utility: backfill ownership for existing protocols (NULL user_id)
 	http.HandleFunc("/admin/backfill-ownership", requireAuth(AdminBackfillOwnershipHandler, "admin"))
 	http.HandleFunc("/admin/reparse", requireAuth(AdminReparseHandler, "admin"))

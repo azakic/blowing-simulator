@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1976d2" />
+  <title>Customer import - Wolken-ASM Reports</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Wolken-ASM Reports</a>
+    <input type="checkbox" id="nav-toggle" class="nav-toggle">
+    <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
+    <nav class="nav">
+      <a href="/">Dashboard</a>
+      <a href="/tasks">Tasks</a>
+      <a href="/ha">HA protocols</a>
+      <a href="/reports/projects">Project Report</a>
+      <a href="/bulk-upload">Bulk Upload</a>
+      {{if .IsOrgAdmin}}<a href="/org/users">My users</a>{{end}}
+      {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a><a href="/admin/projects">Projects</a><a href="/admin/import" class="active">Import</a>{{end}}
+      {{if .UserRole}}<a href="/account">Account</a><span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+      {{else}}<a href="/login">Login</a>{{end}}
+    </nav>
+  </header>
+
+  <main class="page">
+    <a class="back" href="/">← Dashboard</a>
+
+    <div class="head">
+      <div>
+        <h1>Customer directory import</h1>
+        <p class="sub">Admin-only import of connection data (Adresse, NVT, Kunde, Telefon, Mobil). The HaP form uses this directory to suggest the client and phone numbers when you type an NVT or an address.</p>
+      </div>
+    </div>
+
+    {{if .Result}}
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Import result</h2>
+        <span class="hint">{{.Result.Filename}}{{if .Result.Format}} · {{.Result.Format}}{{end}}{{if .Result.HeaderDetected}} · headers recognized{{else}} · positional columns{{end}}</span>
+      </div>
+      <div class="panel-body">
+        <div class="kpis">
+          <div class="kpi"><div class="label">Rows parsed</div><div class="value">{{.Result.Rows}}</div></div>
+          <div class="kpi"><div class="label">New</div><div class="value">{{.Result.Imported}}</div></div>
+          <div class="kpi"><div class="label">Updated</div><div class="value">{{.Result.Updated}}</div></div>
+          <div class="kpi"><div class="label">Skipped</div><div class="value">{{.Result.Skipped}}</div></div>
+          <div class="kpi"><div class="label">Failed</div><div class="value">{{if .Result.Failed}}<span style="color:#c62828;">{{.Result.Failed}}</span>{{else}}0{{end}}</div></div>
+        </div>
+        {{if .Result.Errors}}
+        <div class="note" style="margin-top:.8rem;white-space:pre-wrap;font-family:ui-monospace,monospace;font-size:.78rem;">{{range .Result.Errors}}{{.}}
+{{end}}</div>
+        {{end}}
+      </div>
+    </section>
+    {{end}}
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Upload a file</h2>
+        <span class="hint">xlsx · xls · csv / txt / tsv</span>
+      </div>
+      <div class="panel-body">
+        <form method="POST" action="/admin/import" enctype="multipart/form-data" class="filters" style="margin:0;border:0;padding:0;background:transparent;">
+          <input type="hidden" name="csrf_token" value="{{csrfToken}}">
+          <label class="field" style="flex:2 1 320px;">
+            <span>File</span>
+            <input type="file" name="file" accept=".xlsx,.xlsm,.xls,.csv,.txt,.tsv" required>
+          </label>
+          <button class="btn btn-primary" type="submit">Import</button>
+        </form>
+        <p class="muted" style="margin:.9rem 0 0;font-size:.82rem;line-height:1.5;">
+          Expected columns: <strong>Adresse, NVT, Kunde, Telefon, Mobil</strong> — in any order, with headers, or positionally in that order.
+          For workbooks, the first sheet with a recognizable header row is used (e.g. <em>Tabelle1</em> in the Volmarstein workbook).
+          Rows are matched by <strong>NVT</strong>; rows without an NVT are matched by address. Re-importing updates existing entries instead of duplicating them.
+        </p>
+      </div>
+    </section>
+
+    <section class="kpis">
+      <div class="kpi"><div class="label">Entries in directory</div><div class="value">{{.Count}}</div></div>
+    </section>
+
+    <div class="table-wrap">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>File</th>
+              <th class="num">Rows</th>
+              <th class="num">New</th>
+              <th class="num">Updated</th>
+              <th class="num">Skipped</th>
+              <th class="num">Failed</th>
+              <th>By</th>
+              <th>When</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Imports}}
+            <tr>
+              <td data-label="#">{{.ID}}</td>
+              <td data-label="File">{{.Filename}}</td>
+              <td data-label="Rows" class="num">{{.Total}}</td>
+              <td data-label="New" class="num">{{.Imported}}</td>
+              <td data-label="Updated" class="num">{{.Updated}}</td>
+              <td data-label="Skipped" class="num">{{.Skipped}}</td>
+              <td data-label="Failed" class="num">{{.Failed}}</td>
+              <td data-label="By">{{if .UserEmail.Valid}}{{.UserEmail.String}}{{else}}<span class="muted">—</span>{{end}}</td>
+              <td data-label="When">{{.CreatedAt}}</td>
+            </tr>
+            {{else}}
+            <tr><td colspan="9" class="muted">No imports yet.</td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

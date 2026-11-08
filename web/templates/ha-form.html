@@ -19,7 +19,7 @@
             <a href="/reports/projects">Project Report</a>
             <a href="/bulk-upload">Bulk Upload</a>
             {{if .IsOrgAdmin}}<a href="/org/users">My users</a>{{end}}
-            {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a><a href="/admin/projects">Projects</a>{{end}}
+            {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a><a href="/admin/projects">Projects</a><a href="/admin/import">Import</a>{{end}}
             {{if .UserRole}}<a href="/account">Account</a><span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
             {{else}}<a href="/login">Login</a>{{end}}
         </nav>
@@ -55,6 +55,10 @@
                         <label class="field"><span>Adresse *</span>
                             <input type="text" name="address" required value="{{.HA.Address}}" placeholder="An der Borg 25">
                         </label>
+                        <label class="field"><span>NVT</span>
+                            <input type="text" name="nvt" id="ha-nvt" value="{{.HA.NVT}}" placeholder="NVT 1V2200">
+                        </label>
+                        <p id="ha-match" class="note" style="display:none;flex:1 1 100%;margin:0;"></p>
                         <label class="field"><span>Ort</span>
                             <input type="text" name="city" value="{{.HA.City}}" placeholder="Volmarstein">
                         </label>
@@ -66,6 +70,12 @@
                         </label>
                         <label class="field"><span>Name</span>
                             <input type="text" name="client_first_name" value="{{.HA.ClientFirstName}}">
+                        </label>
+                        <label class="field"><span>Telefon</span>
+                            <input type="tel" name="client_phone" value="{{.HA.ClientPhone}}">
+                        </label>
+                        <label class="field"><span>Mobil</span>
+                            <input type="tel" name="client_mobile" value="{{.HA.ClientMobile}}">
                         </label>
                         <label class="field"><span>Wohneinheiten (WE)</span>
                             <input type="number" name="units" min="0" max="999" value="{{if .HA.Units.Valid}}{{.HA.Units.Int64}}{{end}}">
@@ -209,6 +219,61 @@
                 });
             });
         }
+    </script>
+    <script>
+        // Prediktivno popunjavanje iz direktorijuma klijenata (/admin/import).
+        // Kada se unese NVT ili adresa, prazna polja klijenta se popunjavaju;
+        // postojeće vrednosti se nikad ne prepisuju.
+        (function () {
+            var nvt = document.getElementById('ha-nvt');
+            var address = document.querySelector('input[name="address"]');
+            var hint = document.getElementById('ha-match');
+            if (!nvt || !address || !hint) { return; }
+            var timer = null;
+            function fill(name, value) {
+                if (!value) { return; }
+                var el = document.querySelector('input[name="' + name + '"]');
+                if (el && !el.value.trim()) { el.value = value; }
+            }
+            function lookup() {
+                var q = '?nvt=' + encodeURIComponent(nvt.value || '') +
+                        '&address=' + encodeURIComponent(address.value || '');
+                if (!nvt.value.trim() && (address.value || '').trim().length < 3) { return; }
+                fetch('/ha/lookup' + q, { credentials: 'same-origin' })
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (d) {
+                        if (!d || !d.found || !d.best) { hint.style.display = 'none'; return; }
+                        var b = d.best;
+                        if (d.matches && d.matches.length > 1) {
+                            // NVT je zajednički za više adresa — ne popunjavaj
+                            // pogrešnog klijenta, samo pokaži kandidate.
+                            var names = d.matches.map(function (m) { return m.address; });
+                            hint.textContent = 'NVT ' + (b.nvt || '') + ' covers ' + d.matches.length +
+                                ' addresses: ' + names.join(' · ') + ' — type the address for an exact match.';
+                            hint.style.display = 'block';
+                            return;
+                        }
+                        var parts = [];
+                        if (b.kunde) { parts.push(b.kunde); }
+                        if (b.phone) { parts.push('Tel ' + b.phone); }
+                        if (b.mobile) { parts.push('Mobil ' + b.mobile); }
+                        if (b.address) { parts.push(b.address); }
+                        hint.textContent = 'Directory: ' + parts.join(' · ') + ' — empty fields were filled.';
+                        hint.style.display = 'block';
+                        fill('client_last_name', b.last_name);
+                        fill('client_first_name', b.first_name);
+                        fill('client_phone', b.phone);
+                        fill('client_mobile', b.mobile);
+                        fill('nvt', b.nvt);
+                    })
+                    .catch(function () {});
+            }
+            function schedule() { clearTimeout(timer); timer = setTimeout(lookup, 350); }
+            nvt.addEventListener('blur', schedule);
+            address.addEventListener('blur', schedule);
+            nvt.addEventListener('change', schedule);
+            address.addEventListener('change', schedule);
+        })();
     </script>
 </body>
 </html>

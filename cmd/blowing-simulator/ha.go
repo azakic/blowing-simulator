@@ -83,6 +83,9 @@ func ensureHASchema(db *sqlx.DB) error {
 			created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			updated_at        TIMESTAMPTZ
 		)`,
+		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS nvt TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS client_phone TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS client_mobile TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_ha_project ON ha_protocols(project_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_ha_org ON ha_protocols(org_id)`,
 		`CREATE TABLE IF NOT EXISTS ha_photos (
@@ -116,10 +119,13 @@ type haRow struct {
 	OrgID           sql.NullInt64   `db:"org_id"`
 	Auftragnehmer   string          `db:"auftragnehmer"`
 	Address         string          `db:"address"`
+	NVT             string          `db:"nvt"`
 	City            string          `db:"city"`
 	Bauabschnitt    string          `db:"bauabschnitt"`
 	ClientLastName  string          `db:"client_last_name"`
 	ClientFirstName string          `db:"client_first_name"`
+	ClientPhone     string          `db:"client_phone"`
+	ClientMobile    string          `db:"client_mobile"`
 	Units           sql.NullInt64   `db:"units"`
 	ProtocolDate    string          `db:"protocol_date"`
 	Monteur         string          `db:"monteur"`
@@ -145,7 +151,8 @@ type haRow struct {
 const haSelect = `
 	SELECT h.id, h.task_id, h.project_id, h.org_id,
 	       h.auftragnehmer, h.address, h.city, h.bauabschnitt,
-	       h.client_last_name, h.client_first_name, h.units,
+	       h.client_last_name, h.client_first_name, h.client_phone, h.client_mobile,
+	       h.nvt, h.units,
 	       to_char(h.protocol_date, 'YYYY-MM-DD') AS protocol_date,
 	       h.monteur, h.pruefer, h.project_number, h.gvs, h.kassette_b,
 	       h.mux_number, h.mux_fibers, h.splices, h.fiber_colors,
@@ -290,6 +297,7 @@ func haPrefillFromTask(r *http.Request, taskID int64) haRow {
 	}
 	h.OrgID = t.OrgID
 	h.Address = t.Address
+	h.NVT = t.NVT
 	h.ProjectNumber = t.Project
 	return h
 }
@@ -453,10 +461,12 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 			 client_last_name, client_first_name, units, protocol_date, monteur, pruefer,
 			 project_number, gvs, kassette_b, mux_number, mux_fibers, splices,
 			 fiber_colors, cable_charge, cable_length_m,
+			 nvt, client_phone, client_mobile,
 			 check_fiber, check_complete, check_clean, created_by)
 		VALUES ($1, $2, $3, $4,$5,$6,$7,$8,$9,
 		        NULLIF($10,'')::int, $11::date, $12,$13,$14,$15,$16,$17,$18,
-		        NULLIF($19,'')::int, $20,$21,NULLIF($22,'')::numeric, $23,$24,$25,$26)
+		        NULLIF($19,'')::int, $20,$21,NULLIF($22,'')::numeric,
+		        $23,$24,$25, $26,$27,$28,$29)
 		RETURNING id`,
 		nullableID(taskID), nullableID(projectID), nullableID(orgID),
 		strings.TrimSpace(r.FormValue("auftragnehmer")),
@@ -478,6 +488,9 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 		strings.Join(r.Form["fiber_colors"], ","),
 		strings.TrimSpace(r.FormValue("cable_charge")),
 		strings.TrimSpace(r.FormValue("cable_length_m")),
+		strings.TrimSpace(r.FormValue("nvt")),
+		strings.TrimSpace(r.FormValue("client_phone")),
+		strings.TrimSpace(r.FormValue("client_mobile")),
 		r.FormValue("check_fiber") != "",
 		r.FormValue("check_complete") != "",
 		r.FormValue("check_clean") != "",
@@ -685,9 +698,10 @@ func updateHA(r *http.Request, h haRow) string {
 			gvs=$12, kassette_b=$13, mux_number=$14, mux_fibers=$15,
 			splices=NULLIF($16,'')::int, fiber_colors=$17, cable_charge=$18,
 			cable_length_m=NULLIF($19,'')::numeric,
-			check_fiber=$20, check_complete=$21, check_clean=$22,
+			nvt=$20, client_phone=$21, client_mobile=$22,
+			check_fiber=$23, check_complete=$24, check_clean=$25,
 			updated_at=NOW()
-		WHERE id=$23`,
+		WHERE id=$26`,
 		strings.TrimSpace(r.FormValue("auftragnehmer")),
 		strings.TrimSpace(r.FormValue("address")),
 		strings.TrimSpace(r.FormValue("city")),
@@ -707,6 +721,9 @@ func updateHA(r *http.Request, h haRow) string {
 		strings.Join(r.Form["fiber_colors"], ","),
 		strings.TrimSpace(r.FormValue("cable_charge")),
 		strings.TrimSpace(r.FormValue("cable_length_m")),
+		strings.TrimSpace(r.FormValue("nvt")),
+		strings.TrimSpace(r.FormValue("client_phone")),
+		strings.TrimSpace(r.FormValue("client_mobile")),
 		r.FormValue("check_fiber") != "",
 		r.FormValue("check_complete") != "",
 		r.FormValue("check_clean") != "",
