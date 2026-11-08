@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"html/template"
@@ -14,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -486,6 +489,49 @@ func contentTypeOf(ext string) string {
 	default:
 		return "image/jpeg"
 	}
+}
+
+// DeleteRaw briše objekat po ključu (koristi se pri brisanju HaP-a).
+func (s *SourceStore) DeleteRaw(ctx context.Context, key string) error {
+	if !s.Enabled() || key == "" {
+		return nil
+	}
+	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	return err
+}
+
+// HADeleteHandler briše HaP i njegove priloge (staff ili vlasnik/organizacija).
+func HADeleteHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
+	h, err := loadHA(id)
+	if err != nil {
+		http.Error(w, "HaP not found", http.StatusNotFound)
+		return
+	}
+	claims := GetAuthClaims(r)
+	if claims == nil || !canEditHA(r, h) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	photos, _ := listHAPhotos(h.ID)
+	for _, p := range photos {
+		if err := sourceStore.DeleteRaw(r.Context(), p.ObjectKey); err != nil {
+			log.Printf("ha delete object %s: %v", p.ObjectKey, err)
+		}
+	}
+	if _, err := db.Exec(`DELETE FROM ha_protocols WHERE id = $1`, h.ID); err != nil {
+		http.Error(w, "Delete failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	logUserEvent(claims.UserID, 0, "hap-delete", fmt.Sprintf("hap %d", h.ID))
+	http.Redirect(w, r, "/ha?msg="+url.QueryEscape("HaP deleted."), http.StatusFound)
 }
 
 // HAViewHandler prikazuje HaP i dozvoljava izmenu tekstualnih polja.

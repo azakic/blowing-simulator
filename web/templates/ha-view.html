@@ -36,6 +36,13 @@
             <div class="actions">
                 <a class="btn btn-primary" href="/ha/pdf?id={{.HA.ID}}">⬇ Create HaP (PDF)</a>
                 {{if .CanEdit}}<a class="btn btn-ghost" href="/ha/edit?id={{.HA.ID}}">Edit</a>{{end}}
+                {{if .CanEdit}}
+                <form method="POST" action="/ha/delete" style="display:inline;" onsubmit="return confirm('Delete this HaP and all its photos? This cannot be undone.');">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
+                    <input type="hidden" name="id" value="{{.HA.ID}}">
+                    <button class="btn btn-danger" type="submit">Delete</button>
+                </form>
+                {{end}}
             </div>
         </div>
 

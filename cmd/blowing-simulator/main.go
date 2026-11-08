@@ -854,6 +854,7 @@ func main() {
 	http.HandleFunc("/ha/view", requireAuth(HAViewHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/ha/photo", requireAuth(HAPhotoHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/ha/pdf", requireAuth(HAPDFHandler, "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/ha/delete", requireAuth(withCSRF(HADeleteHandler), "editor", "partner", "admin"))
 	// Admin utility: backfill ownership for existing protocols (NULL user_id)
 	http.HandleFunc("/admin/backfill-ownership", requireAuth(AdminBackfillOwnershipHandler, "admin"))
 	http.HandleFunc("/admin/reparse", requireAuth(AdminReparseHandler, "admin"))
