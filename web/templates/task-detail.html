@@ -36,6 +36,7 @@
                 </p>
             </div>
             <div class="actions">
+                {{if .Task.DueDate.Valid}}<a class="btn btn-ghost" href="/tasks/ics?id={{.Task.ID}}">📅 Add to calendar</a>{{end}}
                 <span class="pill {{.Task.Status}}">{{.Task.Status}}</span>
                 <span class="pill {{.Task.Priority}}">{{.Task.Priority}}</span>
             </div>
@@ -46,7 +47,7 @@
         <section class="kpis">
             <div class="kpi"><div class="label">Address</div><div class="value" style="font-size:.95rem;">{{if .Task.Address}}{{.Task.Address}}{{else}}—{{end}}</div></div>
             <div class="kpi"><div class="label">NVT</div><div class="value" style="font-size:.95rem;">{{if .Task.NVT}}{{.Task.NVT}}{{else}}—{{end}}</div></div>
-            <div class="kpi"><div class="label">Due date</div><div class="value" style="font-size:.95rem;">{{if .Task.DueDate.Valid}}{{.Task.DueDate.String}}{{else}}—{{end}}</div></div>
+            <div class="kpi"><div class="label">Due</div><div class="value" style="font-size:.95rem;">{{if .Task.DueDate.Valid}}{{.Task.DueDate.String}}{{if .Task.DueTime.Valid}} · {{dotTime .Task.DueTime.String}}{{end}}{{else}}—{{end}}</div></div>
             <div class="kpi"><div class="label">Assigned to</div><div class="value" style="font-size:.85rem;">{{if .Task.UserEmail.Valid}}{{.Task.UserEmail.String}}{{else}}unassigned{{end}}</div></div>
         </section>
 
@@ -86,6 +87,7 @@
                         </select>
                     </label>
                     <label class="field"><span>Due date</span><input type="date" name="due_date" value="{{if .Task.DueDate.Valid}}{{.Task.DueDate.String}}{{end}}"></label>
+                    <label class="field"><span>Time</span><input type="time" name="due_time" step="300" value="{{if .Task.DueTime.Valid}}{{.Task.DueTime.String}}{{end}}"></label>
                     {{if .IsStaff}}
                     <label class="field"><span>Organisation</span>
                         <select name="org_id">

@@ -71,6 +71,8 @@ func ensureTaskSchema(db *sqlx.DB) error {
 			updated_at   TIMESTAMPTZ,
 			completed_at TIMESTAMPTZ
 		)`,
+		// Vreme roka (HH:MM) uz datum — radnik dobija tačan termin u kalendaru.
+		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS due_time TIME`,
 		`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_tasks_org ON tasks(org_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(user_id)`,
@@ -108,6 +110,7 @@ type taskRow struct {
 	Address      string         `db:"address"`
 	NVT          string         `db:"nvt"`
 	DueDate      sql.NullString `db:"due_date"`
+	DueTime      sql.NullString `db:"due_time"`
 	CreatedAt    string         `db:"created_at"`
 	UpdatedAt    sql.NullString `db:"updated_at"`
 	CompletedAt  sql.NullString `db:"completed_at"`
@@ -124,6 +127,7 @@ const taskSelect = `
 	       t.title, t.description, t.status, t.priority,
 	       t.address, t.nvt,
 	       to_char(t.due_date, 'YYYY-MM-DD') AS due_date,
+	       to_char(t.due_time, 'HH24:MI') AS due_time,
 	       to_char(t.created_at, 'YYYY-MM-DD HH24:MI') AS created_at,
 	       to_char(t.updated_at, 'YYYY-MM-DD HH24:MI') AS updated_at,
 	       to_char(t.completed_at, 'YYYY-MM-DD HH24:MI') AS completed_at,
@@ -413,7 +417,9 @@ func TasksHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tmpl, err := template.New("tasks.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/tasks.html")
+	tmpl, err := template.New("tasks.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).
+		Funcs(template.FuncMap{"dotTime": dotTime}).
+		ParseFiles("web/templates/tasks.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -515,22 +521,21 @@ func createTask(r *http.Request, claims *AuthClaims) string {
 		}
 	}
 
-	due := strings.TrimSpace(r.FormValue("due_date"))
-	if due != "" {
-		if _, err := time.Parse("2006-01-02", due); err != nil {
-			return "Datum roka nije ispravan (YYYY-MM-DD)."
-		}
+	due, dueTime, msg := parseDue(r)
+	if msg != "" {
+		return msg
 	}
 
 	var newID int64
 	err := db.Get(&newID, `INSERT INTO tasks
 			(project_id, org_id, user_id, title, description, priority,
-			 address, nvt, due_date, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9,'')::date, $10)
+			 address, nvt, due_date, due_time, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9,'')::date,
+		        NULLIF($10,'')::time, $11)
 		RETURNING id`,
 		projectID, sqlNullInt64(orgID), sqlNullInt64(userID), title, description, priority,
 		strings.TrimSpace(r.FormValue("address")), strings.TrimSpace(r.FormValue("nvt")),
-		due, claims.UserID)
+		due, dueTime, claims.UserID)
 	if err != nil {
 		return "Greška: " + err.Error()
 	}
@@ -636,7 +641,9 @@ func TaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 		{TaskPriorityHigh, "High"},
 	}
 
-	tmpl, err := template.New("task-detail.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/task-detail.html")
+	tmpl, err := template.New("task-detail.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).
+		Funcs(template.FuncMap{"dotTime": dotTime}).
+		ParseFiles("web/templates/task-detail.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -694,11 +701,9 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 		if !validTaskPriority(priority) {
 			priority = TaskPriorityNormal
 		}
-		due := strings.TrimSpace(r.FormValue("due_date"))
-		if due != "" {
-			if _, err := time.Parse("2006-01-02", due); err != nil {
-				return "Datum roka nije ispravan."
-			}
+		due, dueTime, msg := parseDue(r)
+		if msg != "" {
+			return msg
 		}
 
 		var orgID int64
@@ -717,11 +722,12 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 
 		_, err := db.Exec(`UPDATE tasks SET title=$1, description=$2, priority=$3,
 				address=$4, nvt=$5, due_date=NULLIF($6,'')::date,
-				org_id=$7, user_id=$8, updated_at=NOW()
-			WHERE id=$9`,
+				due_time=NULLIF($7,'')::time,
+				org_id=$8, user_id=$9, updated_at=NOW()
+			WHERE id=$10`,
 			title, description, priority,
 			strings.TrimSpace(r.FormValue("address")), strings.TrimSpace(r.FormValue("nvt")),
-			due, sqlNullInt64(orgID), sqlNullInt64(userID), t.ID)
+			due, dueTime, sqlNullInt64(orgID), sqlNullInt64(userID), t.ID)
 		if err != nil {
 			return "Greška: " + err.Error()
 		}
@@ -782,6 +788,33 @@ func protocolVisibleToUser(claims *AuthClaims, protocolID int) bool {
 	return err == nil && n > 0
 }
 
+// dotTime prikazuje vreme nemačkom notacijom (09:30 → 09.30).
+func dotTime(s string) string { return strings.ReplaceAll(s, ":", ".") }
+
+// parseDue čita datum i vreme roka iz forme. Vreme je `HH:MM` (HTML time),
+// a vraća se kao `HH:MM` koji PostgreSQL prihvata za TIME.
+func parseDue(r *http.Request) (date, clock, errMsg string) {
+	date = strings.TrimSpace(r.FormValue("due_date"))
+	clock = strings.TrimSpace(r.FormValue("due_time"))
+	if date != "" {
+		if _, err := time.Parse("2006-01-02", date); err != nil {
+			return "", "", "Datum roka nije ispravan."
+		}
+	}
+	if clock != "" {
+		clock = strings.ReplaceAll(clock, ".", ":") // 09.30 → 09:30 (nemačka notacija)
+		t, err := time.Parse("15:04", clock)
+		if err != nil {
+			return "", "", "Vreme roka mora biti u formatu HH:MM."
+		}
+		clock = t.Format("15:04")
+	}
+	if date == "" && clock != "" {
+		return "", "", "Vreme bez datuma nema smisla — unesi i datum."
+	}
+	return date, clock, ""
+}
+
 // notifyTaskAssigned šalje kratko obaveštenje dodeljenom korisniku.
 func notifyTaskAssigned(userID, taskID int64) {
 	if !mail.Enabled() {
@@ -803,7 +836,11 @@ func notifyTaskAssigned(userID, taskID int64) {
 		text += "NVT: " + t.NVT + "\n"
 	}
 	if t.DueDate.Valid {
-		text += "Rok: " + t.DueDate.String + "\n"
+		text += "Rok: " + t.DueDate.String
+		if t.DueTime.Valid {
+			text += " " + strings.ReplaceAll(t.DueTime.String, ":", ".")
+		}
+		text += "\n"
 	}
 	text += "\nOtvori: " + mail.link("/tasks/view?id="+strconv.FormatInt(taskID, 10)) + "\n"
 	mail.Send([]string{email}, "Novi zadatak: "+t.Title, text)

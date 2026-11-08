@@ -841,6 +841,8 @@ func main() {
 	// Zadaci sa terena (faza 2 projekata) — svi prijavljeni vide svoj opseg.
 	http.HandleFunc("/tasks", requireAuth(withCSRF(TasksHandler), "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/tasks/view", requireAuth(withCSRF(TaskDetailHandler), "viewer", "editor", "partner", "admin"))
+	// .ics izvoz za „Add to calendar“ na telefonu (GET, bez CSRF-a).
+	http.HandleFunc("/tasks/ics", requireAuth(TaskICSHandler, "viewer", "editor", "partner", "admin"))
 	// Admin utility: backfill ownership for existing protocols (NULL user_id)
 	http.HandleFunc("/admin/backfill-ownership", requireAuth(AdminBackfillOwnershipHandler, "admin"))
 	http.HandleFunc("/admin/reparse", requireAuth(AdminReparseHandler, "admin"))

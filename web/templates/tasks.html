@@ -107,6 +107,7 @@
                         </select>
                     </label>
                     <label class="field"><span>Due date</span><input type="date" name="due_date"></label>
+                    <label class="field"><span>Time</span><input type="time" name="due_time" step="300"></label>
                     <label class="field" style="flex:2 1 220px;"><span>Address</span><input type="text" name="address" placeholder="Street, no., city"></label>
                     <label class="field"><span>NVT</span><input type="text" name="nvt" placeholder="NVT 1V3400"></label>
                     <label class="field" style="flex:1 1 100%;"><span>Description</span>
@@ -129,7 +130,7 @@
                             <th>Project</th>
                             <th>Address / NVT</th>
                             <th>Assigned</th>
-                            <th>Due</th>
+                            <th>Due / time</th>
                             <th>Priority</th>
                             <th>Status</th>
                             <th>Actions</th>
@@ -153,12 +154,16 @@
                                 {{if .OrgName.Valid}}<div class="muted" style="font-size:.8rem;">{{.OrgName.String}}</div>{{end}}
                             </td>
                             <td data-label="Due">
-                                {{if .DueDate.Valid}}{{.DueDate.String}}{{if .IsOverdue}} <span style="color:#c62828;font-weight:700;" title="Overdue">!</span>{{end}}{{else}}<span class="muted">—</span>{{end}}
+                                {{if .DueDate.Valid}}
+                                {{.DueDate.String}}{{if .IsOverdue}} <span style="color:#c62828;font-weight:700;" title="Overdue">!</span>{{end}}
+                                {{if .DueTime.Valid}}<div class="muted" style="font-size:.8rem;">{{dotTime .DueTime.String}}</div>{{end}}
+                                {{else}}<span class="muted">—</span>{{end}}
                             </td>
                             <td data-label="Priority"><span class="pill {{.Priority}}">{{.Priority}}</span></td>
                             <td data-label="Status"><span class="pill {{.Status}}">{{.Status}}</span></td>
                             <td data-label="Actions" style="white-space:nowrap;">
                                 <a class="btn btn-ghost btn-small" href="/tasks/view?id={{.ID}}">Open</a>
+                                {{if .DueDate.Valid}}<a class="btn btn-ghost btn-small" href="/tasks/ics?id={{.ID}}" title="Add to calendar">📅</a>{{end}}
                                 {{if eq .Status "open"}}
                                 <form method="POST" action="/tasks" style="display:inline;">
                                     <input type="hidden" name="csrf_token" value="{{csrfToken}}">
