@@ -83,6 +83,11 @@
                     <label class="field" style="flex:2 1 260px;"><span>Title</span>
                         <input type="text" name="title" maxlength="200" value="{{.Task.Title}}" placeholder="optional — defaults to the address">
                     </label>
+                    <label class="field"><span>Project *</span>
+                        <select name="project_id" required>
+                            {{range .Projects}}<option value="{{.ID}}" {{if eq $.Task.ProjectID .ID}}selected{{end}}>{{.Number}}{{if .Name}} — {{.Name}}{{end}}</option>{{end}}
+                        </select>
+                    </label>
                     <label class="field"><span>Priority</span>
                         <select name="priority">
                             {{range .Priorities}}<option value="{{.Value}}" {{if eq $.Task.Priority .Value}}selected{{end}}>{{.Label}}</option>{{end}}

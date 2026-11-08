@@ -751,6 +751,46 @@ type lookupResponse struct {
 	Matches []lookupMatch `json:"matches,omitempty"`
 }
 
+// findCustomers traži pogotke: tačna adresa, pa NVT (grupa adresa), pa
+// prefiks adrese.
+func findCustomers(nvt, addr string) []customerRow {
+	var rows []customerRow
+	if addr != "" {
+		_ = db.Select(&rows, `SELECT id, address, nvt, kunde, phone, mobile
+			FROM ha_customers WHERE address_key = $1 LIMIT 1`, addr)
+	}
+	if len(rows) == 0 && nvt != "" {
+		_ = db.Select(&rows, `SELECT id, address, nvt, kunde, phone, mobile
+			FROM ha_customers WHERE nvt_key = $1 ORDER BY address_key LIMIT 5`, nvt)
+	}
+	if len(rows) == 0 && len(addr) >= 3 {
+		_ = db.Select(&rows, `SELECT id, address, nvt, kunde, phone, mobile
+			FROM ha_customers WHERE address_key LIKE $1 || '%'
+			ORDER BY length(address_key), address_key LIMIT 5`, addr)
+	}
+	return rows
+}
+
+// customerForPrefill vraća klijenta za server-side popunjavanje forme:
+// tačna adresa, ili NVT samo kada je jedinstven (NVT je obično grupa adresa).
+func customerForPrefill(nvt, address string) (customerRow, bool) {
+	var row customerRow
+	if a := customerKey(address); a != "" {
+		if err := db.Get(&row, `SELECT id, address, nvt, kunde, phone, mobile
+			FROM ha_customers WHERE address_key = $1 LIMIT 1`, a); err == nil {
+			return row, true
+		}
+	}
+	if n := customerKey(nvt); n != "" {
+		var rows []customerRow
+		if err := db.Select(&rows, `SELECT id, address, nvt, kunde, phone, mobile
+			FROM ha_customers WHERE nvt_key = $1 LIMIT 2`, n); err == nil && len(rows) == 1 {
+			return rows[0], true
+		}
+	}
+	return customerRow{}, false
+}
+
 // HALookupHandler vraća najbolji pogodak iz direktorijuma za zadati NVT ili
 // adresu; HaP forma njime popunjava prazna polja klijenta.
 func HALookupHandler(w http.ResponseWriter, r *http.Request) {
@@ -766,21 +806,7 @@ func HALookupHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var rows []customerRow
-	// Adresa je tačan ključ; NVT je često zajednički za grupu adresa.
-	if addr != "" {
-		_ = db.Select(&rows, `SELECT id, address, nvt, kunde, phone, mobile
-			FROM ha_customers WHERE address_key = $1 LIMIT 1`, addr)
-	}
-	if len(rows) == 0 && nvt != "" {
-		_ = db.Select(&rows, `SELECT id, address, nvt, kunde, phone, mobile
-			FROM ha_customers WHERE nvt_key = $1 ORDER BY address_key LIMIT 5`, nvt)
-	}
-	if len(rows) == 0 && len(addr) >= 3 {
-		_ = db.Select(&rows, `SELECT id, address, nvt, kunde, phone, mobile
-			FROM ha_customers WHERE address_key LIKE $1 || '%'
-			ORDER BY length(address_key), address_key LIMIT 5`, addr)
-	}
+	rows := findCustomers(nvt, addr)
 	if len(rows) == 0 {
 		writeJSON(w, resp)
 		return

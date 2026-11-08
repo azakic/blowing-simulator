@@ -84,7 +84,7 @@
                     </label>
                     <label class="field"><span>Project *</span>
                         <select name="project_id" required>
-                            {{range .Projects}}<option value="{{.ID}}">{{.Number}}{{if .Name}} — {{.Name}}{{end}}</option>{{end}}
+                            {{range .Projects}}<option value="{{.ID}}" {{if eq $.Filter.Project .Number}}selected{{end}}>{{.Number}}{{if .Name}} — {{.Name}}{{end}}</option>{{end}}
                         </select>
                     </label>
                     {{if .IsStaff}}

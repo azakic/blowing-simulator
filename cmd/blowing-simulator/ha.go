@@ -299,6 +299,19 @@ func haPrefillFromTask(r *http.Request, taskID int64) haRow {
 	h.Address = t.Address
 	h.NVT = t.NVT
 	h.ProjectNumber = t.Project
+
+	// Predikcija: ako direktorijum klijenata već ima ovu adresu (ili
+	// jedinstven NVT), popuni klijenta i telefone odmah, bez čekanja na JS.
+	if c, ok := customerForPrefill(t.NVT, t.Address); ok {
+		first, last := splitKunde(c.Kunde)
+		h.ClientFirstName = first
+		h.ClientLastName = last
+		h.ClientPhone = c.Phone
+		h.ClientMobile = c.Mobile
+		if h.NVT == "" {
+			h.NVT = c.NVT
+		}
+	}
 	return h
 }
 

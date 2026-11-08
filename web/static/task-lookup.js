@@ -50,4 +50,8 @@
     nvt.addEventListener('blur', schedule);
     nvt.addEventListener('change', schedule);
   }
+  // Izmena zadatka već ima adresu — pokušaj odmah da dopuniš NVT.
+  if ((address.value || '').trim().length >= 3 || (nvt && nvt.value.trim())) {
+    lookup();
+  }
 })();

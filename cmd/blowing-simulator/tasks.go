@@ -288,6 +288,37 @@ func canSeeTask(r *http.Request, t taskRow) bool {
 
 // --- stranice ---
 
+// taskProjectOption je jedna opcija u izboru projekta na formama zadatka.
+type taskProjectOption struct {
+	ID     int64  `db:"id"`
+	Number string `db:"number"`
+	Name   string `db:"name"`
+	Status string `db:"status"`
+}
+
+// taskProjectOptions vraća aktivne projekte koje korisnik sme da koristi:
+// staff sve, org admin samo projekte svoje organizacije.
+func taskProjectOptions(r *http.Request) []taskProjectOption {
+	var out []taskProjectOption
+	if !canSeeAllTasks(r) {
+		claims := GetAuthClaims(r)
+		if claims == nil {
+			return nil
+		}
+		orgID := userOrgID(claims.UserID)
+		if orgID == 0 {
+			return nil
+		}
+		_ = db.Select(&out, `SELECT p.id, p.number, coalesce(p.name,'') AS name, p.status
+			FROM projects p JOIN project_orgs po ON po.project_id = p.id
+			WHERE p.status = 'active' AND po.org_id = $1 ORDER BY p.number`, orgID)
+		return out
+	}
+	_ = db.Select(&out, `SELECT id, number, coalesce(name,'') AS name, status
+		FROM projects WHERE status = 'active' ORDER BY number`)
+	return out
+}
+
 // TasksHandler: lista zadataka + kreiranje + brza promena statusa.
 //
 //	GET  /tasks?status=&project=&mine=1&org=
@@ -388,26 +419,7 @@ func TasksHandler(w http.ResponseWriter, r *http.Request) {
 		counts[c.Status] = c.N
 	}
 
-	// Opcije za forme
-	type projectOption struct {
-		ID     int64  `db:"id"`
-		Number string `db:"number"`
-		Name   string `db:"name"`
-		Status string `db:"status"`
-	}
-	var projects []projectOption
-	projQuery := `SELECT id, number, coalesce(name,'') AS name, status FROM projects
-		WHERE status = 'active' ORDER BY number`
-	if !canSeeAllTasks(r) {
-		if orgID := userOrgID(claims.UserID); orgID != 0 {
-			projQuery = `SELECT p.id, p.number, coalesce(p.name,'') AS name, p.status
-				FROM projects p JOIN project_orgs po ON po.project_id = p.id
-				WHERE p.status = 'active' AND po.org_id = $1 ORDER BY p.number`
-			_ = db.Select(&projects, projQuery, orgID)
-		}
-	} else {
-		_ = db.Select(&projects, projQuery)
-	}
+	projects := taskProjectOptions(r)
 
 	orgs, _ := listOrgs()
 
@@ -689,6 +701,23 @@ func TaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 		FROM task_protocols tp JOIN protocols p ON p.id = tp.protocol_id
 		WHERE tp.task_id = $1 ORDER BY p.protocol_date DESC, p.id DESC`, t.ID)
 
+	projects := taskProjectOptions(r)
+	// Trenutni projekat mora uvek biti u listi, čak i ako je zatvoren.
+	projectInList := false
+	for _, p := range projects {
+		if p.ID == t.ProjectID {
+			projectInList = true
+			break
+		}
+	}
+	if !projectInList {
+		var cur taskProjectOption
+		if err := db.Get(&cur, `SELECT id, number, coalesce(name,'') AS name, status
+			FROM projects WHERE id = $1`, t.ProjectID); err == nil {
+			projects = append([]taskProjectOption{cur}, projects...)
+		}
+	}
+
 	orgs, _ := listOrgs()
 	var users []struct {
 		ID    int64         `db:"id"`
@@ -734,6 +763,7 @@ func TaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 		"Task":       t,
 		"Linked":     linked,
 		"HAs":        linkedHAs,
+		"Projects":   projects,
 		"Orgs":       orgs,
 		"Users":      users,
 		"Statuses":   statuses,
@@ -786,6 +816,14 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 			return msg
 		}
 
+		projectID, _ := strconv.ParseInt(r.FormValue("project_id"), 10, 64)
+		if projectID <= 0 {
+			return "Project is required."
+		}
+		if projectID != t.ProjectID && !canCreateTask(r, projectID) {
+			return "You are not allowed to move the task to that project."
+		}
+
 		var orgID int64
 		if canSeeAllTasks(r) {
 			orgID, _ = strconv.ParseInt(r.FormValue("org_id"), 10, 64)
@@ -809,12 +847,12 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 			title = address
 		}
 
-		_, err := db.Exec(`UPDATE tasks SET title=$1, description=$2, priority=$3,
-				address=$4, nvt=$5, due_date=NULLIF($6,'')::date,
-				due_time=NULLIF($7,'')::time,
-				org_id=$8, user_id=$9, updated_at=NOW()
-			WHERE id=$10`,
-			title, description, priority, address, nvt,
+		_, err := db.Exec(`UPDATE tasks SET project_id=$1, title=$2, description=$3,
+				priority=$4, address=$5, nvt=$6,
+				due_date=NULLIF($7,'')::date, due_time=NULLIF($8,'')::time,
+				org_id=$9, user_id=$10, updated_at=NOW()
+			WHERE id=$11`,
+			projectID, title, description, priority, address, nvt,
 			due, dueTime, sqlNullInt64(orgID), sqlNullInt64(userID), t.ID)
 		if err != nil {
 			return "Error: " + err.Error()

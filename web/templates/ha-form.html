@@ -273,6 +273,10 @@
             address.addEventListener('blur', schedule);
             nvt.addEventListener('change', schedule);
             address.addEventListener('change', schedule);
+            // Forma otvorena iz zadatka već ima adresu/NVT — popuni odmah.
+            if (nvt.value.trim() || (address.value || '').trim().length >= 3) {
+                lookup();
+            }
         })();
     </script>
 </body>
