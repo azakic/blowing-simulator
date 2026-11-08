@@ -60,6 +60,63 @@ func TestParseTaskFilterMineOff(t *testing.T) {
 	}
 }
 
+func TestMinuteValues(t *testing.T) {
+	got := minuteValues()
+	want := []string{"00", "15", "30", "45"}
+	if len(got) != len(want) {
+		t.Fatalf("minuteValues = %v, očekivano %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("minuteValues = %v, očekivano %v", got, want)
+		}
+	}
+}
+
+func TestMinuteOptionsKeepsLegacy(t *testing.T) {
+	if got := minuteOptions(""); len(got) != 4 {
+		t.Fatalf("minuteOptions(prazno) = %v", got)
+	}
+	if got := minuteOptions("09:30"); len(got) != 4 {
+		t.Fatalf("minuteOptions(09:30) = %v (ne sme duplikat)", got)
+	}
+	got := minuteOptions("09:37")
+	if len(got) != 5 {
+		t.Fatalf("minuteOptions(09:37) = %v", got)
+	}
+	found := false
+	for _, m := range got {
+		if m == "37" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("minuteOptions(09:37) ne sadrži 37: %v", got)
+	}
+}
+
+func TestValidateTaskRequired(t *testing.T) {
+	if msg := validateTaskRequired(1, "Am Hang 10", "1.25", "2026-11-08", "09:30"); msg != "" {
+		t.Fatalf("validan unos vraća grešku: %q", msg)
+	}
+	cases := []struct {
+		name                  string
+		org                   int64
+		addr, nvt, due, clock string
+	}{
+		{"organizacija", 0, "A", "1.1", "2026-11-08", "09:30"},
+		{"adresa", 1, " ", "1.1", "2026-11-08", "09:30"},
+		{"nvt", 1, "A", "", "2026-11-08", "09:30"},
+		{"datum", 1, "A", "1.1", "", "09:30"},
+		{"vreme", 1, "A", "1.1", "2026-11-08", ""},
+	}
+	for _, c := range cases {
+		if msg := validateTaskRequired(c.org, c.addr, c.nvt, c.due, c.clock); msg == "" {
+			t.Errorf("%s: očekivana greška", c.name)
+		}
+	}
+}
+
 func TestParseTaskFilter(t *testing.T) {
 	r := httptest.NewRequest("GET", "/tasks?status=open&project=SM209214964&mine=1&org=2", nil)
 	f := parseTaskFilter(r)

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -516,15 +517,33 @@ func handleTaskAction(r *http.Request) (msg, target string) {
 	return "Unknown action.", ""
 }
 
+// validateTaskRequired sprovodi obavezna polja zadatka: organizacija, adresa,
+// NVT, datum i vreme. Naslov i opis su opcioni (naslov se izvodi iz adrese).
+func validateTaskRequired(orgID int64, address, nvt, due, clock string) string {
+	switch {
+	case orgID <= 0:
+		return "Organisation is required."
+	case strings.TrimSpace(address) == "":
+		return "Address is required."
+	case strings.TrimSpace(nvt) == "":
+		return "NVT is required."
+	case due == "":
+		return "Due date is required."
+	case clock == "":
+		return "Due time is required."
+	}
+	return ""
+}
+
 func createTask(r *http.Request, claims *AuthClaims) (int64, string) {
 	projectID, _ := strconv.ParseInt(r.FormValue("project_id"), 10, 64)
+	if projectID <= 0 {
+		return 0, "Project is required."
+	}
 	if !canCreateTask(r, projectID) {
 		return 0, "You are not allowed to create tasks on that project."
 	}
 	title := strings.TrimSpace(r.FormValue("title"))
-	if title == "" {
-		return 0, "Task title is required."
-	}
 	if len(title) > 200 {
 		title = title[:200]
 	}
@@ -553,9 +572,18 @@ func createTask(r *http.Request, claims *AuthClaims) (int64, string) {
 		}
 	}
 
+	address := strings.TrimSpace(r.FormValue("address"))
+	nvt := strings.TrimSpace(r.FormValue("nvt"))
 	due, dueTime, msg := parseDue(r)
 	if msg != "" {
 		return 0, msg
+	}
+	if msg := validateTaskRequired(orgID, address, nvt, due, dueTime); msg != "" {
+		return 0, msg
+	}
+	// Naslov je opcion: bez naslova zadatak nosi adresu.
+	if title == "" {
+		title = address
 	}
 
 	var newID int64
@@ -566,8 +594,7 @@ func createTask(r *http.Request, claims *AuthClaims) (int64, string) {
 		        NULLIF($10,'')::time, $11)
 		RETURNING id`,
 		projectID, sqlNullInt64(orgID), sqlNullInt64(userID), title, description, priority,
-		strings.TrimSpace(r.FormValue("address")), strings.TrimSpace(r.FormValue("nvt")),
-		due, dueTime, claims.UserID)
+		address, nvt, due, dueTime, claims.UserID)
 	if err != nil {
 		return 0, "Error: " + err.Error()
 	}
@@ -694,7 +721,7 @@ func TaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 		Funcs(template.FuncMap{
 			"dotTime": dotTime,
 			"hours":   hourValues,
-			"minutes": minuteValues,
+			"minutes": func() []string { return minuteOptions(t.DueTime.String) },
 			"hourOf":  hourOf,
 			"minOf":   minOf,
 		}).
@@ -743,9 +770,6 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 			return "You are not allowed to change this task."
 		}
 		title := strings.TrimSpace(r.FormValue("title"))
-		if title == "" {
-			return "Title is required."
-		}
 		if len(title) > 200 {
 			title = title[:200]
 		}
@@ -776,13 +800,21 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 			}
 		}
 
+		address := strings.TrimSpace(r.FormValue("address"))
+		nvt := strings.TrimSpace(r.FormValue("nvt"))
+		if msg := validateTaskRequired(orgID, address, nvt, due, dueTime); msg != "" {
+			return msg
+		}
+		if title == "" {
+			title = address
+		}
+
 		_, err := db.Exec(`UPDATE tasks SET title=$1, description=$2, priority=$3,
 				address=$4, nvt=$5, due_date=NULLIF($6,'')::date,
 				due_time=NULLIF($7,'')::time,
 				org_id=$8, user_id=$9, updated_at=NOW()
 			WHERE id=$10`,
-			title, description, priority,
-			strings.TrimSpace(r.FormValue("address")), strings.TrimSpace(r.FormValue("nvt")),
+			title, description, priority, address, nvt,
 			due, dueTime, sqlNullInt64(orgID), sqlNullInt64(userID), t.ID)
 		if err != nil {
 			return "Error: " + err.Error()
@@ -857,11 +889,26 @@ func hourValues() []string {
 	return out
 }
 
+// minuteValues: minute se biraju na četvrt sata (00/15/30/45).
 func minuteValues() []string {
-	out := make([]string, 60)
-	for i := range out {
-		out[i] = fmt.Sprintf("%02d", i)
+	return []string{"00", "15", "30", "45"}
+}
+
+// minuteOptions vraća četvrti, a postojeći minut van njih zadržava kako stara
+// vrednost ne bi nestala pri izmeni.
+func minuteOptions(clock string) []string {
+	out := minuteValues()
+	m := minOf(clock)
+	if m == "" {
+		return out
 	}
+	for _, o := range out {
+		if o == m {
+			return out
+		}
+	}
+	out = append(out, m)
+	sort.Strings(out)
 	return out
 }
 

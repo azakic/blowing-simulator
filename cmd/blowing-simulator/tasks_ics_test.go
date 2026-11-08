@@ -172,7 +172,13 @@ func TestHourMinHelpers(t *testing.T) {
 	if len(hs) != 24 || hs[0] != "00" || hs[23] != "23" {
 		t.Errorf("hourValues = %v", hs)
 	}
-	if len(ms) != 60 || ms[0] != "00" || ms[59] != "59" {
-		t.Errorf("minuteValues = %v", ms)
+	wantMs := []string{"00", "15", "30", "45"}
+	if len(ms) != len(wantMs) {
+		t.Errorf("minuteValues = %v, očekivano %v", ms, wantMs)
+	}
+	for i := range wantMs {
+		if ms[i] != wantMs[i] {
+			t.Errorf("minuteValues = %v, očekivano %v", ms, wantMs)
+		}
 	}
 }

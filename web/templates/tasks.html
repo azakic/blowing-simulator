@@ -79,8 +79,8 @@
                 <form method="POST" action="/tasks" class="filters" style="margin:0;border:0;padding:0;background:transparent;">
                     <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                     <input type="hidden" name="action" value="create">
-                    <label class="field" style="flex:2 1 260px;"><span>Title *</span>
-                        <input type="text" name="title" maxlength="200" placeholder="e.g. Blow fibre HA 12, NVT 2" required>
+                    <label class="field" style="flex:2 1 260px;"><span>Title</span>
+                        <input type="text" name="title" maxlength="200" placeholder="optional — defaults to the address">
                     </label>
                     <label class="field"><span>Project *</span>
                         <select name="project_id" required>
@@ -88,8 +88,8 @@
                         </select>
                     </label>
                     {{if .IsStaff}}
-                    <label class="field"><span>Organisation</span>
-                        <select name="org_id">
+                    <label class="field"><span>Organisation *</span>
+                        <select name="org_id" required>
                             <option value="">—</option>
                             {{range .Orgs}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
                         </select>
@@ -108,22 +108,23 @@
                             <option value="low">Low</option>
                         </select>
                     </label>
-                    <label class="field"><span>Due date</span><input type="date" name="due_date"></label>
-                    <label class="field"><span>Time (24 h)</span>
+                    <label class="field"><span>Due date *</span><input type="date" name="due_date" required></label>
+                    <label class="field"><span>Time (24 h) *</span>
                         <div style="display:flex;gap:.35rem;align-items:center;">
-                            <select name="due_hour" aria-label="Hour" style="flex:1 1 0;">
+                            <select name="due_hour" aria-label="Hour" required style="flex:1 1 0;">
                                 <option value="">hh</option>
                                 {{range hours}}<option value="{{.}}">{{.}}</option>{{end}}
                             </select>
                             <span style="color:var(--muted);font-weight:700;">:</span>
-                            <select name="due_min" aria-label="Minute" style="flex:1 1 0;">
+                            <select name="due_min" aria-label="Minute" required style="flex:1 1 0;">
                                 <option value="">mm</option>
                                 {{range minutes}}<option value="{{.}}">{{.}}</option>{{end}}
                             </select>
                         </div>
                     </label>
-                    <label class="field" style="flex:2 1 220px;"><span>Address</span><input type="text" name="address" placeholder="Street, no., city"></label>
-                    <label class="field"><span>NVT</span><input type="text" name="nvt" placeholder="NVT 1V3400"></label>
+                    <label class="field" style="flex:2 1 220px;"><span>Address *</span><input type="text" name="address" id="task-address" required placeholder="Street, no., city"></label>
+                    <label class="field"><span>NVT *</span><input type="text" name="nvt" id="task-nvt" required placeholder="NVT 1V3400"></label>
+                    <p id="task-lookup-hint" class="note" style="display:none;flex:1 1 100%;margin:0;"></p>
                     <label class="field" style="flex:1 1 100%;"><span>Description</span>
                         <textarea name="description" rows="3" placeholder="Scope, notes, access details…"></textarea>
                     </label>
@@ -207,5 +208,6 @@
             {{end}}
         </div>
     </main>
+    <script src="/static/task-lookup.js"></script>
 </body>
 </html>
