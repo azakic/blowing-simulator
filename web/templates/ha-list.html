@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1976d2">
+    <title>HA protocols - Wolken-ASM Reports</title>
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="/">Wolken-ASM Reports</a>
+        <input type="checkbox" id="nav-toggle" class="nav-toggle">
+        <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
+        <nav class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/tasks">Tasks</a>
+            <a href="/ha" class="active">HA protocols</a>
+            <a href="/reports/projects">Project Report</a>
+            <a href="/bulk-upload">Bulk Upload</a>
+            {{if .IsOrgAdmin}}<a href="/org/users">My users</a>{{end}}
+            {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a><a href="/admin/projects">Projects</a>{{end}}
+            {{if .UserRole}}<a href="/account">Account</a><span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+            {{else}}<a href="/login">Login</a>{{end}}
+        </nav>
+    </header>
+
+    <main class="page">
+        <a class="back" href="/">← Dashboard</a>
+
+        <div class="head">
+            <div>
+                <h1>HA protocols</h1>
+                <p class="sub">Hausanschlussprotokoll per connection — fields, photos with GPS and a ready PDF.</p>
+            </div>
+            <div class="actions">
+                <a class="btn btn-primary" href="/ha/new">＋ New HaP</a>
+            </div>
+        </div>
+
+        {{if .Message}}<p class="note">{{.Message}}</p>{{end}}
+
+        <div class="table-wrap">
+            {{if .Rows}}
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Address</th>
+                            <th>Client</th>
+                            <th>Date</th>
+                            <th>GVS / Kasette</th>
+                            <th>Monteur</th>
+                            <th>Photos</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Rows}}
+                        <tr>
+                            <td data-label="#"><a class="id-link" href="/ha/view?id={{.ID}}">#{{.ID}}</a></td>
+                            <td data-label="Address">
+                                <a class="link" href="/ha/view?id={{.ID}}">{{.Address}}{{if .City}}, {{.City}}{{end}}</a>
+                                {{if .ProjectNumber}}<div class="muted" style="font-size:.75rem;">{{.ProjectNumber}}</div>{{end}}
+                            </td>
+                            <td data-label="Client">{{if .ClientLastName}}{{.ClientFirstName}} {{.ClientLastName}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Date">{{.ProtocolDate}}</td>
+                            <td data-label="GVS / Kasette">
+                                {{if .GVS}}{{.GVS}}{{else}}<span class="muted">—</span>{{end}}
+                                {{if .KassetteB}}<div class="muted" style="font-size:.78rem;">{{.KassetteB}}</div>{{end}}
+                            </td>
+                            <td data-label="Monteur">{{if .Monteur}}{{.Monteur}}{{else}}<span class="muted">—</span>{{end}}</td>
+                            <td data-label="Photos" class="num">{{.PhotoCount}}</td>
+                            <td data-label="Actions" style="white-space:nowrap;">
+                                <a class="btn btn-ghost btn-small" href="/ha/view?id={{.ID}}">Open</a>
+                                <a class="btn btn-ghost btn-small" href="/ha/pdf?id={{.ID}}">PDF</a>
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            {{else}}
+            <p class="empty">No HA protocols yet. Create the first one.</p>
+            {{end}}
+        </div>
+    </main>
+</body>
+</html>

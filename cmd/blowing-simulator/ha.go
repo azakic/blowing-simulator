@@ -1,0 +1,670 @@
+package main
+
+import (
+	"database/sql"
+	"fmt"
+	"html/template"
+	"io"
+	"log"
+	"mime/multipart"
+	"net/http"
+	"net/url"
+	"path"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/jmoiron/sqlx"
+)
+
+// HaP = Hausanschlussprotokoll (Westnetz obrazac 1.5.1) koji pravimo iz forme
+// i na kraju generišemo kao PDF u istom rasporedu.
+//
+// Forma pokriva sva tekstualna polja, izbor boja vlakana, tri potvrdna polja i
+// devet priloga (4 fotografije, 2 nalepnice, Licht test, 2 potpisa).
+
+// haPhotoKinds su fiksni slotovi; redosled je redosled u PDF-u.
+var haPhotoKinds = []struct {
+	Key, Label string
+}{
+	{"bild1", "Bild 1 — Hausanschluss gesamt"},
+	{"bild2", "Bild 2 — APL offen"},
+	{"bild3", "Bild 3 — APL geschlossen / Aufkleber"},
+	{"bild4", "Bild 4 — Foto ONT"},
+	{"ont_label", "ONT Aufkleber"},
+	{"apl_label", "APL Aufkleber"},
+	{"light_test", "Licht test"},
+	{"sig_monteur", "Unterschrift Monteur"},
+	{"sig_pruefer", "Unterschrift Prüfer"},
+}
+
+func validHAKind(kind string) bool {
+	for _, k := range haPhotoKinds {
+		if k.Key == kind {
+			return true
+		}
+	}
+	return false
+}
+
+func ensureHASchema(db *sqlx.DB) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS ha_protocols (
+			id                SERIAL PRIMARY KEY,
+			task_id           INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+			project_id        INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+			org_id            INTEGER REFERENCES orgs(id) ON DELETE SET NULL,
+			auftragnehmer     TEXT NOT NULL DEFAULT '',
+			address           TEXT NOT NULL DEFAULT '',
+			city              TEXT NOT NULL DEFAULT '',
+			bauabschnitt      TEXT NOT NULL DEFAULT '',
+			client_last_name  TEXT NOT NULL DEFAULT '',
+			client_first_name TEXT NOT NULL DEFAULT '',
+			units             INTEGER,
+			protocol_date     DATE NOT NULL DEFAULT CURRENT_DATE,
+			monteur           TEXT NOT NULL DEFAULT '',
+			pruefer           TEXT NOT NULL DEFAULT '',
+			project_number    TEXT NOT NULL DEFAULT '',
+			gvs               TEXT NOT NULL DEFAULT '',
+			kassette_b        TEXT NOT NULL DEFAULT '',
+			mux_number        TEXT NOT NULL DEFAULT '',
+			mux_fibers        TEXT NOT NULL DEFAULT '',
+			splices           INTEGER,
+			fiber_colors      TEXT NOT NULL DEFAULT '',
+			cable_charge      TEXT NOT NULL DEFAULT '',
+			cable_length_m    NUMERIC(10,1),
+			check_fiber       BOOLEAN NOT NULL DEFAULT FALSE,
+			check_complete    BOOLEAN NOT NULL DEFAULT FALSE,
+			check_clean       BOOLEAN NOT NULL DEFAULT FALSE,
+			created_by        INTEGER REFERENCES users(id) ON DELETE SET NULL,
+			created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at        TIMESTAMPTZ
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_ha_project ON ha_protocols(project_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_ha_org ON ha_protocols(org_id)`,
+		`CREATE TABLE IF NOT EXISTS ha_photos (
+			id          SERIAL PRIMARY KEY,
+			ha_id       INTEGER NOT NULL REFERENCES ha_protocols(id) ON DELETE CASCADE,
+			kind        TEXT NOT NULL,
+			object_key  TEXT NOT NULL,
+			content_type TEXT NOT NULL DEFAULT 'image/jpeg',
+			bytes       INTEGER NOT NULL DEFAULT 0,
+			lat         DOUBLE PRECISION,
+			lon         DOUBLE PRECISION,
+			altitude_m  DOUBLE PRECISION,
+			bearing_deg DOUBLE PRECISION,
+			taken_at    TIMESTAMPTZ,
+			created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			UNIQUE (ha_id, kind)
+		)`,
+	}
+	for _, s := range stmts {
+		if _, err := db.Exec(s); err != nil {
+			return fmt.Errorf("ha schema: %w", err)
+		}
+	}
+	return nil
+}
+
+type haRow struct {
+	ID              int64           `db:"id"`
+	TaskID          sql.NullInt64   `db:"task_id"`
+	ProjectID       sql.NullInt64   `db:"project_id"`
+	OrgID           sql.NullInt64   `db:"org_id"`
+	Auftragnehmer   string          `db:"auftragnehmer"`
+	Address         string          `db:"address"`
+	City            string          `db:"city"`
+	Bauabschnitt    string          `db:"bauabschnitt"`
+	ClientLastName  string          `db:"client_last_name"`
+	ClientFirstName string          `db:"client_first_name"`
+	Units           sql.NullInt64   `db:"units"`
+	ProtocolDate    string          `db:"protocol_date"`
+	Monteur         string          `db:"monteur"`
+	Pruefer         string          `db:"pruefer"`
+	ProjectNumber   string          `db:"project_number"`
+	GVS             string          `db:"gvs"`
+	KassetteB       string          `db:"kassette_b"`
+	MuxNumber       string          `db:"mux_number"`
+	MuxFibers       string          `db:"mux_fibers"`
+	Splices         sql.NullInt64   `db:"splices"`
+	FiberColors     string          `db:"fiber_colors"`
+	CableCharge     string          `db:"cable_charge"`
+	CableLength     sql.NullFloat64 `db:"cable_length_m"`
+	CheckFiber      bool            `db:"check_fiber"`
+	CheckComplete   bool            `db:"check_complete"`
+	CheckClean      bool            `db:"check_clean"`
+	CreatedBy       sql.NullInt64   `db:"created_by"`
+	CreatedAt       string          `db:"created_at"`
+	CreatorEmail    sql.NullString  `db:"creator_email"`
+	PhotoCount      int             `db:"photos"`
+}
+
+const haSelect = `
+	SELECT h.id, h.task_id, h.project_id, h.org_id,
+	       h.auftragnehmer, h.address, h.city, h.bauabschnitt,
+	       h.client_last_name, h.client_first_name, h.units,
+	       to_char(h.protocol_date, 'YYYY-MM-DD') AS protocol_date,
+	       h.monteur, h.pruefer, h.project_number, h.gvs, h.kassette_b,
+	       h.mux_number, h.mux_fibers, h.splices, h.fiber_colors,
+	       h.cable_charge, h.cable_length_m,
+	       h.check_fiber, h.check_complete, h.check_clean,
+	       h.created_by, to_char(h.created_at, 'YYYY-MM-DD HH24:MI') AS created_at,
+	       u.email AS creator_email,
+	       (SELECT count(*) FROM ha_photos p WHERE p.ha_id = h.id) AS photos
+	FROM ha_protocols h
+	LEFT JOIN users u ON u.id = h.created_by`
+
+type haPhotoRow struct {
+	ID          int64           `db:"id"`
+	HAID        int64           `db:"ha_id"`
+	Kind        string          `db:"kind"`
+	ObjectKey   string          `db:"object_key"`
+	ContentType string          `db:"content_type"`
+	Bytes       int             `db:"bytes"`
+	Lat         sql.NullFloat64 `db:"lat"`
+	Lon         sql.NullFloat64 `db:"lon"`
+	Altitude    sql.NullFloat64 `db:"altitude_m"`
+	Bearing     sql.NullFloat64 `db:"bearing_deg"`
+	TakenAt     sql.NullString  `db:"taken_at"`
+}
+
+func loadHA(id int64) (haRow, error) {
+	var h haRow
+	err := db.Get(&h, haSelect+" WHERE h.id = $1", id)
+	return h, err
+}
+
+func listHAPhotos(haID int64) ([]haPhotoRow, error) {
+	var out []haPhotoRow
+	err := db.Select(&out, `SELECT id, ha_id, kind, object_key, content_type, bytes,
+			lat, lon, altitude_m, bearing_deg,
+			to_char(taken_at, 'YYYY-MM-DD HH24:MI') AS taken_at
+		FROM ha_photos WHERE ha_id = $1`, haID)
+	return out, err
+}
+
+// canSeeHA: staff sve; partner samo HaP svoje organizacije ili svoj.
+func canSeeHA(r *http.Request, h haRow) bool {
+	claims := GetAuthClaims(r)
+	if claims == nil {
+		return false
+	}
+	if seesAllProtocols(claims.Role) {
+		return true
+	}
+	if h.CreatedBy.Valid && h.CreatedBy.Int64 == claims.UserID {
+		return true
+	}
+	orgID := userOrgID(claims.UserID)
+	return orgID != 0 && h.OrgID.Valid && h.OrgID.Int64 == orgID
+}
+
+func canEditHA(r *http.Request, h haRow) bool {
+	return canSeeHA(r, h) // staff + ista organizacija; dalje ograničeno rolom
+}
+
+// HAListHandler prikazuje listu HaP-ova.
+func HAListHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetAuthClaims(r)
+	if claims == nil {
+		http.Redirect(w, r, "/login?next=/ha", http.StatusFound)
+		return
+	}
+	where := " WHERE 1=1"
+	args := []interface{}{}
+	if !seesAllProtocols(claims.Role) {
+		where += " AND (h.created_by = $1"
+		args = append(args, claims.UserID)
+		if orgID := userOrgID(claims.UserID); orgID != 0 {
+			where += " OR h.org_id = $2"
+			args = append(args, orgID)
+		}
+		where += ")"
+	}
+	var rows []haRow
+	if err := db.Select(&rows, haSelect+where+` ORDER BY h.id DESC LIMIT 200`, args...); err != nil {
+		http.Error(w, "Query failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	tmpl, err := template.New("ha-list.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/ha-list.html")
+	if err != nil {
+		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = tmpl.Execute(w, map[string]any{
+		"Rows":       rows,
+		"IsAdmin":    isAdminRole(r),
+		"IsOrgAdmin": isOrgAdminRequest(r),
+		"UserRole":   userRole(r),
+		"Message":    r.URL.Query().Get("msg"),
+	})
+}
+
+// HANewHandler: GET forma, POST kreiranje.
+func HANewHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetAuthClaims(r)
+	if claims == nil {
+		http.Redirect(w, r, "/login?next=/ha/new", http.StatusFound)
+		return
+	}
+	if r.Method == http.MethodPost {
+		id, msg := createHA(r, claims)
+		if id == 0 {
+			renderHAForm(w, r, claims, haRow{}, false, msg)
+			return
+		}
+		http.Redirect(w, r, "/ha/view?id="+strconv.FormatInt(id, 10)+"&msg="+url.QueryEscape(msg), http.StatusFound)
+		return
+	}
+	renderHAForm(w, r, claims, haRow{}, false, "")
+}
+
+func renderHAForm(w http.ResponseWriter, r *http.Request, claims *AuthClaims, h haRow, isEdit bool, message string) {
+	type projectOption struct {
+		ID     int64  `db:"id"`
+		Number string `db:"number"`
+	}
+	var projects []projectOption
+	_ = db.Select(&projects, `SELECT id, number FROM projects WHERE status = 'active' ORDER BY number`)
+
+	orgs, _ := listOrgs()
+
+	defFirma := h.Auftragnehmer
+	if defFirma == "" {
+		defFirma = orgNameByID(userOrgID(claims.UserID))
+	}
+	defMonteur := h.Monteur
+	if defMonteur == "" {
+		defMonteur = claims.Email
+	}
+	defDate := h.ProtocolDate
+	if defDate == "" {
+		defDate = time.Now().Format("2006-01-02")
+	}
+
+	tmpl, err := template.New("ha-form.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/ha-form.html")
+	if err != nil {
+		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = tmpl.Execute(w, map[string]any{
+		"Message":        message,
+		"HA":             h,
+		"IsEdit":         isEdit,
+		"PhotoKinds":     haPhotoKinds,
+		"FiberColors":    haFiberColors,
+		"Selected":       splitColors(h.FiberColors),
+		"Projects":       projects,
+		"Orgs":           orgs,
+		"DefaultDate":    defDate,
+		"DefaultFirma":   defFirma,
+		"DefaultMonteur": defMonteur,
+		"IsAdmin":        isAdminRole(r),
+		"IsOrgAdmin":     isOrgAdminRequest(r),
+		"IsStaff":        claims != nil && seesAllProtocols(claims.Role),
+		"UserRole":       userRole(r),
+	})
+}
+
+// HAEditHandler: GET forma sa postojećim podacima, POST izmena.
+func HAEditHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetAuthClaims(r)
+	if claims == nil {
+		http.Redirect(w, r, "/login?next=/ha", http.StatusFound)
+		return
+	}
+	id, _ := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	if id <= 0 && r.Method == http.MethodPost {
+		id, _ = strconv.ParseInt(r.FormValue("id"), 10, 64)
+	}
+	if id <= 0 {
+		http.Error(w, "Missing id", http.StatusBadRequest)
+		return
+	}
+	h, err := loadHA(id)
+	if err != nil {
+		http.Error(w, "HaP not found", http.StatusNotFound)
+		return
+	}
+	if !canEditHA(r, h) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	if r.Method == http.MethodPost {
+		msg := updateHA(r, h)
+		http.Redirect(w, r, "/ha/view?id="+strconv.FormatInt(h.ID, 10)+"&msg="+url.QueryEscape(msg), http.StatusFound)
+		return
+	}
+	renderHAForm(w, r, claims, h, true, "")
+}
+
+func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
+	if err := r.ParseMultipartForm(64 << 20); err != nil {
+		return 0, "Upload failed: " + err.Error()
+	}
+	address := strings.TrimSpace(r.FormValue("address"))
+	if address == "" {
+		return 0, "Address is required."
+	}
+	date := strings.TrimSpace(r.FormValue("protocol_date"))
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
+	if _, err := time.Parse("2006-01-02", date); err != nil {
+		return 0, "Invalid date."
+	}
+
+	var projectID int64
+	if v, err := strconv.ParseInt(r.FormValue("project_id"), 10, 64); err == nil && v > 0 {
+		projectID = v
+	}
+	orgID := userOrgID(claims.UserID)
+	if seesAllProtocols(claims.Role) {
+		if v, err := strconv.ParseInt(r.FormValue("org_id"), 10, 64); err == nil && v > 0 {
+			orgID = v
+		}
+	}
+
+	var id int64
+	err := db.Get(&id, `INSERT INTO ha_protocols
+			(task_id, project_id, org_id, auftragnehmer, address, city, bauabschnitt,
+			 client_last_name, client_first_name, units, protocol_date, monteur, pruefer,
+			 project_number, gvs, kassette_b, mux_number, mux_fibers, splices,
+			 fiber_colors, cable_charge, cable_length_m,
+			 check_fiber, check_complete, check_clean, created_by)
+		VALUES (NULLIF($1,0), NULLIF($2,0), NULLIF($3,0), $4,$5,$6,$7,$8,$9,
+		        NULLIF($10,'')::int, $11::date, $12,$13,$14,$15,$16,$17,$18,
+		        NULLIF($19,'')::int, $20,$21,NULLIF($22,'')::numeric, $23,$24,$25,$26)
+		RETURNING id`,
+		r.FormValue("task_id"), projectID, orgID,
+		strings.TrimSpace(r.FormValue("auftragnehmer")),
+		address,
+		strings.TrimSpace(r.FormValue("city")),
+		strings.TrimSpace(r.FormValue("bauabschnitt")),
+		strings.TrimSpace(r.FormValue("client_last_name")),
+		strings.TrimSpace(r.FormValue("client_first_name")),
+		strings.TrimSpace(r.FormValue("units")),
+		date,
+		strings.TrimSpace(r.FormValue("monteur")),
+		strings.TrimSpace(r.FormValue("pruefer")),
+		strings.TrimSpace(r.FormValue("project_number")),
+		strings.TrimSpace(r.FormValue("gvs")),
+		strings.TrimSpace(r.FormValue("kassette_b")),
+		strings.TrimSpace(r.FormValue("mux_number")),
+		strings.TrimSpace(r.FormValue("mux_fibers")),
+		strings.TrimSpace(r.FormValue("splices")),
+		strings.Join(r.Form["fiber_colors"], ","),
+		strings.TrimSpace(r.FormValue("cable_charge")),
+		strings.TrimSpace(r.FormValue("cable_length_m")),
+		r.FormValue("check_fiber") != "",
+		r.FormValue("check_complete") != "",
+		r.FormValue("check_clean") != "",
+		claims.UserID)
+	if err != nil {
+		return 0, "Could not save: " + err.Error()
+	}
+
+	saved, failed := saveHAPhotos(r, id)
+	logUserEvent(claims.UserID, 0, "hap-create", fmt.Sprintf("hap %d", id))
+	msg := "HaP created."
+	if saved > 0 {
+		msg = fmt.Sprintf("HaP created with %d photo(s).", saved)
+	}
+	if failed > 0 {
+		msg += fmt.Sprintf(" %d photo(s) could not be stored.", failed)
+	}
+	return id, msg
+}
+
+// saveHAPhotos čuva sve priloge iz multipart forme.
+func saveHAPhotos(r *http.Request, haID int64) (saved, failed int) {
+	for _, k := range haPhotoKinds {
+		file, header, err := r.FormFile("photo_" + k.Key)
+		if err != nil || file == nil {
+			continue
+		}
+		data, err := io.ReadAll(io.LimitReader(file, 25<<20))
+		_ = file.Close()
+		if err != nil || len(data) == 0 {
+			failed++
+			continue
+		}
+		info := parseExif(data)
+		ext := strings.ToLower(path.Ext(header.Filename))
+		if ext != ".jpg" && ext != ".jpeg" && ext != ".png" {
+			ext = ".jpg"
+		}
+		key := haPhotoKey(haID, k.Key, ext)
+		if err := sourceStore.PutRaw(r.Context(), key, data, contentTypeOf(ext)); err != nil {
+			log.Printf("ha photo upload %s: %v", k.Key, err)
+			failed++
+			continue
+		}
+		// EXIF (koordinate iz kamere) ima prednost; ako ga nema, koristi se
+		// geolokacija koju je pretraživač zabeležio pri uploadu.
+		var lat, lon any
+		if info.HasLocation {
+			lat, lon = info.Lat, info.Lon
+		} else if la, lo, ok := parseLatLonText(r.FormValue("geo_" + k.Key)); ok {
+			lat, lon = la, lo
+		}
+		var alt, brg, taken any
+		if info.HasLocation && info.Altitude != 0 {
+			alt = info.Altitude
+		}
+		if info.HasLocation && info.Bearing != 0 {
+			brg = info.Bearing
+		}
+		if info.HasTimestamp {
+			taken = info.TakenAt
+		}
+		if _, err := db.Exec(`INSERT INTO ha_photos
+				(ha_id, kind, object_key, content_type, bytes, lat, lon, altitude_m, bearing_deg, taken_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+			ON CONFLICT (ha_id, kind) DO UPDATE SET
+				object_key = EXCLUDED.object_key, content_type = EXCLUDED.content_type,
+				bytes = EXCLUDED.bytes, lat = EXCLUDED.lat, lon = EXCLUDED.lon,
+				altitude_m = EXCLUDED.altitude_m, bearing_deg = EXCLUDED.bearing_deg,
+				taken_at = EXCLUDED.taken_at`,
+			haID, k.Key, key, contentTypeOf(ext), len(data), lat, lon, alt, brg, taken); err != nil {
+			log.Printf("ha photo db %s: %v", k.Key, err)
+			failed++
+			continue
+		}
+		saved++
+	}
+	return saved, failed
+}
+
+func contentTypeOf(ext string) string {
+	switch ext {
+	case ".png":
+		return "image/png"
+	case ".webp":
+		return "image/webp"
+	default:
+		return "image/jpeg"
+	}
+}
+
+// HAViewHandler prikazuje HaP i dozvoljava izmenu tekstualnih polja.
+func HAViewHandler(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	if id <= 0 && r.Method == http.MethodPost {
+		id, _ = strconv.ParseInt(r.FormValue("id"), 10, 64)
+	}
+	if id <= 0 {
+		http.Error(w, "Missing id", http.StatusBadRequest)
+		return
+	}
+	h, err := loadHA(id)
+	if err != nil {
+		http.Error(w, "HaP not found", http.StatusNotFound)
+		return
+	}
+	claims := GetAuthClaims(r)
+	if claims == nil || !canSeeHA(r, h) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	photos, _ := listHAPhotos(h.ID)
+	byKind := map[string]haPhotoRow{}
+	for _, p := range photos {
+		byKind[p.Kind] = p
+	}
+	tmpl, err := template.New("ha-view.html").
+		Funcs(template.FuncMap(csrfTemplateFuncs(r))).
+		Funcs(template.FuncMap{"dateShort": dateShort}).
+		ParseFiles("web/templates/ha-view.html")
+	if err != nil {
+		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = tmpl.Execute(w, map[string]any{
+		"HA":          h,
+		"Photos":      photos,
+		"PhotoByKind": byKind,
+		"PhotoKinds":  haPhotoKinds,
+		"FiberColors": haFiberColors,
+		"Selected":    strings.Split(h.FiberColors, ","),
+		"CanEdit":     canEditHA(r, h),
+		"IsAdmin":     isAdminRole(r),
+		"IsOrgAdmin":  isOrgAdminRequest(r),
+		"UserRole":    userRole(r),
+		"Message":     r.URL.Query().Get("msg"),
+	})
+}
+
+func updateHA(r *http.Request, h haRow) string {
+	if err := r.ParseMultipartForm(64 << 20); err != nil {
+		return "Upload failed: " + err.Error()
+	}
+	date := strings.TrimSpace(r.FormValue("protocol_date"))
+	if date == "" {
+		date = h.ProtocolDate
+	}
+	_, err := db.Exec(`UPDATE ha_protocols SET
+			auftragnehmer=$1, address=$2, city=$3, bauabschnitt=$4,
+			client_last_name=$5, client_first_name=$6, units=NULLIF($7,'')::int,
+			protocol_date=$8::date, monteur=$9, pruefer=$10, project_number=$11,
+			gvs=$12, kassette_b=$13, mux_number=$14, mux_fibers=$15,
+			splices=NULLIF($16,'')::int, fiber_colors=$17, cable_charge=$18,
+			cable_length_m=NULLIF($19,'')::numeric,
+			check_fiber=$20, check_complete=$21, check_clean=$22,
+			updated_at=NOW()
+		WHERE id=$23`,
+		strings.TrimSpace(r.FormValue("auftragnehmer")),
+		strings.TrimSpace(r.FormValue("address")),
+		strings.TrimSpace(r.FormValue("city")),
+		strings.TrimSpace(r.FormValue("bauabschnitt")),
+		strings.TrimSpace(r.FormValue("client_last_name")),
+		strings.TrimSpace(r.FormValue("client_first_name")),
+		strings.TrimSpace(r.FormValue("units")),
+		date,
+		strings.TrimSpace(r.FormValue("monteur")),
+		strings.TrimSpace(r.FormValue("pruefer")),
+		strings.TrimSpace(r.FormValue("project_number")),
+		strings.TrimSpace(r.FormValue("gvs")),
+		strings.TrimSpace(r.FormValue("kassette_b")),
+		strings.TrimSpace(r.FormValue("mux_number")),
+		strings.TrimSpace(r.FormValue("mux_fibers")),
+		strings.TrimSpace(r.FormValue("splices")),
+		strings.Join(r.Form["fiber_colors"], ","),
+		strings.TrimSpace(r.FormValue("cable_charge")),
+		strings.TrimSpace(r.FormValue("cable_length_m")),
+		r.FormValue("check_fiber") != "",
+		r.FormValue("check_complete") != "",
+		r.FormValue("check_clean") != "",
+		h.ID)
+	if err != nil {
+		return "Could not save: " + err.Error()
+	}
+	saved, failed := saveHAPhotos(r, h.ID)
+	if saved == 0 && failed == 0 {
+		return "HaP saved."
+	}
+	return fmt.Sprintf("HaP saved. Photos stored: %d, failed: %d.", saved, failed)
+}
+
+// HAPhotoHandler servira sliku iz Object Storage-a (uz proveru vidljivosti).
+func HAPhotoHandler(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	var p haPhotoRow
+	if err := db.Get(&p, `SELECT id, ha_id, kind, object_key, content_type, bytes,
+			lat, lon, altitude_m, bearing_deg, NULL::text AS taken_at
+		FROM ha_photos WHERE id = $1`, id); err != nil {
+		http.Error(w, "Photo not found", http.StatusNotFound)
+		return
+	}
+	h, err := loadHA(p.HAID)
+	if err != nil || !canSeeHA(r, h) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	data, ct, err := sourceStore.GetRaw(r.Context(), p.ObjectKey)
+	if err != nil {
+		http.Error(w, "Photo unavailable", http.StatusBadGateway)
+		return
+	}
+	if ct == "" {
+		ct = p.ContentType
+	}
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	_, _ = w.Write(data)
+}
+
+// HAPDFHandler generiše PDF na zahtev (nema potrebe da se čuva kopija).
+func HAPDFHandler(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	if id <= 0 {
+		http.Error(w, "Missing id", http.StatusBadRequest)
+		return
+	}
+	h, err := loadHA(id)
+	if err != nil {
+		http.Error(w, "HaP not found", http.StatusNotFound)
+		return
+	}
+	if !canSeeHA(r, h) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	photos, _ := listHAPhotos(h.ID)
+	images := map[string][]byte{}
+	for _, p := range photos {
+		if data, _, err := sourceStore.GetRaw(r.Context(), p.ObjectKey); err == nil {
+			images[p.Kind] = data
+		}
+	}
+	pdf, err := buildHAPDF(h, photos, images)
+	if err != nil {
+		http.Error(w, "PDF error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	name := sanitizeHAFilename(fmt.Sprintf("HaP_%s_%s.pdf", h.Address, h.ProtocolDate))
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+	_, _ = w.Write(pdf)
+}
+
+// dateShort prikazuje "2026-07-21 12:13" kao "21.07.2026 12:13".
+func dateShort(v string) string {
+	if len(v) >= 16 && v[4] == '-' {
+		return v[8:10] + "." + v[5:7] + "." + v[0:4] + " " + v[11:16]
+	}
+	return v
+}
+
+func sanitizeHAFilename(s string) string {
+	repl := strings.NewReplacer(" ", "_", "/", "-", "\\", "-", "\"", "", "'", "", ",", "", ";", "")
+	out := repl.Replace(s)
+	if len(out) > 120 {
+		out = out[:120]
+	}
+	return out
+}
+
+// unusedMultipartHead sprečava "declared and not used" ako se potpis promeni.
+var _ = multipart.ErrMessageTooLarge

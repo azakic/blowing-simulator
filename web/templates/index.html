@@ -15,6 +15,7 @@
         <nav class="nav">
             <a href="/" class="active">Dashboard</a>
             <a href="/tasks">Tasks</a>
+            <a href="/ha">HA protocols</a>
             <a href="/reports/projects">Project Report</a>
             <a href="/bulk-upload">Bulk Upload</a>
             {{if .IsOrgAdmin}}<a href="/org/users">My users</a>{{end}}
@@ -52,6 +53,11 @@
                         <span class="icon">☑️</span>
                         <span class="t">Tasks</span>
                         <span class="d">HA work per project — assign, track, close</span>
+                    </a>
+                    <a class="tile" href="/ha">
+                        <span class="icon">📋</span>
+                        <span class="t">HA protocols</span>
+                        <span class="d">Hausanschlussprotokoll — fields, GPS photos, PDF</span>
                     </a>
                     <a class="tile" href="/reports/projects">
                         <span class="icon">🏗️</span>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1976d2">
+    <title>{{if .IsEdit}}Edit HaP #{{.HA.ID}}{{else}}New HaP{{end}} - Wolken-ASM Reports</title>
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="/">Wolken-ASM Reports</a>
+        <input type="checkbox" id="nav-toggle" class="nav-toggle">
+        <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
+        <nav class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/tasks">Tasks</a>
+            <a href="/ha" class="active">HA protocols</a>
+            <a href="/reports/projects">Project Report</a>
+            <a href="/bulk-upload">Bulk Upload</a>
+            {{if .IsOrgAdmin}}<a href="/org/users">My users</a>{{end}}
+            {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a><a href="/admin/projects">Projects</a>{{end}}
+            {{if .UserRole}}<a href="/account">Account</a><span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+            {{else}}<a href="/login">Login</a>{{end}}
+        </nav>
+    </header>
+
+    <main class="page">
+        <a class="back" href="{{if .IsEdit}}/ha/view?id={{.HA.ID}}{{else}}/ha{{end}}">← Back</a>
+
+        <div class="head">
+            <div>
+                <h1>{{if .IsEdit}}Edit HaP #{{.HA.ID}}{{else}}New HA protocol{{end}}</h1>
+                <p class="sub">Hausanschlussprotokoll (Westnetz 1.5.1) — fill everything you have; photos are optional but expected in the field.</p>
+            </div>
+        </div>
+
+        {{if .Message}}<p class="note">{{.Message}}</p>{{end}}
+
+        <form method="POST" enctype="multipart/form-data"
+              action="{{if .IsEdit}}/ha/edit?id={{.HA.ID}}{{else}}/ha/new{{end}}"
+              id="ha-form">
+            <input type="hidden" name="csrf_token" value="{{csrfToken}}">
+            {{if .IsEdit}}<input type="hidden" name="id" value="{{.HA.ID}}">{{end}}
+
+            <section class="panel">
+                <div class="panel-head"><h2>Auftragnehmer / Anschluss / Anschlussnehmer</h2></div>
+                <div class="panel-body">
+                    <div class="filters" style="margin:0;border:0;padding:0;background:transparent;">
+                        <label class="field"><span>Firma (Auftragnehmer)</span>
+                            <input type="text" name="auftragnehmer" value="{{if .HA.Auftragnehmer}}{{.HA.Auftragnehmer}}{{else}}{{.DefaultFirma}}{{end}}">
+                        </label>
+                        <label class="field"><span>Adresse *</span>
+                            <input type="text" name="address" required value="{{.HA.Address}}" placeholder="An der Borg 25">
+                        </label>
+                        <label class="field"><span>Ort</span>
+                            <input type="text" name="city" value="{{.HA.City}}" placeholder="Volmarstein">
+                        </label>
+                        <label class="field"><span>Bauabschnitt</span>
+                            <input type="text" name="bauabschnitt" value="{{.HA.Bauabschnitt}}">
+                        </label>
+                        <label class="field"><span>Nachname (Anschlussnehmer)</span>
+                            <input type="text" name="client_last_name" value="{{.HA.ClientLastName}}">
+                        </label>
+                        <label class="field"><span>Name</span>
+                            <input type="text" name="client_first_name" value="{{.HA.ClientFirstName}}">
+                        </label>
+                        <label class="field"><span>Wohneinheiten (WE)</span>
+                            <input type="number" name="units" min="0" max="999" value="{{if .HA.Units.Valid}}{{.HA.Units.Int64}}{{end}}">
+                        </label>
+                        <label class="field"><span>Datum</span>
+                            <input type="date" name="protocol_date" value="{{.DefaultDate}}">
+                        </label>
+                        <label class="field"><span>Monteur</span>
+                            <input type="text" name="monteur" value="{{if .HA.Monteur}}{{.HA.Monteur}}{{else}}{{.DefaultMonteur}}{{end}}">
+                        </label>
+                        <label class="field"><span>Prüfer</span>
+                            <input type="text" name="pruefer" value="{{.HA.Pruefer}}">
+                        </label>
+                        <label class="field"><span>Projektnummer</span>
+                            <input type="text" name="project_number" value="{{.HA.ProjectNumber}}">
+                        </label>
+                        <label class="field"><span>Project (link)</span>
+                            <select name="project_id">
+                                <option value="">—</option>
+                                {{range .Projects}}<option value="{{.ID}}" {{if and $.HA.ProjectID.Valid (eq $.HA.ProjectID.Int64 .ID)}}selected{{end}}>{{.Number}}</option>{{end}}
+                            </select>
+                        </label>
+                        {{if .IsStaff}}
+                        <label class="field"><span>Organisation</span>
+                            <select name="org_id">
+                                <option value="">—</option>
+                                {{range .Orgs}}<option value="{{.ID}}" {{if and $.HA.OrgID.Valid (eq $.HA.OrgID.Int64 .ID)}}selected{{end}}>{{.Name}}</option>{{end}}
+                            </select>
+                        </label>
+                        {{end}}
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-head"><h2>Technik</h2><span class="hint">GVS, Kasette, Splitter, Kabel</span></div>
+                <div class="panel-body">
+                    <div class="filters" style="margin:0;border:0;padding:0;background:transparent;">
+                        <label class="field"><span>Zugehöriger GVS</span>
+                            <input type="text" name="gvs" value="{{.HA.GVS}}" placeholder="N-1.31">
+                        </label>
+                        <label class="field"><span>Kasette B-Seite</span>
+                            <input type="text" name="kassette_b" value="{{.HA.KassetteB}}" placeholder="R38">
+                        </label>
+                        <label class="field"><span>Splitter (MUX) Nummer</span>
+                            <input type="text" name="mux_number" value="{{.HA.MuxNumber}}">
+                        </label>
+                        <label class="field"><span>Splitter (MUX) Fasern</span>
+                            <input type="text" name="mux_fibers" value="{{.HA.MuxFibers}}">
+                        </label>
+                        <label class="field"><span>Spleiße (Stück)</span>
+                            <input type="number" name="splices" min="0" value="{{if .HA.Splices.Valid}}{{.HA.Splices.Int64}}{{end}}">
+                        </label>
+                        <label class="field"><span>GF Kabel Charge</span>
+                            <input type="text" name="cable_charge" value="{{.HA.CableCharge}}">
+                        </label>
+                        <label class="field"><span>GF Kabel Länge (m)</span>
+                            <input type="number" step="0.1" min="0" name="cable_length_m" value="{{if .HA.CableLength.Valid}}{{.HA.CableLength.Float64}}{{end}}">
+                        </label>
+                    </div>
+
+                    <div style="margin-top:.9rem;">
+                        <span style="font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">Genutzte Faserfarben</span>
+                        <div style="display:flex;flex-wrap:wrap;gap:.55rem;margin-top:.45rem;">
+                            {{$sel := .Selected}}
+                            {{range .FiberColors}}
+                            {{$ck := .Key}}
+                            <label style="display:inline-flex;align-items:center;gap:.35rem;font-size:.82rem;cursor:pointer;">
+                                <input type="checkbox" name="fiber_colors" value="{{.Key}}"
+                                    {{range $sel}}{{if eq . $ck}}checked{{end}}{{end}}
+                                    style="width:auto;">
+                                <span style="display:inline-block;width:.8rem;height:.8rem;border:1px solid #888;border-radius:2px;background:rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}});"></span>
+                                {{.Label}}
+                            </label>
+                            {{end}}
+                        </div>
+                    </div>
+
+                    <div style="margin-top:1rem;display:flex;flex-direction:column;gap:.45rem;">
+                        <label style="display:flex;align-items:center;gap:.5rem;font-size:.85rem;cursor:pointer;">
+                            <input type="checkbox" name="check_fiber" style="width:auto;" {{if .HA.CheckFiber}}checked{{end}}>
+                            Die Durchgängigkeit der Faser wurde überprüft
+                        </label>
+                        <label style="display:flex;align-items:center;gap:.5rem;font-size:.85rem;cursor:pointer;">
+                            <input type="checkbox" name="check_complete" style="width:auto;" {{if .HA.CheckComplete}}checked{{end}}>
+                            Die Arbeiten wurden vollständig abgeschlossen
+                        </label>
+                        <label style="display:flex;align-items:center;gap:.5rem;font-size:.85rem;cursor:pointer;">
+                            <input type="checkbox" name="check_clean" style="width:auto;" {{if .HA.CheckClean}}checked{{end}}>
+                            Die Arbeitstelle wurde ordentlich und sauber hinterlassen
+                        </label>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-head"><h2>Fotos &amp; Unterschriften</h2><span class="hint">GPS se čita iz EXIF-a; ako ga nema, koristi se lokacija telefona</span></div>
+                <div class="panel-body">
+                    <div class="filters" style="margin:0;border:0;padding:0;background:transparent;">
+                        {{range .PhotoKinds}}
+                        <label class="field">
+                            <span>{{.Label}}</span>
+                            <input type="file" name="photo_{{.Key}}" accept="image/jpeg,image/png"
+                                   capture="environment" class="ha-photo" data-kind="{{.Key}}">
+                            <input type="hidden" name="geo_{{.Key}}" value="" id="geo_{{.Key}}">
+                            <span class="geo-hint" id="hint_{{.Key}}" style="font-size:.72rem;color:var(--muted);"></span>
+                        </label>
+                        {{end}}
+                    </div>
+                </div>
+            </section>
+
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:2rem;">
+                <button class="btn btn-primary" type="submit">{{if .IsEdit}}Save HaP{{else}}Create HaP{{end}}</button>
+                <a class="btn btn-ghost" href="{{if .IsEdit}}/ha/view?id={{.HA.ID}}{{else}}/ha{{end}}">Cancel</a>
+            </div>
+        </form>
+    </main>
+
+    <script>
+        // Geolokacija pri uploadu: pokušaj da je zabeležimo za svaku fotografiju.
+        // Server ipak preferira EXIF iz same slike.
+        if (navigator.geolocation) {
+            document.querySelectorAll('input.ha-photo').forEach(function (input) {
+                input.addEventListener('change', function () {
+                    var kind = input.dataset.kind;
+                    var hint = document.getElementById('hint_' + kind);
+                    var hidden = document.getElementById('geo_' + kind);
+                    if (!input.files || !input.files.length) { return; }
+                    if (hint) { hint.textContent = 'Getting location…'; }
+                    navigator.geolocation.getCurrentPosition(function (pos) {
+                        var v = pos.coords.latitude.toFixed(6) + ', ' + pos.coords.longitude.toFixed(6);
+                        if (hidden) { hidden.value = v; }
+                        if (hint) {
+                            hint.textContent = '📍 ' + v +
+                                (pos.coords.accuracy ? ' (±' + Math.round(pos.coords.accuracy) + ' m)' : '');
+                        }
+                    }, function () {
+                        if (hint) { hint.textContent = 'Location unavailable — EXIF from the photo will be used.'; }
+                    }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+                });
+            });
+        }
+    </script>
+</body>
+</html>

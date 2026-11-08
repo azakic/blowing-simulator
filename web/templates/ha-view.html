@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1976d2">
+    <title>HaP #{{.HA.ID}} - Wolken-ASM Reports</title>
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="/">Wolken-ASM Reports</a>
+        <input type="checkbox" id="nav-toggle" class="nav-toggle">
+        <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
+        <nav class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/tasks">Tasks</a>
+            <a href="/ha" class="active">HA protocols</a>
+            <a href="/reports/projects">Project Report</a>
+            <a href="/bulk-upload">Bulk Upload</a>
+            {{if .IsOrgAdmin}}<a href="/org/users">My users</a>{{end}}
+            {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a><a href="/admin/projects">Projects</a>{{end}}
+            {{if .UserRole}}<a href="/account">Account</a><span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+            {{else}}<a href="/login">Login</a>{{end}}
+        </nav>
+    </header>
+
+    <main class="page">
+        <a class="back" href="/ha">← All HA protocols</a>
+
+        <div class="head">
+            <div>
+                <h1>HaP #{{.HA.ID}} · {{.HA.Address}}{{if .HA.City}}, {{.HA.City}}{{end}}</h1>
+                <p class="sub">{{.HA.ClientFirstName}} {{.HA.ClientLastName}} · {{.HA.ProtocolDate}} · Monteur: {{.HA.Monteur}}{{if .HA.Pruefer}} · Prüfer: {{.HA.Pruefer}}{{end}}</p>
+            </div>
+            <div class="actions">
+                <a class="btn btn-primary" href="/ha/pdf?id={{.HA.ID}}">⬇ Create HaP (PDF)</a>
+                {{if .CanEdit}}<a class="btn btn-ghost" href="/ha/edit?id={{.HA.ID}}">Edit</a>{{end}}
+            </div>
+        </div>
+
+        {{if .Message}}<p class="note">{{.Message}}</p>{{end}}
+
+        <section class="kpis">
+            <div class="kpi"><div class="label">GVS</div><div class="value" style="font-size:.95rem;">{{if .HA.GVS}}{{.HA.GVS}}{{else}}—{{end}}</div></div>
+            <div class="kpi"><div class="label">Kasette B</div><div class="value" style="font-size:.95rem;">{{if .HA.KassetteB}}{{.HA.KassetteB}}{{else}}—{{end}}</div></div>
+            <div class="kpi"><div class="label">Splitter</div><div class="value" style="font-size:.95rem;">{{if .HA.MuxNumber}}{{.HA.MuxNumber}}{{else}}—{{end}}{{if .HA.MuxFibers}} / {{.HA.MuxFibers}}{{end}}</div></div>
+            <div class="kpi"><div class="label">Kabel</div><div class="value" style="font-size:.95rem;">{{if .HA.CableLength.Valid}}{{printf "%.1f" .HA.CableLength.Float64}} m{{else}}—{{end}}</div></div>
+            <div class="kpi"><div class="label">Spleiße</div><div class="value" style="font-size:.95rem;">{{if .HA.Splices.Valid}}{{.HA.Splices.Int64}}{{else}}—{{end}}</div></div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-head"><h2>Checklist</h2></div>
+            <div class="panel-body" style="display:flex;flex-direction:column;gap:.4rem;font-size:.86rem;">
+                <div>{{if .HA.CheckFiber}}☑{{else}}☐{{end}} Die Durchgängigkeit der Faser wurde überprüft</div>
+                <div>{{if .HA.CheckComplete}}☑{{else}}☐{{end}} Die Arbeiten wurden vollständig abgeschlossen</div>
+                <div>{{if .HA.CheckClean}}☑{{else}}☐{{end}} Die Arbeitstelle wurde ordentlich und sauber hinterlassen</div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-head"><h2>Fotos</h2><span class="hint">{{len .Photos}} uploaded</span></div>
+            <div class="panel-body">
+                <div class="tiles" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
+                    {{range .PhotoKinds}}
+                    {{$p := index $.PhotoByKind .Key}}
+                    <div class="tile" style="cursor:default;">
+                        {{if $p.ID}}
+                        <a href="/ha/photo?id={{$p.ID}}" target="_blank" rel="noopener">
+                            <img src="/ha/photo?id={{$p.ID}}" alt="{{.Label}}" style="width:100%;border-radius:8px;display:block;">
+                        </a>
+                        {{else}}
+                        <div style="width:100%;height:120px;border:1px dashed #c7d2de;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem;">no photo</div>
+                        {{end}}
+                        <span class="t" style="margin-top:.45rem;font-size:.82rem;">{{.Label}}</span>
+                        {{if $p.ID}}
+                        <span class="d" style="font-size:.72rem;">
+                            {{if $p.TakenAt.Valid}}{{dateShort $p.TakenAt.String}}{{end}}
+                            {{if and $p.Lat.Valid $p.Lon.Valid}}
+                            · {{printf "%.5f" $p.Lat.Float64}}, {{printf "%.5f" $p.Lon.Float64}}{{if $p.Altitude.Valid}} · {{printf "%.0f" $p.Altitude.Float64}} m{{end}}
+                            {{end}}
+                        </span>
+                        {{end}}
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

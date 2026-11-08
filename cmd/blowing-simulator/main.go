@@ -791,6 +791,10 @@ func main() {
 	if err := ensureTaskSchema(db); err != nil {
 		log.Fatal("Failed to ensure tasks schema:", err)
 	}
+	// HaP (Hausanschlussprotokoll): obrazac + fotografije.
+	if err := ensureHASchema(db); err != nil {
+		log.Fatal("Failed to ensure HA schema:", err)
+	}
 	if err := backfillProjects(db); err != nil {
 		log.Fatal("Failed to backfill projects:", err)
 	}
@@ -843,6 +847,13 @@ func main() {
 	http.HandleFunc("/tasks/view", requireAuth(withCSRF(TaskDetailHandler), "viewer", "editor", "partner", "admin"))
 	// .ics izvoz za „Add to calendar“ na telefonu (GET, bez CSRF-a).
 	http.HandleFunc("/tasks/ics", requireAuth(TaskICSHandler, "viewer", "editor", "partner", "admin"))
+	// HA protokoli (Hausanschlussprotokoll) — forma, pregled i PDF.
+	http.HandleFunc("/ha", requireAuth(HAListHandler, "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/ha/new", requireAuth(withCSRF(HANewHandler), "editor", "partner", "admin"))
+	http.HandleFunc("/ha/edit", requireAuth(withCSRF(HAEditHandler), "editor", "partner", "admin"))
+	http.HandleFunc("/ha/view", requireAuth(HAViewHandler, "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/ha/photo", requireAuth(HAPhotoHandler, "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/ha/pdf", requireAuth(HAPDFHandler, "viewer", "editor", "partner", "admin"))
 	// Admin utility: backfill ownership for existing protocols (NULL user_id)
 	http.HandleFunc("/admin/backfill-ownership", requireAuth(AdminBackfillOwnershipHandler, "admin"))
 	http.HandleFunc("/admin/reparse", requireAuth(AdminReparseHandler, "admin"))

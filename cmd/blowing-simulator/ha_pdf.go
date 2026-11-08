@@ -1,0 +1,396 @@
+package main
+
+import (
+	"bytes"
+	"database/sql"
+	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
+	"strings"
+
+	"github.com/jung-kurt/gofpdf"
+)
+
+// fiberColor je jedno polje iz mreže boja vlakana (Röhrchenfarbe / genutzte
+// Faserfarben). `Key` ide u bazu, `Hex` se koristi za ispunu u PDF-u.
+type fiberColor struct {
+	Key   string
+	Label string
+	Hex   [3]int
+}
+
+var haFiberColors = []fiberColor{
+	{"rot", "rot", [3]int{226, 0, 26}},
+	{"gruen", "grün", [3]int{0, 150, 64}},
+	{"blau", "blau", [3]int{0, 80, 160}},
+	{"gelb", "gelb", [3]int{255, 215, 0}},
+	{"weiss", "weiß", [3]int{255, 255, 255}},
+	{"grau", "grau", [3]int{158, 158, 158}},
+	{"braun", "braun", [3]int{109, 76, 65}},
+	{"violett", "violett", [3]int{123, 31, 162}},
+	{"tuerkis", "türkis", [3]int{38, 198, 218}},
+	{"schwarz", "schwarz", [3]int{0, 0, 0}},
+	{"orange", "orange", [3]int{255, 109, 0}},
+	{"rosa", "rosa", [3]int{248, 187, 208}},
+}
+
+// Geometrija A4 stranice (mm).
+const (
+	haPageW   = 210.0
+	haTableW  = 190.0
+	haMarginX = 10.0
+)
+
+// buildHAPDF generiše obrazac u rasporedu Westnetz obrasca 1.5.1.
+func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte) ([]byte, error) {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.SetMargins(haMarginX, 10, haMarginX)
+	pdf.SetAutoPageBreak(false, 0)
+	pdf.AddPage()
+	pdf.SetLineWidth(0.25)
+
+	x0 := haMarginX
+	y := 20.0
+
+	// --- zaglavlje ---
+	pdf.SetFont("Helvetica", "B", 17)
+	pdf.SetTextColor(0, 60, 47)
+	pdf.SetXY(x0, 8)
+	pdf.CellFormat(20, 8, "west", "", 0, "L", false, 0, "")
+	pdf.SetTextColor(141, 198, 63)
+	pdf.CellFormat(18, 8, "netz", "", 0, "L", false, 0, "")
+	pdf.SetTextColor(0, 0, 0)
+	pdf.SetFont("Helvetica", "B", 14)
+	pdf.SetXY(x0, 8)
+	pdf.CellFormat(haTableW, 8, "Hausanschlussprotokoll", "", 0, "C", false, 0, "")
+
+	// --- kolone ---
+	colW := []float64{85, 45, 35, 25}
+	colX := []float64{x0, x0 + colW[0], x0 + colW[0] + colW[1], x0 + colW[0] + colW[1] + colW[2]}
+
+	headerRow := func(labels, values []string) {
+		const labelH, valueH = 4.6, 6.4
+		x := x0
+		pdf.SetFont("Helvetica", "", 6.5)
+		for i, l := range labels {
+			pdf.SetXY(x+1, y+0.9)
+			pdf.CellFormat(colW[i]-2, labelH-0.9, l, "", 0, "L", false, 0, "")
+			x += colW[i]
+		}
+		y += labelH
+		x = x0
+		pdf.SetFont("Helvetica", "B", 9)
+		for i, v := range values {
+			pdf.SetXY(x+1, y+0.5)
+			pdf.CellFormat(colW[i]-2, valueH-0.8, v, "", 0, "L", false, 0, "")
+			x += colW[i]
+		}
+		y += valueH
+		pdf.Line(x0, y, x0+haTableW, y)
+	}
+
+	units := ""
+	if h.Units.Valid {
+		units = fmt.Sprintf("%d WE", h.Units.Int64)
+	}
+
+	headerRow(
+		[]string{"Firma", "Adresse", "Nachname", "Datum"},
+		[]string{h.Auftragnehmer, h.Address, h.ClientLastName, formatHaDate(h.ProtocolDate)})
+	headerRow(
+		[]string{"Projektnummer", "Ort", "Name", "Monteur"},
+		[]string{h.ProjectNumber, h.City, h.ClientFirstName, h.Monteur})
+	headerRow(
+		[]string{"", "Bauabschnitt", "Wohneinheiten", "Prüfer"},
+		[]string{"", h.Bauabschnitt, units, h.Pruefer})
+
+	for _, cx := range colX[1:] {
+		pdf.Line(cx, 20, cx, y)
+	}
+
+	// --- tehnički blok ---
+	blockTop := y
+	const blockH = 30.0
+	midX := x0 + 130.0
+	pdf.Line(x0, blockTop+blockH, x0+haTableW, blockTop+blockH)
+	pdf.Line(midX, blockTop, midX, blockTop+blockH)
+
+	const leftLabelW = 52.0
+	const rowH = 4.3
+	ly := blockTop + 2.0
+
+	leftRow := func(label, value string) {
+		pdf.SetFont("Helvetica", "", 7.5)
+		pdf.SetXY(x0, ly)
+		pdf.CellFormat(leftLabelW, rowH, label, "", 0, "R", false, 0, "")
+		if value != "" {
+			pdf.SetFont("Helvetica", "B", 8.5)
+			pdf.SetXY(x0+leftLabelW+2, ly)
+			pdf.CellFormat(midX-(x0+leftLabelW+2)-2, rowH, value, "1", 0, "L", false, 0, "")
+		}
+		ly += rowH
+	}
+
+	sel := splitColors(h.FiberColors)
+	leftRow("Zugehöriger GVS", h.GVS)
+	pdf.SetFont("Helvetica", "", 7.5)
+	pdf.SetXY(x0, ly)
+	pdf.CellFormat(leftLabelW, rowH, "Rohr", "", 0, "R", false, 0, "")
+	drawColorSwatches(pdf, x0+leftLabelW+2, ly+0.35, midX-(x0+leftLabelW+2)-3, sel)
+	ly += rowH
+	pdf.SetXY(x0, ly)
+	pdf.CellFormat(leftLabelW, rowH, "Röhrchenfarbe", "", 0, "R", false, 0, "")
+	drawColorSwatches(pdf, x0+leftLabelW+2, ly+0.35, midX-(x0+leftLabelW+2)-3, nil)
+	ly += rowH
+	pdf.SetXY(x0, ly)
+	pdf.CellFormat(leftLabelW, rowH, "Mehrfarbig!->", "", 0, "R", false, 0, "")
+	drawColorSwatches(pdf, x0+leftLabelW+2, ly+0.35, midX-(x0+leftLabelW+2)-3, nil)
+	ly += rowH
+	leftRow("Kasette B-Seite", h.KassetteB)
+	leftRow("Splitter (MUX) Nummer", h.MuxNumber)
+
+	const rightLabelW = 38.0
+	rightX := midX + 2
+	ry := blockTop + 2.0
+	rightRow := func(label, value string) {
+		pdf.SetFont("Helvetica", "", 7.5)
+		pdf.SetXY(rightX, ry)
+		pdf.CellFormat(rightLabelW, rowH, label, "", 0, "R", false, 0, "")
+		if value != "" {
+			pdf.SetFont("Helvetica", "B", 8.5)
+			pdf.SetXY(rightX+rightLabelW+1, ry)
+			pdf.CellFormat(x0+haTableW-rightX-rightLabelW-2, rowH, value, "1", 0, "L", false, 0, "")
+		}
+		ry += rowH
+	}
+	rightRow("Spleiße:", intOrEmpty(h.Splices)+" Stück")
+	pdf.SetFont("Helvetica", "", 7.5)
+	pdf.SetXY(rightX, ry)
+	pdf.CellFormat(rightLabelW, rowH, "Genutzte Faserfarben:", "", 0, "R", false, 0, "")
+	drawColorSwatches(pdf, rightX+rightLabelW+1, ry+0.2, x0+haTableW-rightX-rightLabelW-2, sel)
+	ry += rowH
+	rightRow("GF Kabel Charge:", h.CableCharge)
+	length := ""
+	if h.CableLength.Valid {
+		length = fmt.Sprintf("%.1f m", h.CableLength.Float64)
+	}
+	rightRow("GF Kabel Länge:", length)
+	rightRow("Splitter (MUX) Fasern", h.MuxFibers)
+
+	y = blockTop + blockH
+
+	// --- fotografije 2×2 ---
+	const capH, photoH = 4.6, 44.0
+	halfW := haTableW / 2
+
+	photoCell := func(kind, caption string, px float64) {
+		pdf.SetFont("Helvetica", "", 7)
+		pdf.SetXY(px+1, y+0.9)
+		pdf.CellFormat(halfW-2, capH-1, caption, "", 0, "L", false, 0, "")
+		drawImageFit(pdf, "ph-"+kind, images[kind], px+2, y+capH+1, halfW-4, photoH-3)
+		if p := findPhoto(photos, kind); p != nil {
+			if c := photoCaption(p); c != "" {
+				pdf.SetFont("Helvetica", "", 5.6)
+				pdf.SetTextColor(90, 90, 90)
+				pdf.SetXY(px+2, y+photoH-3.2)
+				pdf.CellFormat(halfW-4, 3, c, "", 0, "L", false, 0, "")
+				pdf.SetTextColor(0, 0, 0)
+			}
+		}
+	}
+
+	photoBlock := func(lk, lc, rk, rc string) {
+		y += capH
+		photoCell(lk, lc, x0)
+		photoCell(rk, rc, x0+halfW)
+		y += photoH
+		pdf.Line(x0, y, x0+haTableW, y)
+		pdf.Line(x0+halfW, y-photoH, x0+halfW, y)
+	}
+	photoBlock("bild1", "Bild 1      Hausanschluss gesamt", "bild2", "Bild 2      APL offen")
+	photoBlock("bild3", "Bild 3      APL geschlossen/Foto mit Aufkleber", "bild4", "Bild 4      Foto ONT")
+
+	// --- potvrdna polja + ONT nalepnica ---
+	const checkH = 22.0
+	checkTop := y
+	pdf.Line(x0, checkTop+checkH, x0+haTableW, checkTop+checkH)
+	pdf.Line(x0+halfW, checkTop, x0+halfW, checkTop+checkH)
+
+	checks := []struct {
+		on   bool
+		text string
+	}{
+		{h.CheckFiber, "Die Durchgängigkeit der Faser wurde überprüft"},
+		{h.CheckComplete, "Die Arbeiten wurden vollständig abgeschlossen"},
+		{h.CheckClean, "Die Arbeitstelle wurde ordentlich und sauber hinterlassen"},
+	}
+	cy := checkTop + 3.5
+	for _, c := range checks {
+		pdf.Rect(x0+12, cy, 4, 4, "D")
+		if c.on {
+			pdf.SetFont("Helvetica", "B", 10)
+			pdf.SetXY(x0+12.3, cy-1.0)
+			pdf.CellFormat(4, 5, "X", "", 0, "C", false, 0, "")
+		}
+		pdf.SetFont("Helvetica", "", 7.5)
+		pdf.SetXY(x0+20, cy+0.3)
+		pdf.CellFormat(halfW-22, 4, c.text, "", 0, "L", false, 0, "")
+		cy += 5.6
+	}
+
+	pdf.SetFont("Helvetica", "", 7)
+	pdf.SetXY(x0+halfW+2, checkTop+1.2)
+	pdf.CellFormat(halfW-4, 4, "ONT Aufkleber:", "", 0, "L", false, 0, "")
+	drawImageFit(pdf, "ont", images["ont_label"], x0+halfW+2, checkTop+5.5, halfW-4, checkH-7)
+
+	y = checkTop + checkH
+
+	// --- potpisi + APL nalepnica + Licht test ---
+	const sigH = 26.0
+	sigTop := y
+	pdf.Line(x0, sigTop+sigH, x0+haTableW, sigTop+sigH)
+	pdf.Line(x0+halfW, sigTop, x0+halfW, sigTop+sigH)
+
+	pdf.SetFont("Helvetica", "", 7)
+	pdf.SetXY(x0+2, sigTop+1.2)
+	pdf.CellFormat(30, 4, "Unterschriften:", "", 0, "L", false, 0, "")
+	drawImageFit(pdf, "sig-m", images["sig_monteur"], x0+2, sigTop+5.5, 55, sigH-9)
+	drawImageFit(pdf, "sig-p", images["sig_pruefer"], x0+60, sigTop+5.5, 45, sigH-9)
+	pdf.SetFont("Helvetica", "", 6.5)
+	pdf.SetXY(x0+2, sigTop+sigH-4)
+	pdf.CellFormat(40, 3, "Monteur", "", 0, "L", false, 0, "")
+	pdf.SetXY(x0+60, sigTop+sigH-4)
+	pdf.CellFormat(40, 3, "Prüfer:", "", 0, "L", false, 0, "")
+
+	pdf.SetFont("Helvetica", "", 7)
+	pdf.SetXY(x0+halfW+2, sigTop+1.2)
+	pdf.CellFormat(40, 4, "APL Aufkleber:", "", 0, "L", false, 0, "")
+	pdf.SetXY(x0+halfW+62, sigTop+1.2)
+	pdf.CellFormat(30, 4, "Licht test", "", 0, "L", false, 0, "")
+	drawImageFit(pdf, "apl", images["apl_label"], x0+halfW+2, sigTop+5.5, 55, sigH-8)
+	drawImageFit(pdf, "light", images["light_test"], x0+halfW+62, sigTop+5.5, 35, sigH-8)
+
+	// --- footer ---
+	footTop := 282.0
+	pdf.Line(x0, footTop, x0+haTableW, footTop)
+	footerRow := func(label string, lx, lw float64, value string, vx, vw float64) {
+		pdf.SetFont("Helvetica", "", 6.5)
+		pdf.SetXY(lx, footTop+1)
+		pdf.CellFormat(lw, 4, label, "", 0, "L", false, 0, "")
+		pdf.SetFont("Helvetica", "B", 6.5)
+		pdf.SetXY(vx, footTop+1)
+		pdf.CellFormat(vw, 4, value, "", 0, "L", false, 0, "")
+	}
+	footerRow("Dateiname:", x0+1, 20, "Hausanschlussprotokoll", x0+22, 70)
+	footerRow("", x0+150, 14, "Seite 1 von 1", x0+164, 26)
+	footTop += 5
+	footerRow("Ersteller:", x0+1, 20, "Louis Vieting", x0+22, 70)
+	footerRow("Version:", x0+150, 14, "1.5.1", x0+164, 26)
+	footTop += 5
+	footerRow("Freigabe:", x0+1, 20, "Roland Wehn", x0+22, 70)
+	footerRow("Stand:", x0+150, 14, "22.05.2023", x0+164, 26)
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func findPhoto(photos []haPhotoRow, kind string) *haPhotoRow {
+	for i := range photos {
+		if photos[i].Kind == kind {
+			return &photos[i]
+		}
+	}
+	return nil
+}
+
+func photoCaption(p *haPhotoRow) string {
+	var parts []string
+	if p.TakenAt.Valid && p.TakenAt.String != "" {
+		parts = append(parts, p.TakenAt.String)
+	}
+	if p.Lat.Valid && p.Lon.Valid {
+		parts = append(parts, fmt.Sprintf("%.5f, %.5f", p.Lat.Float64, p.Lon.Float64))
+		if p.Altitude.Valid && p.Altitude.Float64 != 0 {
+			parts = append(parts, fmt.Sprintf("%.0f m", p.Altitude.Float64))
+		}
+	}
+	return strings.Join(parts, " · ")
+}
+
+// drawImageFit ubacuje sliku u okvir čuvajući odnos stranica.
+func drawImageFit(pdf *gofpdf.Fpdf, name string, data []byte, x, y, w, h float64) {
+	if len(data) == 0 {
+		pdf.SetDrawColor(205, 205, 205)
+		pdf.Rect(x, y, w, h, "D")
+		pdf.SetDrawColor(0, 0, 0)
+		return
+	}
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil || cfg.Width == 0 || cfg.Height == 0 {
+		return
+	}
+	imgType := "JPG"
+	if format == "png" {
+		imgType = "PNG"
+	}
+	opts := gofpdf.ImageOptions{ImageType: imgType}
+	info := pdf.RegisterImageOptionsReader(name, opts, bytes.NewReader(data))
+	if info == nil {
+		return
+	}
+	ratio := float64(cfg.Width) / float64(cfg.Height)
+	iw, ih := w, w/ratio
+	if ih > h {
+		ih, iw = h, h*ratio
+	}
+	pdf.ImageOptions(name, x+(w-iw)/2, y+(h-ih)/2, iw, ih, false, opts, 0, "")
+}
+
+func drawColorSwatches(pdf *gofpdf.Fpdf, x, y, maxW float64, selected []string) {
+	sel := map[string]bool{}
+	for _, s := range selected {
+		sel[strings.TrimSpace(s)] = true
+	}
+	const sz, gap = 3.6, 1.2
+	const perRow = 6
+	for i, c := range haFiberColors {
+		col, row := i%perRow, i/perRow
+		cx := x + float64(col)*(sz+gap)
+		cy := y + float64(row)*(sz+0.8)
+		if float64(col)*(sz+gap)+sz > maxW {
+			continue
+		}
+		if sel[c.Key] {
+			pdf.SetFillColor(c.Hex[0], c.Hex[1], c.Hex[2])
+		} else {
+			pdf.SetFillColor(255, 255, 255)
+		}
+		pdf.Rect(cx, cy, sz, sz, "FD")
+	}
+	pdf.SetDrawColor(0, 0, 0)
+}
+
+func splitColors(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	return strings.Split(s, ",")
+}
+
+func intOrEmpty(v sql.NullInt64) string {
+	if !v.Valid {
+		return ""
+	}
+	return fmt.Sprintf("%d", v.Int64)
+}
+
+func formatHaDate(d string) string {
+	if len(d) == 10 && d[4] == '-' {
+		return d[8:10] + "." + d[5:7] + "." + d[0:4]
+	}
+	return d
+}
