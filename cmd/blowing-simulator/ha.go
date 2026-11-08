@@ -358,7 +358,10 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 		return 0, "Invalid date."
 	}
 
-	var projectID int64
+	var taskID, projectID int64
+	if v, err := strconv.ParseInt(r.FormValue("task_id"), 10, 64); err == nil && v > 0 {
+		taskID = v
+	}
 	if v, err := strconv.ParseInt(r.FormValue("project_id"), 10, 64); err == nil && v > 0 {
 		projectID = v
 	}
@@ -376,11 +379,11 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 			 project_number, gvs, kassette_b, mux_number, mux_fibers, splices,
 			 fiber_colors, cable_charge, cable_length_m,
 			 check_fiber, check_complete, check_clean, created_by)
-		VALUES (NULLIF($1,0), NULLIF($2,0), NULLIF($3,0), $4,$5,$6,$7,$8,$9,
+		VALUES ($1, $2, $3, $4,$5,$6,$7,$8,$9,
 		        NULLIF($10,'')::int, $11::date, $12,$13,$14,$15,$16,$17,$18,
 		        NULLIF($19,'')::int, $20,$21,NULLIF($22,'')::numeric, $23,$24,$25,$26)
 		RETURNING id`,
-		r.FormValue("task_id"), projectID, orgID,
+		nullableID(taskID), nullableID(projectID), nullableID(orgID),
 		strings.TrimSpace(r.FormValue("auftragnehmer")),
 		address,
 		strings.TrimSpace(r.FormValue("city")),
@@ -418,6 +421,14 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 		msg += fmt.Sprintf(" %d photo(s) could not be stored.", failed)
 	}
 	return id, msg
+}
+
+// nullableID vraća nil za 0 (SQL NULL) ili int64 — sprečava cast "" u int.
+func nullableID(v int64) any {
+	if v <= 0 {
+		return nil
+	}
+	return v
 }
 
 // saveHAPhotos čuva sve priloge iz multipart forme.
