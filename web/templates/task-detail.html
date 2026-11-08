@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1976d2">
+    <title>Task #{{.Task.ID}} - Wolken-ASM Reports</title>
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="/">Wolken-ASM Reports</a>
+        <input type="checkbox" id="nav-toggle" class="nav-toggle">
+        <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
+        <nav class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/tasks" class="active">Tasks</a>
+            <a href="/reports/projects">Project Report</a>
+            <a href="/bulk-upload">Bulk Upload</a>
+            {{if .IsOrgAdmin}}<a href="/org/users">My users</a>{{end}}
+            {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a><a href="/admin/projects">Projects</a>{{end}}
+            {{if .UserRole}}<a href="/account">Account</a><span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+            {{else}}<a href="/login">Login</a>{{end}}
+        </nav>
+    </header>
+
+    <main class="page">
+        <a class="back" href="/tasks">← All tasks</a>
+
+        <div class="head">
+            <div>
+                <h1>#{{.Task.ID}} · {{.Task.Title}}</h1>
+                <p class="sub">
+                    Project <a class="project-link" href="/reports/project?project={{.Task.Project}}">{{.Task.Project}}</a>
+                    {{if .Task.ProjectName}} — {{.Task.ProjectName}}{{end}}
+                </p>
+            </div>
+            <div class="actions">
+                <span class="pill {{.Task.Status}}">{{.Task.Status}}</span>
+                <span class="pill {{.Task.Priority}}">{{.Task.Priority}}</span>
+            </div>
+        </div>
+
+        {{if .Message}}<p class="note">{{.Message}}</p>{{end}}
+
+        <section class="kpis">
+            <div class="kpi"><div class="label">Address</div><div class="value" style="font-size:.95rem;">{{if .Task.Address}}{{.Task.Address}}{{else}}—{{end}}</div></div>
+            <div class="kpi"><div class="label">NVT</div><div class="value" style="font-size:.95rem;">{{if .Task.NVT}}{{.Task.NVT}}{{else}}—{{end}}</div></div>
+            <div class="kpi"><div class="label">Due date</div><div class="value" style="font-size:.95rem;">{{if .Task.DueDate.Valid}}{{.Task.DueDate.String}}{{else}}—{{end}}</div></div>
+            <div class="kpi"><div class="label">Assigned to</div><div class="value" style="font-size:.85rem;">{{if .Task.UserEmail.Valid}}{{.Task.UserEmail.String}}{{else}}unassigned{{end}}</div></div>
+        </section>
+
+        {{if .CanStatus}}
+        <section class="panel">
+            <div class="panel-head"><h2>Status</h2><span class="hint">who did what, when</span></div>
+            <div class="panel-body">
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                    {{range .Statuses}}
+                    <form method="POST" action="/tasks/view" style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="{{csrfToken}}">
+                        <input type="hidden" name="action" value="set-status">
+                        <input type="hidden" name="id" value="{{$.Task.ID}}">
+                        <input type="hidden" name="status" value="{{.Value}}">
+                        <button class="btn {{if eq $.Task.Status .Value}}btn-primary{{else}}btn-ghost{{end}} btn-small" type="submit">{{.Label}}</button>
+                    </form>
+                    {{end}}
+                </div>
+                {{if .Task.CompletedAt.Valid}}<p class="note" style="margin:.6rem 0 0;">Completed: {{.Task.CompletedAt.String}}</p>{{end}}
+            </div>
+        </section>
+        {{end}}
+
+        <section class="panel">
+            <div class="panel-head"><h2>Details</h2><span class="hint">created {{.Task.CreatedAt}}{{if .Task.CreatorEmail.Valid}} by {{.Task.CreatorEmail.String}}{{end}}</span></div>
+            <div class="panel-body">
+                {{if .CanManage}}
+                <form method="POST" action="/tasks/view" class="filters" style="margin:0;border:0;padding:0;background:transparent;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
+                    <input type="hidden" name="action" value="update">
+                    <label class="field" style="flex:2 1 260px;"><span>Title *</span>
+                        <input type="text" name="title" maxlength="200" value="{{.Task.Title}}" required>
+                    </label>
+                    <label class="field"><span>Priority</span>
+                        <select name="priority">
+                            {{range .Priorities}}<option value="{{.Value}}" {{if eq $.Task.Priority .Value}}selected{{end}}>{{.Label}}</option>{{end}}
+                        </select>
+                    </label>
+                    <label class="field"><span>Due date</span><input type="date" name="due_date" value="{{if .Task.DueDate.Valid}}{{.Task.DueDate.String}}{{end}}"></label>
+                    {{if .IsStaff}}
+                    <label class="field"><span>Organisation</span>
+                        <select name="org_id">
+                            <option value="">—</option>
+                            {{range .Orgs}}<option value="{{.ID}}" {{if and $.Task.OrgID.Valid (eq $.Task.OrgID.Int64 .ID)}}selected{{end}}>{{.Name}}</option>{{end}}
+                        </select>
+                    </label>
+                    {{end}}
+                    <label class="field"><span>Assigned to</span>
+                        <select name="user_id">
+                            <option value="">—</option>
+                            {{range .Users}}<option value="{{.ID}}" {{if and $.Task.UserID.Valid (eq $.Task.UserID.Int64 .ID)}}selected{{end}}>{{.Email}}</option>{{end}}
+                        </select>
+                    </label>
+                    <label class="field" style="flex:2 1 220px;"><span>Address</span><input type="text" name="address" value="{{.Task.Address}}"></label>
+                    <label class="field"><span>NVT</span><input type="text" name="nvt" value="{{.Task.NVT}}"></label>
+                    <label class="field" style="flex:1 1 100%;"><span>Description</span>
+                        <textarea name="description" rows="4">{{.Task.Description}}</textarea>
+                    </label>
+                    <button class="btn btn-primary" type="submit">Save changes</button>
+                </form>
+                {{else}}
+                <div class="panel-body" style="padding:0;">
+                    <p style="white-space:pre-wrap;margin:0;">{{if .Task.Description}}{{.Task.Description}}{{else}}<span class="muted">No description.</span>{{end}}</p>
+                </div>
+                {{end}}
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-head">
+                <h2>Protocols</h2>
+                <span class="hint">{{len .Linked}} linked — the evidence that the work is done</span>
+            </div>
+            <div class="panel-body">
+                {{if .Linked}}
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr><th>ID</th><th>Type</th><th>Date</th><th>File</th><th></th></tr></thead>
+                        <tbody>
+                            {{range .Linked}}
+                            <tr>
+                                <td data-label="ID"><a class="id-link" href="/protocols/view?id={{.ID}}">#{{.ID}}</a></td>
+                                <td data-label="Type"><span class="pill {{.Type}}">{{.Type}}</span></td>
+                                <td data-label="Date">{{.Date}}</td>
+                                <td data-label="File">{{if .Filename}}{{.Filename}}{{else}}<span class="muted">—</span>{{end}}</td>
+                                <td data-label="">
+                                    {{if $.CanManage}}
+                                    <form method="POST" action="/tasks/view" style="display:inline;">
+                                        <input type="hidden" name="csrf_token" value="{{csrfToken}}">
+                                        <input type="hidden" name="action" value="unlink-protocol">
+                                        <input type="hidden" name="id" value="{{$.Task.ID}}">
+                                        <input type="hidden" name="protocol_id" value="{{.ID}}">
+                                        <button class="btn btn-ghost btn-small" type="submit">Unlink</button>
+                                    </form>
+                                    {{end}}
+                                </td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+                {{else}}
+                <p class="muted" style="margin:0;">No protocol linked yet.</p>
+                {{end}}
+
+                {{if .CanManage}}
+                <form method="POST" action="/tasks/view" style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;margin-top:.9rem;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
+                    <input type="hidden" name="action" value="link-protocol">
+                    <input type="hidden" name="id" value="{{.Task.ID}}">
+                    <label class="field" style="flex:0 1 200px;"><span>Link protocol by ID</span>
+                        <input type="number" name="protocol_id" min="1" placeholder="e.g. 254">
+                    </label>
+                    <button class="btn btn-primary btn-small" type="submit">Link</button>
+                </form>
+                {{end}}
+            </div>
+        </section>
+
+        {{if .CanManage}}
+        <section class="panel">
+            <div class="panel-head"><h2>Danger zone</h2></div>
+            <div class="panel-body">
+                <form method="POST" action="/tasks" onsubmit="return confirm('Delete this task? This cannot be undone.');">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="id" value="{{.Task.ID}}">
+                    <button class="btn btn-danger btn-small" type="submit">Delete task</button>
+                </form>
+            </div>
+        </section>
+        {{end}}
+    </main>
+</body>
+</html>

@@ -14,6 +14,7 @@
         <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
         <nav class="nav">
             <a href="/">Dashboard</a>
+            <a href="/tasks">Tasks</a>
             <a href="/reports/projects" class="active">Project Report</a>
             <a href="/bulk-upload">Bulk Upload</a>
             {{if .IsOrgAdmin}}<a href="/org/users">My users</a>{{end}}
@@ -32,6 +33,7 @@
                 <p class="sub">Every protocol of this project, Fremco and Jetting merged, with the share of each organisation.</p>
             </div>
             <div class="actions">
+                <a class="btn btn-ghost" href="/tasks?project={{.Project}}">☑ Tasks for this project</a>
                 <a class="btn btn-export" href="{{.ExportURL}}">⬇ Export CSV</a>
             </div>
         </div>

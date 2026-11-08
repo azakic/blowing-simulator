@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1976d2">
+    <title>Tasks - Wolken-ASM Reports</title>
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="/">Wolken-ASM Reports</a>
+        <input type="checkbox" id="nav-toggle" class="nav-toggle">
+        <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">☰</label>
+        <nav class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/tasks" class="active">Tasks</a>
+            <a href="/reports/projects">Project Report</a>
+            <a href="/bulk-upload">Bulk Upload</a>
+            {{if .IsOrgAdmin}}<a href="/org/users">My users</a>{{end}}
+            {{if .IsAdmin}}<a href="/admin/users">Users</a><a href="/admin/orgs">Organisations</a><a href="/admin/projects">Projects</a>{{end}}
+            {{if .UserRole}}<a href="/account">Account</a><span class="role">Role: {{.UserRole}}</span><a href="/logout">Logout</a>
+            {{else}}<a href="/login">Login</a>{{end}}
+        </nav>
+    </header>
+
+    <main class="page">
+        <a class="back" href="/">← Dashboard</a>
+
+        <div class="head">
+            <div>
+                <h1>Tasks</h1>
+                <p class="sub">HA work per project — who does what, where, by when. Partners see their own organisation's tasks.</p>
+            </div>
+        </div>
+
+        {{if .Message}}<p class="note">{{.Message}}</p>{{end}}
+
+        <section class="kpis">
+            <div class="kpi"><div class="label">Open</div><div class="value">{{index .Counts "open"}}</div></div>
+            <div class="kpi"><div class="label">In progress</div><div class="value">{{index .Counts "in_progress"}}</div></div>
+            <div class="kpi"><div class="label">Done</div><div class="value">{{index .Counts "done"}}</div></div>
+            <div class="kpi"><div class="label">Cancelled</div><div class="value">{{index .Counts "cancelled"}}</div></div>
+        </section>
+
+        <form class="filters" method="GET" action="/tasks">
+            <label class="field"><span>Status</span>
+                <select name="status">
+                    <option value="active" {{if or (eq .Filter.Status "") (eq .Filter.Status "active")}}selected{{end}}>Active (open + in progress)</option>
+                    <option value="all" {{if eq .Filter.Status "all"}}selected{{end}}>All</option>
+                    <option value="open" {{if eq .Filter.Status "open"}}selected{{end}}>Open</option>
+                    <option value="in_progress" {{if eq .Filter.Status "in_progress"}}selected{{end}}>In progress</option>
+                    <option value="done" {{if eq .Filter.Status "done"}}selected{{end}}>Done</option>
+                    <option value="cancelled" {{if eq .Filter.Status "cancelled"}}selected{{end}}>Cancelled</option>
+                </select>
+            </label>
+            <label class="field"><span>Project</span>
+                <select name="project">
+                    <option value="">All</option>
+                    {{range .Projects}}<option value="{{.Number}}" {{if eq $.Filter.Project .Number}}selected{{end}}>{{.Number}}{{if .Name}} — {{.Name}}{{end}}</option>{{end}}
+                </select>
+            </label>
+            <label class="field" style="flex:0 0 auto;">
+                <span>Assigned</span>
+                <label style="display:flex;align-items:center;gap:.4rem;height:2.1rem;font-size:.88rem;cursor:pointer;">
+                    <input type="checkbox" name="mine" value="1" {{if .Filter.Mine}}checked{{end}} style="width:auto;"> Only mine
+                </label>
+            </label>
+            <button class="btn btn-primary" type="submit">Filter</button>
+            <a class="btn btn-ghost" href="/tasks">Clear</a>
+        </form>
+
+        {{if .CanCreate}}
+        <section class="panel">
+            <div class="panel-head"><h2>New task</h2><span class="hint">HA work item on a project</span></div>
+            <div class="panel-body">
+                <form method="POST" action="/tasks" class="filters" style="margin:0;border:0;padding:0;background:transparent;">
+                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
+                    <input type="hidden" name="action" value="create">
+                    <label class="field" style="flex:2 1 260px;"><span>Title *</span>
+                        <input type="text" name="title" maxlength="200" placeholder="e.g. Blow fibre HA 12, NVT 2" required>
+                    </label>
+                    <label class="field"><span>Project *</span>
+                        <select name="project_id" required>
+                            {{range .Projects}}<option value="{{.ID}}">{{.Number}}{{if .Name}} — {{.Name}}{{end}}</option>{{end}}
+                        </select>
+                    </label>
+                    {{if .IsStaff}}
+                    <label class="field"><span>Organisation</span>
+                        <select name="org_id">
+                            <option value="">—</option>
+                            {{range .Orgs}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+                        </select>
+                    </label>
+                    {{end}}
+                    <label class="field"><span>Assign to</span>
+                        <select name="user_id">
+                            <option value="">—</option>
+                            {{range .Users}}<option value="{{.ID}}">{{.Email}}{{if .OrgName.Valid}} ({{.OrgName.String}}){{end}}</option>{{end}}
+                        </select>
+                    </label>
+                    <label class="field"><span>Priority</span>
+                        <select name="priority">
+                            <option value="normal">Normal</option>
+                            <option value="high">High</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </label>
+                    <label class="field"><span>Due date</span><input type="date" name="due_date"></label>
+                    <label class="field" style="flex:2 1 220px;"><span>Address</span><input type="text" name="address" placeholder="Street, no., city"></label>
+                    <label class="field"><span>NVT</span><input type="text" name="nvt" placeholder="NVT 1V3400"></label>
+                    <label class="field" style="flex:1 1 100%;"><span>Description</span>
+                        <textarea name="description" rows="3" placeholder="Scope, notes, access details…"></textarea>
+                    </label>
+                    <button class="btn btn-primary" type="submit">Create task</button>
+                </form>
+            </div>
+        </section>
+        {{end}}
+
+        <div class="table-wrap">
+            {{if .Tasks}}
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Task</th>
+                            <th>Project</th>
+                            <th>Address / NVT</th>
+                            <th>Assigned</th>
+                            <th>Due</th>
+                            <th>Priority</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Tasks}}
+                        <tr>
+                            <td data-label="#"><a class="id-link" href="/tasks/view?id={{.ID}}">#{{.ID}}</a></td>
+                            <td data-label="Task">
+                                <a class="link" href="/tasks/view?id={{.ID}}">{{.Title}}</a>
+                                {{if gt .Protocols 0}}<span class="muted" style="font-size:.78rem;">{{.Protocols}} protocol(s)</span>{{end}}
+                            </td>
+                            <td data-label="Project"><a class="project-link" href="/reports/project?project={{.Project}}">{{.Project}}</a></td>
+                            <td data-label="Address / NVT">
+                                {{if .Address}}{{.Address}}{{else}}<span class="muted">—</span>{{end}}
+                                {{if .NVT}}<div class="muted" style="font-size:.8rem;">{{.NVT}}</div>{{end}}
+                            </td>
+                            <td data-label="Assigned">
+                                {{if .UserEmail.Valid}}{{.UserEmail.String}}{{else}}<span class="muted">—</span>{{end}}
+                                {{if .OrgName.Valid}}<div class="muted" style="font-size:.8rem;">{{.OrgName.String}}</div>{{end}}
+                            </td>
+                            <td data-label="Due">
+                                {{if .DueDate.Valid}}{{.DueDate.String}}{{if .IsOverdue}} <span style="color:#c62828;font-weight:700;" title="Overdue">!</span>{{end}}{{else}}<span class="muted">—</span>{{end}}
+                            </td>
+                            <td data-label="Priority"><span class="pill {{.Priority}}">{{.Priority}}</span></td>
+                            <td data-label="Status"><span class="pill {{.Status}}">{{.Status}}</span></td>
+                            <td data-label="Actions" style="white-space:nowrap;">
+                                <a class="btn btn-ghost btn-small" href="/tasks/view?id={{.ID}}">Open</a>
+                                {{if eq .Status "open"}}
+                                <form method="POST" action="/tasks" style="display:inline;">
+                                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
+                                    <input type="hidden" name="action" value="set-status">
+                                    <input type="hidden" name="id" value="{{.ID}}">
+                                    <input type="hidden" name="status" value="in_progress">
+                                    <button class="btn btn-ghost btn-small" type="submit">Start</button>
+                                </form>
+                                {{end}}
+                                {{if ne .Status "done"}}
+                                <form method="POST" action="/tasks" style="display:inline;">
+                                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
+                                    <input type="hidden" name="action" value="set-status">
+                                    <input type="hidden" name="id" value="{{.ID}}">
+                                    <input type="hidden" name="status" value="done">
+                                    <button class="btn btn-ghost btn-small" type="submit">Done</button>
+                                </form>
+                                {{end}}
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            {{else}}
+            <p class="empty">No tasks match these filters.{{if .CanCreate}} Create one above.{{end}}</p>
+            {{end}}
+        </div>
+    </main>
+</body>
+</html>

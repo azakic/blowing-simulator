@@ -213,6 +213,14 @@ tbody tr:hover td { background: #f9fbfd; }
 .pill.role-editor { background: #fff3e0; color: var(--amber); }
 .pill.role-partner { background: #e8eaf6; color: #283593; }
 .pill.role-viewer { background: #eceff1; color: #455a64; }
+/* zadaci: status i prioritet */
+.pill.open { background: #e3f2fd; color: #1565c0; }
+.pill.in_progress { background: #fff8e1; color: #b26a00; }
+.pill.done { background: #e8f5e9; color: var(--green); }
+.pill.cancelled { background: #eceff1; color: #546e7a; }
+.pill.high { background: #fdecea; color: var(--red); }
+.pill.normal { background: #eef2f7; color: #34495e; }
+.pill.low { background: #f1f8e9; color: #558b2f; }
 .chip { background: #eef2f7; color: #34495e; border-radius: 999px; padding: 3px 10px; font-size: .78rem; }
 .chips { display: flex; flex-wrap: wrap; gap: .35rem; padding: .75rem 1rem 0; }
 

@@ -787,6 +787,10 @@ func main() {
 	if err := ensureProjectSchema(db); err != nil {
 		log.Fatal("Failed to ensure project schema:", err)
 	}
+	// Zadaci sa terena (faza 2): tasks + task_protocols.
+	if err := ensureTaskSchema(db); err != nil {
+		log.Fatal("Failed to ensure tasks schema:", err)
+	}
 	if err := backfillProjects(db); err != nil {
 		log.Fatal("Failed to backfill projects:", err)
 	}
@@ -834,6 +838,9 @@ func main() {
 	http.HandleFunc("/admin/users", requireAuth(withCSRF(AdminUsersHandler), "admin"))
 	http.HandleFunc("/admin/orgs", requireAuth(withCSRF(AdminOrgsHandler), "admin"))
 	http.HandleFunc("/admin/projects", requireAuth(withCSRF(AdminProjectsHandler), "admin"))
+	// Zadaci sa terena (faza 2 projekata) — svi prijavljeni vide svoj opseg.
+	http.HandleFunc("/tasks", requireAuth(withCSRF(TasksHandler), "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/tasks/view", requireAuth(withCSRF(TaskDetailHandler), "viewer", "editor", "partner", "admin"))
 	// Admin utility: backfill ownership for existing protocols (NULL user_id)
 	http.HandleFunc("/admin/backfill-ownership", requireAuth(AdminBackfillOwnershipHandler, "admin"))
 	http.HandleFunc("/admin/reparse", requireAuth(AdminReparseHandler, "admin"))
