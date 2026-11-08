@@ -249,13 +249,13 @@ func DownloadSourceHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !row.SHA.Valid || row.SHA.String == "" {
-		http.Error(w, "Original nije sačuvan za ovaj protokol", http.StatusNotFound)
+		http.Error(w, "No original stored for this protocol", http.StatusNotFound)
 		return
 	}
 
 	url, err := sourceStore.PresignGet(r.Context(), row.SHA.String, row.Filename.String, 15*time.Minute)
 	if err != nil {
-		log.Printf("source storage: presign za protokol %d: %v", id, err)
+		log.Printf("source storage: presign for protocol %d: %v", id, err)
 		http.Error(w, "Original is currently unavailable", http.StatusServiceUnavailable)
 		return
 	}

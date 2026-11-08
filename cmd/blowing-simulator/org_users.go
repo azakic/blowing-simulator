@@ -210,108 +210,108 @@ func handleOrgUserAction(r *http.Request, scope int64) string {
 	if action == "rotate-code" {
 		code, err := regenerateInviteCode(scope)
 		if err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		logUserEvent(actorID, 0, "rotate-invite-code", orgNameByID(scope))
-		return "Novi registracioni kod: " + code
+		return "New registration code: " + code
 	}
 
 	id, _ := strconv.ParseInt(strings.TrimSpace(r.FormValue("id")), 10, 64)
 	if id <= 0 {
-		return "Nedostaje korisnik."
+		return "Missing user."
 	}
 	target, err := managedOrgUser(id)
 	if err != nil {
-		return "Korisnik nije nađen."
+		return "User not found."
 	}
 	if target.OrgID != scope {
-		return "Taj nalog nije u tvojoj organizaciji."
+		return "That account is not in your organisation."
 	}
 	if !orgRoleManageable(target.Role) {
-		return "Možeš da upravljaš samo partnerskim nalozima."
+		return "You can only manage partner accounts."
 	}
 
 	switch action {
 	case "approve":
 		if used, max := orgSeatUsage(scope); !seatAvailable(used, max) {
-			return fmt.Sprintf("Nema slobodno mesto (%d/%d). Deaktiviraj nalog koji se ne koristi.", used, max)
+			return fmt.Sprintf("No free seat (%d/%d). Disable an unused account.", used, max)
 		}
 		if err := setUserStatus(id, UserStatusPending, UserStatusActive); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		logUserEvent(actorID, id, "org-approve", orgNameByID(scope))
 		notifyAccountApproved(id)
-		return "Nalog odobren."
+		return "Account approved."
 
 	case "reject":
 		res, err := db.Exec(`DELETE FROM users WHERE id = $1 AND org_id = $2 AND status = $3`,
 			id, scope, UserStatusPending)
 		if err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
-			return "Nalog nije u statusu pending."
+			return "Account is not pending."
 		}
 		logUserEvent(actorID, id, "org-reject", "")
-		return "Zahtev odbijen."
+		return "Request rejected."
 
 	case "disable":
 		if id == actorID {
-			return "Ne možeš deaktivirati sopstveni nalog."
+			return "You cannot disable your own account."
 		}
 		if target.IsOrgAdmin && countActiveOrgAdmins(scope, id) == 0 {
-			return "Ne možeš deaktivirati poslednjeg organizacijskog administratora."
+			return "You cannot disable the last organisation admin."
 		}
 		if err := setUserStatus(id, UserStatusActive, UserStatusDisabled); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		logUserEvent(actorID, id, "org-disable", "")
-		return "Nalog deaktiviran."
+		return "Account disabled."
 
 	case "enable":
 		if used, max := orgSeatUsage(scope); !seatAvailable(used, max) {
-			return fmt.Sprintf("Nema slobodno mesto (%d/%d).", used, max)
+			return fmt.Sprintf("No free seat (%d/%d).", used, max)
 		}
 		if err := setUserStatus(id, UserStatusDisabled, UserStatusActive); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		logUserEvent(actorID, id, "org-enable", "")
-		return "Nalog ponovo aktivan."
+		return "Account re-enabled."
 
 	case "set-org-admin":
 		makeAdmin := r.FormValue("value") == "1"
 		if makeAdmin {
 			if target.Status != UserStatusActive {
-				return "Samo aktivan nalog može biti organizacijski administrator."
+				return "Only an active account can be an organisation admin."
 			}
 		} else if target.IsOrgAdmin && countActiveOrgAdmins(scope, id) == 0 {
 			// Isti guard kao za globalnog admina: organizacija ne sme da ostane
 			// bez osobe koja odobrava naloge.
-			return "Ne možeš ukinuti prava poslednjem organizacijskom administratoru."
+			return "You cannot remove admin rights from the last organisation admin."
 		}
 		res, err := db.Exec(`UPDATE users SET is_org_admin = $1, updated_at = NOW()
 			WHERE id = $2 AND org_id = $3`, makeAdmin, id, scope)
 		if err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
-			return "Korisnik nije nađen."
+			return "User not found."
 		}
-		detail := "uklonjeno"
+		detail := "removed"
 		if makeAdmin {
 			detail = "dodeljeno"
 		}
 		logUserEvent(actorID, id, "org-set-org-admin", detail)
-		return "Prava organizacijskog administratora: " + detail + "."
+		return "Organisation admin rights: " + detail + "."
 
 	case "reset-link":
 		link, err := createPasswordResetLink(id, actorID)
 		if err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		logUserEvent(actorID, id, "org-reset-link", "")
 		if notifyResetLink(id, link) {
-			return "Jednokratni link je poslat na email korisnika (važi 24 h)."
+			return "A one-time link was emailed to the user (valid for 24 h)."
 		}
 		return "Jednokratni link (važi 24 h): " + absoluteURL(r, link)
 	}

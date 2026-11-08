@@ -129,7 +129,7 @@ func (s *SourceStore) PutIfAbsent(ctx context.Context, sha string, data []byte) 
 		Body:        bytes.NewReader(data),
 		ContentType: aws.String("application/pdf"),
 	}); err != nil {
-		return fmt.Errorf("upload originala nije uspeo: %w", err)
+		return fmt.Errorf("uploading the original failed: %w", err)
 	}
 
 	return nil
@@ -138,14 +138,14 @@ func (s *SourceStore) PutIfAbsent(ctx context.Context, sha string, data []byte) 
 // Get preuzima original iz Object Storage po SHA-256 (za re-parse).
 func (s *SourceStore) Get(ctx context.Context, sha string) ([]byte, error) {
 	if !s.Enabled() {
-		return nil, fmt.Errorf("source storage nije konfigurisan")
+		return nil, fmt.Errorf("source storage is not configured")
 	}
 	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(s.objectKey(sha)),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("preuzimanje originala nije uspelo: %w", err)
+		return nil, fmt.Errorf("fetching the original failed: %w", err)
 	}
 	defer out.Body.Close()
 	return io.ReadAll(out.Body)
@@ -154,7 +154,7 @@ func (s *SourceStore) Get(ctx context.Context, sha string) ([]byte, error) {
 // PresignGet pravi privremeni URL za preuzimanje originala.
 func (s *SourceStore) PresignGet(ctx context.Context, sha, filename string, ttl time.Duration) (string, error) {
 	if !s.Enabled() {
-		return "", fmt.Errorf("source storage nije konfigurisan")
+		return "", fmt.Errorf("source storage is not configured")
 	}
 
 	input := &s3.GetObjectInput{
@@ -266,6 +266,6 @@ func linkOriginal(protocolID int, sha string, size int64) {
 		return
 	}
 	if err := attachSource(db, protocolID, sha, size, sourceStore.objectKey(sha)); err != nil {
-		log.Printf("source storage: vezivanje originala za protokol %d nije uspelo: %v", protocolID, err)
+		log.Printf("source storage: attaching original to protocol %d failed: %v", protocolID, err)
 	}
 }

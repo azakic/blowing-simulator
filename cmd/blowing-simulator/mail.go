@@ -126,11 +126,11 @@ func (m *mailer) Send(to []string, subject, text string) {
 	go func() {
 		if err := m.send(to, subject, text); err != nil {
 			// Sadržaj poruke se ne loguje (može sadržati jednokratni link).
-			log.Printf("mail: slanje na %d primaoca nije uspelo: %v", len(to), err)
+			log.Printf("mail: sending to %d recipients failed: %v", len(to), err)
 			return
 		}
 		// Potvrda da je provajder prihvatio poruku — bez sadržaja i bez adresa.
-		log.Printf("mail: poslato (primalaca: %d, subject: %q)", len(to), subject)
+		log.Printf("mail: sent (recipients: %d, subject: %q)", len(to), subject)
 	}()
 }
 
@@ -174,7 +174,7 @@ func buildMessage(from string, to []string, subject, text string) []byte {
 func (m *mailer) sendSMTP(to []string, subject, text string) error {
 	host, _, err := net.SplitHostPort(m.smtpAddr)
 	if err != nil {
-		return fmt.Errorf("neispravan MAIL_SMTP_ADDR: %w", err)
+		return fmt.Errorf("invalid MAIL_SMTP_ADDR: %w", err)
 	}
 	var auth smtp.Auth
 	envelopeFrom := m.smtpUser
@@ -183,7 +183,7 @@ func (m *mailer) sendSMTP(to []string, subject, text string) error {
 		// domena (Admin konzola: SMTP relay → "Only addresses in my domains").
 		envelopeFrom = envelopeAddress(m.from)
 		if envelopeFrom == "" {
-			return fmt.Errorf("neispravan MAIL_FROM: %q", m.from)
+			return fmt.Errorf("invalid MAIL_FROM: %q", m.from)
 		}
 	} else {
 		auth = smtp.PlainAuth("", m.smtpUser, m.smtpPass, host)
@@ -296,11 +296,11 @@ func notifyNewRegistration(email, orgName string, orgID int64) {
 		return
 	}
 	to := append(adminRecipients(), orgAdminRecipients(orgID)...)
-	subject := "Nova registracija čeka odobrenje"
-	text := fmt.Sprintf("Novi nalog %s%s čeka odobrenje.\n\nOdobri: %s\n",
+	subject := "New registration awaiting approval"
+	text := fmt.Sprintf("New account %s%s is awaiting approval.\n\nApprove: %s\n",
 		email, withSuffix(orgName), mail.link("/admin/users"))
 	if len(orgAdminRecipients(orgID)) > 0 {
-		text += "Organizacija može da odobri nalog i na " + mail.link("/org/users") + "\n"
+		text += "The organisation can also approve the account at " + mail.link("/org/users") + "\n"
 	}
 	mail.Send(to, subject, text)
 }
@@ -314,8 +314,8 @@ func notifyAccountApproved(userID int64) {
 	if email == "" {
 		return
 	}
-	mail.Send([]string{email}, "Nalog je odobren",
-		fmt.Sprintf("Tvoj nalog je odobren. Prijavi se: %s\n", mail.link("/login")))
+	mail.Send([]string{email}, "Your account has been approved",
+		fmt.Sprintf("Your account has been approved. Sign in: %s\n", mail.link("/login")))
 }
 
 // notifyResetLink šalje jednokratni link korisniku (admin ga je pokrenuo).
@@ -327,9 +327,9 @@ func notifyResetLink(userID int64, link string) bool {
 	if email == "" {
 		return false
 	}
-	mail.Send([]string{email}, "Nova lozinka za Wolken-ASM Reports",
-		fmt.Sprintf("Postavi novu lozinku (link važi 24 h i radi jednom):\n\n%s\n\n"+
-			"Ako ovo nisi tražio, ignoriši poruku — lozinka ostaje nepromenjena.\n",
+	mail.Send([]string{email}, "New password for Wolken-ASM Reports",
+		fmt.Sprintf("Set a new password (the link is valid for 24 h and works once):\n\n%s\n\n"+
+			"If you did not request this, ignore the message — your password stays unchanged.\n",
 			mail.link(link)))
 	return true
 }

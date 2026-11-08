@@ -45,7 +45,7 @@ func hasProtocolAccess(db *sqlx.DB, role string, userID int64, owner sql.NullInt
 	if err := db.Get(&ok, `SELECT EXISTS (
 		SELECT 1 FROM protocol_access WHERE protocol_id = $1 AND user_id = $2)`,
 		protocolID, userID); err != nil {
-		log.Printf("protocol_access: provera za protokol %d nije uspela: %v", protocolID, err)
+		log.Printf("protocol_access: check for protocol %d failed: %v", protocolID, err)
 		return false
 	}
 	if ok {
@@ -61,7 +61,7 @@ func hasProtocolAccess(db *sqlx.DB, role string, userID int64, owner sql.NullInt
 			SELECT 1 FROM protocols p WHERE p.id = $1
 			  AND (p.owner_org_id = $2 OR p.service_provider_org_id = $2))`,
 			protocolID, orgID); err != nil {
-			log.Printf("org access: provera za protokol %d nije uspela: %v", protocolID, err)
+			log.Printf("org access: check for protocol %d failed: %v", protocolID, err)
 			return false
 		}
 		return sameOrg

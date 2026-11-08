@@ -64,14 +64,14 @@ func validateRoleOrg(role, orgKind string) string {
 	switch role {
 	case RolePartner:
 		if orgKind == "" {
-			return "Partner mora imati organizaciju (podizvođač)."
+			return "A partner must belong to a (subcontractor) organisation."
 		}
 		if orgKind == OrgKindInternal {
-			return "Partner ne može biti u internoj organizaciji."
+			return "A partner cannot belong to the internal organisation."
 		}
 	case RoleAdmin, RoleEditor, RoleViewer:
 		if orgKind == OrgKindSubcontractor || orgKind == OrgKindClient {
-			return "Interni nalog (admin/editor/viewer) ne može biti u partnerskoj organizaciji."
+			return "An internal account (admin/editor/viewer) cannot belong to a partner organisation."
 		}
 	}
 	return ""
@@ -117,7 +117,7 @@ func logUserEvent(actorID, targetID int64, action, detail string) {
 func createUser(email, password, role string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if email == "" || password == "" {
-		return fmt.Errorf("email i lozinka su obavezni")
+		return fmt.Errorf("email and password are required")
 	}
 	r, ok := validUserRole(role)
 	if !ok {
@@ -141,7 +141,7 @@ func updateUserRole(id int64, role string) error {
 	if r != RoleAdmin {
 		if oldRole, _, err := roleOfUser(id); err == nil && oldRole == RoleAdmin {
 			if countActiveAdmins(id) == 0 {
-				return fmt.Errorf("ne možeš ukinuti rolu poslednjem aktivnom administratoru")
+				return fmt.Errorf("you cannot remove the role from the last active administrator")
 			}
 		}
 	}
@@ -150,17 +150,17 @@ func updateUserRole(id int64, role string) error {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("korisnik nije nađen")
+		return fmt.Errorf("user not found")
 	}
 	return nil
 }
 
 func resetUserPassword(id int64, newPassword string) error {
 	if newPassword == "" {
-		return fmt.Errorf("nova lozinka je obavezna")
+		return fmt.Errorf("new password is required")
 	}
 	if len(newPassword) < 8 {
-		return fmt.Errorf("lozinka mora imati najmanje 8 znakova")
+		return fmt.Errorf("password must be at least 8 characters")
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
@@ -171,7 +171,7 @@ func resetUserPassword(id int64, newPassword string) error {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("korisnik nije nađen")
+		return fmt.Errorf("user not found")
 	}
 	// Svaka promena lozinke obara postojeće sesije (self-service strana posle
 	// toga izda novi token, vidi account.go).
@@ -224,10 +224,10 @@ func handleUserAction(r *http.Request) string {
 	case "create":
 		email := strings.ToLower(strings.TrimSpace(r.FormValue("email")))
 		if err := createUser(email, r.FormValue("password"), r.FormValue("role")); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		logUserEvent(actorID, 0, "create", email)
-		return "Korisnik napravljen: " + email
+		return "User created: " + email
 
 	case "set-access":
 		// Rola i organizacija se menjaju zajedno, jer pojedinačno mogu da budu
@@ -241,7 +241,7 @@ func handleUserAction(r *http.Request) string {
 		if orgID != 0 {
 			kind = orgKindOf(orgID)
 			if kind == "" {
-				return "Nepoznata organizacija."
+				return "Unknown organisation."
 			}
 		}
 		if msg := validateRoleOrg(role, kind); msg != "" {
@@ -251,34 +251,34 @@ func handleUserAction(r *http.Request) string {
 		// uloge ne bi imao smisla (vidi isOrgAdminUser).
 		orgAdmin := r.FormValue("is_org_admin") != ""
 		if orgAdmin && role != RolePartner {
-			return "Organizacijski admin može biti samo partner."
+			return "Only a partner can be an organisation admin."
 		}
 		oldRole, _, err := roleOfUser(id)
 		if err != nil {
-			return "Korisnik nije nađen."
+			return "User not found."
 		}
 		if oldRole == RoleAdmin && role != RoleAdmin && countActiveAdmins(id) == 0 {
-			return "Ne možeš ukinuti rolu poslednjem aktivnom administratoru."
+			return "You cannot remove the role from the last active administrator."
 		}
 		tx, err := db.Begin()
 		if err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		defer tx.Rollback()
 		if _, err := tx.Exec(`UPDATE users SET role = $1, org_id = $2, is_org_admin = $3,
 			updated_at = NOW() WHERE id = $4`,
 			role, sqlNullInt64(orgID), orgAdmin, id); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		if err := tx.Commit(); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		detail := role + " / " + orgNameByID(orgID)
 		if orgAdmin {
 			detail += " / org admin"
 		}
 		logUserEvent(actorID, id, "set-access", detail)
-		return "Rola i organizacija sačuvane."
+		return "Role and organisation saved."
 
 	case "set-role":
 		role, ok := validUserRole(r.FormValue("role"))
@@ -287,137 +287,137 @@ func handleUserAction(r *http.Request) string {
 		}
 		_, orgKind, err := roleOfUser(id)
 		if err != nil {
-			return "Korisnik nije nađen."
+			return "User not found."
 		}
 		if msg := validateRoleOrg(role, orgKind); msg != "" {
 			return msg
 		}
 		if err := updateUserRole(id, role); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		logUserEvent(actorID, id, "set-role", role)
-		return "Rola promenjena."
+		return "Role changed."
 
 	case "set-org":
 		orgID, _ := strconv.ParseInt(strings.TrimSpace(r.FormValue("org_id")), 10, 64)
 		role, _, err := roleOfUser(id)
 		if err != nil {
-			return "Korisnik nije nađen."
+			return "User not found."
 		}
 		kind := ""
 		if orgID != 0 {
 			kind = orgKindOf(orgID)
 			if kind == "" {
-				return "Nepoznata organizacija."
+				return "Unknown organisation."
 			}
 		}
 		if msg := validateRoleOrg(role, kind); msg != "" {
 			return msg
 		}
 		if err := setUserOrg(id, orgID); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		logUserEvent(actorID, id, "set-org", orgNameByID(orgID))
-		return "Organizacija postavljena."
+		return "Organisation set."
 
 	case "reset-password":
 		if _, _, err := roleOfUser(id); err != nil {
-			return "Korisnik nije nađen."
+			return "User not found."
 		}
 		if err := resetUserPassword(id, r.FormValue("new_password")); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		logUserEvent(actorID, id, "reset-password", "")
-		return "Lozinka promenjena."
+		return "Password changed."
 
 	case "reset-link":
 		if _, _, err := roleOfUser(id); err != nil {
-			return "Korisnik nije nađen."
+			return "User not found."
 		}
 		link, err := createPasswordResetLink(id, actorID)
 		if err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		logUserEvent(actorID, id, "reset-link", "")
 		if notifyResetLink(id, link) {
-			return "Jednokratni link je poslat na email korisnika (važi 24 h)."
+			return "A one-time link was emailed to the user (valid for 24 h)."
 		}
 		return "Jednokratni link (važi 24 h): " + absoluteURL(r, link)
 
 	case "approve":
 		role, orgKind, err := roleOfUser(id)
 		if err != nil {
-			return "Korisnik nije nađen."
+			return "User not found."
 		}
 		if msg := validateRoleOrg(role, orgKind); msg != "" {
-			return "Pre odobrenja: " + msg
+			return "Before approval: " + msg
 		}
 		if err := setUserStatus(id, UserStatusPending, UserStatusActive); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		logUserEvent(actorID, id, "approve", "")
 		notifyAccountApproved(id)
-		return "Nalog odobren."
+		return "Account approved."
 
 	case "reject":
 		if _, err := db.Exec(`DELETE FROM users WHERE id = $1 AND status = $2`, id, UserStatusPending); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		logUserEvent(actorID, id, "reject", "")
-		return "Zahtev odbijen."
+		return "Request rejected."
 
 	case "disable":
 		if id == actorID {
-			return "Ne možeš deaktivirati sopstveni nalog."
+			return "You cannot disable your own account."
 		}
 		role, _, err := roleOfUser(id)
 		if err != nil {
-			return "Korisnik nije nađen."
+			return "User not found."
 		}
 		if role == RoleAdmin && countActiveAdmins(id) == 0 {
-			return "Ne možeš deaktivirati poslednjeg aktivnog administratora."
+			return "You cannot disable the last active administrator."
 		}
 		if err := setUserStatus(id, UserStatusActive, UserStatusDisabled); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		logUserEvent(actorID, id, "disable", "")
-		return "Nalog deaktiviran."
+		return "Account disabled."
 
 	case "enable":
 		if _, _, err := roleOfUser(id); err != nil {
-			return "Korisnik nije nađen."
+			return "User not found."
 		}
 		if err := setUserStatus(id, UserStatusDisabled, UserStatusActive); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		logUserEvent(actorID, id, "enable", "")
-		return "Nalog ponovo aktivan."
+		return "Account re-enabled."
 
 	case "delete":
 		if id == actorID {
-			return "Ne možeš obrisati sopstveni nalog."
+			return "You cannot delete your own account."
 		}
 		var owned int
 		_ = db.Get(&owned, `SELECT count(*) FROM protocols WHERE user_id = $1`, id)
 		if owned > 0 {
-			return fmt.Sprintf("Korisnik ima %d protokola — deaktiviraj nalog umesto brisanja.", owned)
+			return fmt.Sprintf("The user has %d protocols — disable the account instead of deleting it.", owned)
 		}
 		role, _, err := roleOfUser(id)
 		if err != nil {
-			return "Korisnik nije nađen."
+			return "User not found."
 		}
 		if role == RoleAdmin && countActiveAdmins(id) == 0 {
-			return "Ne možeš obrisati poslednjeg aktivnog administratora."
+			return "You cannot delete the last active administrator."
 		}
 		res, err := db.Exec(`DELETE FROM users WHERE id = $1`, id)
 		if err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
-			return "Korisnik nije nađen."
+			return "User not found."
 		}
 		logUserEvent(actorID, id, "delete", "")
-		return "Nalog obrisan."
+		return "Account deleted."
 	}
 	return "Nepoznata akcija."
 }
@@ -446,7 +446,7 @@ func setUserStatus(id int64, from, to string) error {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("nalog nije u statusu %q", from)
+		return fmt.Errorf("account is not in status %q", from)
 	}
 	return nil
 }

@@ -49,7 +49,7 @@ func applyBBoxMeasurements[T any](pdfPath, format string, target *[]T, convert f
 	}
 
 	*target = convert(rows)
-	note := fmt.Sprintf("bbox: %d → %d merenja (koordinatni parser)", oldCount, len(rows))
+	note := fmt.Sprintf("bbox: %d → %d measurements (coordinate parser)", oldCount, len(rows))
 	log.Printf("bbox %s: %s", format, note)
 	return note
 }

@@ -23,12 +23,12 @@ func TaskICSHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
 	if id <= 0 {
-		http.Error(w, "Nedostaje id zadatka", http.StatusBadRequest)
+		http.Error(w, "Missing task id", http.StatusBadRequest)
 		return
 	}
 	t, err := loadTask(id)
 	if err != nil {
-		http.Error(w, "Zadatak nije nađen", http.StatusNotFound)
+		http.Error(w, "Task not found", http.StatusNotFound)
 		return
 	}
 	if !canSeeTask(r, t) {
@@ -36,7 +36,7 @@ func TaskICSHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !t.DueDate.Valid || t.DueDate.String == "" {
-		http.Error(w, "Zadatak nema rok — dodaj datum (i vreme) pa pokušaj ponovo.", http.StatusBadRequest)
+		http.Error(w, "Task has no due date — add a date (and time) and try again.", http.StatusBadRequest)
 		return
 	}
 
@@ -86,20 +86,20 @@ func buildTaskICS(t taskRow, taskURL string) []byte {
 	write("SUMMARY:" + icsEscape(summary))
 	write("STATUS:CONFIRMED")
 
-	desc := []string{"Projekat: " + t.Project}
+	desc := []string{"Project: " + t.Project}
 	if t.ProjectName != "" {
-		desc = append(desc, "Naziv: "+t.ProjectName)
+		desc = append(desc, "Name: "+t.ProjectName)
 	}
 	if t.NVT != "" {
 		desc = append(desc, "NVT: "+t.NVT)
 	}
 	if t.Address != "" {
-		desc = append(desc, "Adresa: "+t.Address)
+		desc = append(desc, "Address: "+t.Address)
 	}
 	if t.Description != "" {
 		desc = append(desc, t.Description)
 	}
-	desc = append(desc, "Zadatak: "+taskURL)
+	desc = append(desc, "Task: "+taskURL)
 	write("DESCRIPTION:" + icsEscape(strings.Join(desc, "\n")))
 
 	if t.Address != "" {
@@ -111,7 +111,7 @@ func buildTaskICS(t taskRow, taskURL string) []byte {
 	if t.DueTime.Valid && t.DueTime.String != "" {
 		write("BEGIN:VALARM")
 		write("ACTION:DISPLAY")
-		write("DESCRIPTION:" + icsEscape("Zadatak: "+t.Title))
+		write("DESCRIPTION:" + icsEscape("Task: "+t.Title))
 		write("TRIGGER:-PT1H")
 		write("END:VALARM")
 	}

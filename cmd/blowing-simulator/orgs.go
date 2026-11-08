@@ -288,7 +288,7 @@ func backfillOrgAttribution(db *sqlx.DB) error {
 		}
 	}
 	if updated > 0 {
-		log.Printf("orgs: backfill dodao organizaciju na %d polja", updated)
+		log.Printf("orgs: backfill added organisation to %d fields", updated)
 	}
 	return nil
 }
@@ -301,7 +301,7 @@ func setUserOrg(userID, orgID int64) error {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("korisnik nije nađen")
+		return fmt.Errorf("user not found")
 	}
 	return nil
 }
@@ -376,7 +376,7 @@ func ensureInviteCodes(db *sqlx.DB) error {
 			if _, err := db.Exec(`UPDATE orgs SET invite_code = $1 WHERE id = $2`, code, id); err != nil {
 				continue // sudar sa unique indeksom → novi pokušaj
 			}
-			log.Printf("orgs: dodeljen registracioni kod organizaciji %d", id)
+			log.Printf("orgs: registration code assigned to organisation %d", id)
 			break
 		}
 	}

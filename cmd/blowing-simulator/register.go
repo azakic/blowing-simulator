@@ -77,16 +77,16 @@ func clientIP(r *http.Request) string {
 func validateRegistration(email, pw, pw2, code string) string {
 	email = strings.TrimSpace(email)
 	if len(email) < 5 || !strings.Contains(email, "@") || strings.ContainsAny(email, " \t") {
-		return "Unesi ispravan email."
+		return "Enter a valid email address."
 	}
 	if len(pw) < 8 {
-		return "Lozinka mora imati najmanje 8 znakova."
+		return "Password must be at least 8 characters."
 	}
 	if pw != pw2 {
-		return "Lozinke se ne poklapaju."
+		return "Passwords do not match."
 	}
 	if strings.TrimSpace(code) == "" {
-		return "Unesi registracioni kod (dobijaš ga od nas)."
+		return "Enter the registration code (we give it to you)."
 	}
 	return ""
 }
@@ -122,7 +122,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !formTimingOK(r) || !registerAllowed(clientIP(r)) {
-		renderRegister(w, r, "Zahtev nije prihvaćen. Pokušaj ponovo kasnije.", http.StatusTooManyRequests)
+		renderRegister(w, r, "Request not accepted. Please try again later.", http.StatusTooManyRequests)
 		return
 	}
 
@@ -146,24 +146,24 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	case OrgKindSubcontractor:
 		role = RolePartner
 	default:
-		renderRegister(w, r, "Taj kod ne otvara nalog. Obrati se administratoru.", http.StatusForbidden)
+		renderRegister(w, r, "That code does not create an account. Please contact an administrator.", http.StatusForbidden)
 		return
 	}
 
 	var exists bool
 	if err := db.Get(&exists, `SELECT EXISTS (SELECT 1 FROM users WHERE lower(email) = lower($1))`, email); err != nil {
-		renderRegister(w, r, "Greška u bazi. Pokušaj ponovo.", http.StatusInternalServerError)
+		renderRegister(w, r, "Database error. Please try again.", http.StatusInternalServerError)
 		return
 	}
 	if exists {
 		// Ne otkrivamo da li nalog postoji — ista poruka kao za uspeh.
-		renderRegister(w, r, "Registracija primljena. Nalog čeka odobrenje administratora.", http.StatusOK)
+		renderRegister(w, r, "Registration received. Your account is awaiting administrator approval.", http.StatusOK)
 		return
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(r.FormValue("password")), bcrypt.DefaultCost)
 	if err != nil {
-		renderRegister(w, r, "Greška pri obradi lozinke.", http.StatusInternalServerError)
+		renderRegister(w, r, "Error while processing the password.", http.StatusInternalServerError)
 		return
 	}
 
@@ -171,13 +171,13 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	if err := db.Get(&newID, `INSERT INTO users (email, password_hash, role, org_id, status)
 		VALUES ($1, $2, $3, $4, $5) RETURNING id`,
 		email, string(hash), role, sqlNullInt64(orgID), UserStatusPending); err != nil {
-		renderRegister(w, r, "Registracija nije uspela. Pokušaj ponovo.", http.StatusInternalServerError)
+		renderRegister(w, r, "Registration failed. Please try again.", http.StatusInternalServerError)
 		return
 	}
 	logUserEvent(0, newID, "register", role)
 	notifyNewRegistration(email, orgNameByID(orgID), orgID)
 
-	renderRegister(w, r, "Registracija primljena. Nalog čeka odobrenje administratora.", http.StatusOK)
+	renderRegister(w, r, "Registration received. Your account is awaiting administrator approval.", http.StatusOK)
 }
 
 func renderRegister(w http.ResponseWriter, r *http.Request, message string, code int) {

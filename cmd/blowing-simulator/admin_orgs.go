@@ -91,12 +91,12 @@ func handleOrgAction(r *http.Request) string {
 			return "Naziv je obavezan."
 		}
 		if kind != OrgKindInternal && kind != OrgKindSubcontractor && kind != OrgKindClient {
-			return "Nepoznat tip organizacije."
+			return "Unknown organisation type."
 		}
 		var id int
 		if err := db.Get(&id, `INSERT INTO orgs (name, kind) VALUES ($1,$2)
 			ON CONFLICT (name) DO UPDATE SET kind = EXCLUDED.kind RETURNING id`, name, kind); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		// Naziv je i alias (normalizovan), da se sledeći PDF prepozna odmah.
 		if key := normalizeOrgName(name); key != "" {
@@ -106,20 +106,20 @@ func handleOrgAction(r *http.Request) string {
 		// Registracioni kod odmah, da nova organizacija ne čeka restart.
 		code, err := regenerateInviteCode(int64(id))
 		if err != nil {
-			return "Organizacija sačuvana: " + name + " (kod nije dodeljen: " + err.Error() + ")"
+			return "Organisation saved: " + name + " (code not assigned: " + err.Error() + ")"
 		}
-		return "Organizacija sačuvana: " + name + " — registracioni kod " + code
+		return "Organisation saved: " + name + " — registracioni kod " + code
 
 	case "add-alias":
 		orgID, _ := strconv.ParseInt(r.FormValue("org_id"), 10, 64)
 		alias := strings.TrimSpace(r.FormValue("alias"))
 		key := normalizeOrgName(alias)
 		if orgID <= 0 || key == "" {
-			return "Izaberi organizaciju i unesi naziv."
+			return "Choose an organisation and enter a name."
 		}
 		if _, err := db.Exec(`INSERT INTO org_aliases (alias_normalized, org_id) VALUES ($1,$2)
 			ON CONFLICT (alias_normalized) DO UPDATE SET org_id = EXCLUDED.org_id`, key, orgID); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		return "Alias dodat: " + key
 
@@ -127,25 +127,25 @@ func handleOrgAction(r *http.Request) string {
 		orgID, _ := strconv.ParseInt(r.FormValue("org_id"), 10, 64)
 		kind := r.FormValue("kind")
 		if orgID <= 0 || (kind != OrgKindInternal && kind != OrgKindSubcontractor && kind != OrgKindClient) {
-			return "Neispravan unos."
+			return "Invalid input."
 		}
 		if _, err := db.Exec(`UPDATE orgs SET kind = $1 WHERE id = $2`, kind, orgID); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
-		return "Tip organizacije promenjen."
+		return "Organisation type changed."
 
 	case "set-seats":
 		orgID, _ := strconv.ParseInt(r.FormValue("org_id"), 10, 64)
 		max, err := strconv.Atoi(strings.TrimSpace(r.FormValue("max_users")))
 		if orgID <= 0 || err != nil || max < 1 || max > 1000 {
-			return "Broj mesta mora biti između 1 i 1000."
+			return "Seat count must be between 1 and 1000."
 		}
 		used, _ := orgSeatUsage(orgID)
 		if max < used {
-			return fmt.Sprintf("Organizacija već koristi %d mesta — limit ne može biti manji.", used)
+			return fmt.Sprintf("Organisation already uses %d seats — the limit cannot be lower.", used)
 		}
 		if _, err := db.Exec(`UPDATE orgs SET max_users = $1 WHERE id = $2`, max, orgID); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		if c := GetAuthClaims(r); c != nil {
 			logUserEvent(c.UserID, 0, "set-seats", fmt.Sprintf("%s: %d", orgNameByID(orgID), max))
@@ -156,9 +156,9 @@ func handleOrgAction(r *http.Request) string {
 		orgID, _ := strconv.ParseInt(r.FormValue("org_id"), 10, 64)
 		code, err := regenerateInviteCode(orgID)
 		if err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
-		return "Novi registracioni kod: " + code
+		return "New registration code: " + code
 
 	case "bulk-assign":
 		return bulkAssignOrg(r)
@@ -171,11 +171,11 @@ func handleOrgAction(r *http.Request) string {
 func bulkAssignOrg(r *http.Request) string {
 	column, ok := orgFieldColumn[r.FormValue("field")]
 	if !ok {
-		return "Izaberi kolonu."
+		return "Choose a column."
 	}
 	orgID, _ := strconv.ParseInt(r.FormValue("org_id"), 10, 64)
 	if orgID <= 0 {
-		return "Izaberi organizaciju."
+		return "Choose an organisation."
 	}
 
 	args := []interface{}{orgID}
@@ -203,10 +203,10 @@ func bulkAssignOrg(r *http.Request) string {
 	res, err := db.Exec(query, args...)
 	if err != nil {
 		log.Printf("bulk-assign: %v", err)
-		return "Greška: " + err.Error()
+		return "Error: " + err.Error()
 	}
 	n, _ := res.RowsAffected()
-	return fmt.Sprintf("Dodeljeno: %d protokola → %s", n, orgNameByID(orgID))
+	return fmt.Sprintf("Assigned: %d protocols → %s", n, orgNameByID(orgID))
 }
 
 // orgStats vraća organizacije sa brojem protokola po koloni i aliasima.

@@ -68,27 +68,27 @@ func AccountHandler(w http.ResponseWriter, r *http.Request) {
 func handleAccountAction(w http.ResponseWriter, r *http.Request) string {
 	c := GetAuthClaims(r)
 	if c == nil {
-		return "Sesija je istekla. Prijavi se ponovo."
+		return "Your session has expired. Please sign in again."
 	}
 	if r.FormValue("action") != "change-password" {
-		return "Nepoznata akcija."
+		return "Unknown action."
 	}
 
 	var hash string
 	if err := db.Get(&hash, `SELECT password_hash FROM users WHERE id = $1`, c.UserID); err != nil {
-		return "Korisnik nije nađen."
+		return "User not found."
 	}
 	if checkPassword(hash, r.FormValue("current_password")) != nil {
-		return "Trenutna lozinka nije ispravna."
+		return "Current password is not correct."
 	}
 	if msg := validateNewPassword(r.FormValue("new_password"), r.FormValue("password2")); msg != "" {
 		return msg
 	}
 	if r.FormValue("new_password") == r.FormValue("current_password") {
-		return "Nova lozinka mora da se razlikuje od trenutne."
+		return "The new password must be different from the current one."
 	}
 	if err := resetUserPassword(c.UserID, r.FormValue("new_password")); err != nil {
-		return "Greška: " + err.Error()
+		return "Error: " + err.Error()
 	}
 	// resetUserPassword je opozvao sve sesije; ova (koja je lozinku i
 	// promenila) odmah dobija novi token da ne bi izbacila sama sebe.
@@ -98,5 +98,5 @@ func handleAccountAction(w http.ResponseWriter, r *http.Request) string {
 		}
 	}
 	logUserEvent(c.UserID, c.UserID, "self-password", "")
-	return "Lozinka je promenjena."
+	return "Password changed."
 }

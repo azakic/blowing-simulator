@@ -65,7 +65,7 @@ func buildWarnings(t parseTelemetry, textLen, measurements int, pdf, hints map[s
 		warnings = append(warnings, fmt.Sprintf("short_text: samo %d znakova teksta", textLen))
 	}
 	if measurements == 0 {
-		warnings = append(warnings, "no_measurements: nema izmerenih tačaka")
+		warnings = append(warnings, "no_measurements: no measurement points")
 	}
 
 	for _, field := range []string{"date", "time", "section", "project"} {
@@ -75,7 +75,7 @@ func buildWarnings(t parseTelemetry, textLen, measurements int, pdf, hints map[s
 			continue
 		}
 		if !sameHint(field, p, h) {
-			warnings = append(warnings, fmt.Sprintf("mismatch:%s: ime fajla %q ≠ dokument %q", field, h, p))
+			warnings = append(warnings, fmt.Sprintf("mismatch:%s: filename %q ≠ document %q", field, h, p))
 		}
 	}
 

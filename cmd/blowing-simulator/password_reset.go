@@ -84,10 +84,10 @@ func consumePasswordReset(token string) error {
 // validateNewPassword proverava novu lozinku i potvrdu (bez baze, testabilno).
 func validateNewPassword(pw, pw2 string) string {
 	if len(pw) < 8 {
-		return "Lozinka mora imati najmanje 8 znakova."
+		return "Password must be at least 8 characters."
 	}
 	if pw != pw2 {
-		return "Lozinke se ne poklapaju."
+		return "Passwords do not match."
 	}
 	return ""
 }
@@ -98,7 +98,7 @@ func ResetPasswordHandler(w http.ResponseWriter, r *http.Request) {
 	token := strings.TrimSpace(r.FormValue("t"))
 	userID, email, err := passwordResetTarget(token)
 	if err != nil {
-		renderReset(w, r, "", "", "Link je istekao ili je već iskorišćen. Zamoli administratora za novi.", http.StatusForbidden)
+		renderReset(w, r, "", "", "The link has expired or has already been used. Ask an administrator for a new one.", http.StatusForbidden)
 		return
 	}
 
@@ -112,16 +112,16 @@ func ResetPasswordHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := resetUserPassword(userID, r.FormValue("password")); err != nil {
-		renderReset(w, r, token, email, "Greška: "+err.Error(), http.StatusInternalServerError)
+		renderReset(w, r, token, email, "Error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if err := consumePasswordReset(token); err != nil {
 		// Lozinka je već promenjena; token ostaje važeći do isteka, ali se
 		// greška ne krije od administratora u logu.
-		logUserEvent(0, userID, "password-reset-consume", "neuspešno poništavanje linka")
+		logUserEvent(0, userID, "password-reset-consume", "failed to invalidate the link")
 	}
 	logUserEvent(0, userID, "password-reset", "jednokratni link")
-	renderReset(w, r, "", "", "Lozinka je promenjena. Možeš da se prijaviš.", http.StatusOK)
+	renderReset(w, r, "", "", "Password changed. You can sign in now.", http.StatusOK)
 }
 
 func renderReset(w http.ResponseWriter, r *http.Request, token, email, message string, code int) {

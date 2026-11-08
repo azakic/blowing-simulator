@@ -51,11 +51,11 @@ func AdminReparseHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.FormValue("confirm") != "yes" {
-		http.Error(w, "Dodaj confirm=yes (menja podatke u bazi)", http.StatusBadRequest)
+		http.Error(w, "Add confirm=yes (changes data in the database)", http.StatusBadRequest)
 		return
 	}
 	if sourceStore == nil || !sourceStore.Enabled() {
-		http.Error(w, "Object Storage nije konfigurisan", http.StatusServiceUnavailable)
+		http.Error(w, "Object Storage is not configured", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -111,11 +111,11 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 		&meta.SectionNVT, &meta.Address, &meta.Company, &meta.ServiceProvider, &meta.Operator,
 		&meta.Remarks, &meta.ParserVersion)
 	if err != nil {
-		res.Error = "protocol nije nađen: " + err.Error()
+		res.Error = "protocol not found: " + err.Error()
 		return res
 	}
 	if !meta.SourceSHA.Valid || meta.SourceSHA.String == "" {
-		res.Error = "nema sačuvanog originala (source_sha256 je prazan)"
+		res.Error = "no stored original (source_sha256 is empty)"
 		return res
 	}
 
@@ -151,7 +151,7 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 		format = detected
 	}
 	if detected != simulator.FormatUnknown && detected != format {
-		log.Printf("reparse %d: sačuvan tip %q, detektovano %q — koristim sačuvani tip", id, format, detected)
+		log.Printf("reparse %d: stored type %q, detected %q — using stored type", id, format, detected)
 	}
 
 	// Novi podaci iz PDF-a; prazna polja ne brišu postojeće vrednosti.
@@ -208,7 +208,7 @@ func reparseOne(ctx context.Context, id int) reparseResult {
 		loaded = p
 
 	default:
-		res.Error = "format nije prepoznat ni iz PDF-a ni iz baze"
+		res.Error = "format not recognised from the PDF or the database"
 		return res
 	}
 

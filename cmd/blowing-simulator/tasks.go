@@ -445,7 +445,7 @@ func TasksHandler(w http.ResponseWriter, r *http.Request) {
 func handleTaskAction(r *http.Request) string {
 	claims := GetAuthClaims(r)
 	if claims == nil {
-		return "Sesija je istekla."
+		return "Your session has expired."
 	}
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
 
@@ -456,42 +456,42 @@ func handleTaskAction(r *http.Request) string {
 	case "set-status":
 		t, err := loadTask(id)
 		if err != nil {
-			return "Zadatak nije nađen."
+			return "Task not found."
 		}
 		if !canChangeTaskStatus(r, t) {
-			return "Nemaš pravo da menjaš ovaj zadatak."
+			return "You are not allowed to change this task."
 		}
 		status := r.FormValue("status")
 		if !validTaskStatus(status) {
-			return "Nepoznat status."
+			return "Unknown status."
 		}
 		return applyTaskStatus(id, status)
 
 	case "delete":
 		t, err := loadTask(id)
 		if err != nil {
-			return "Zadatak nije nađen."
+			return "Task not found."
 		}
 		if !canManageTask(r, t) {
-			return "Nemaš pravo da obrišeš ovaj zadatak."
+			return "You are not allowed to delete this task."
 		}
 		if _, err := db.Exec(`DELETE FROM tasks WHERE id = $1`, id); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		logUserEvent(claims.UserID, 0, "task-delete", fmt.Sprintf("task %d", id))
-		return "Zadatak obrisan."
+		return "Task deleted."
 	}
-	return "Nepoznata akcija."
+	return "Unknown action."
 }
 
 func createTask(r *http.Request, claims *AuthClaims) string {
 	projectID, _ := strconv.ParseInt(r.FormValue("project_id"), 10, 64)
 	if !canCreateTask(r, projectID) {
-		return "Nemaš pravo da kreiraš zadatak na tom projektu."
+		return "You are not allowed to create tasks on that project."
 	}
 	title := strings.TrimSpace(r.FormValue("title"))
 	if title == "" {
-		return "Naslov zadatka je obavezan."
+		return "Task title is required."
 	}
 	if len(title) > 200 {
 		title = title[:200]
@@ -517,7 +517,7 @@ func createTask(r *http.Request, claims *AuthClaims) string {
 	if v, err := strconv.ParseInt(r.FormValue("user_id"), 10, 64); err == nil && v > 0 {
 		userID = v
 		if !userBelongsToOrg(userID, orgID) {
-			return "Izabrani korisnik nije u toj organizaciji."
+			return "The selected user is not in that organisation."
 		}
 	}
 
@@ -537,13 +537,13 @@ func createTask(r *http.Request, claims *AuthClaims) string {
 		strings.TrimSpace(r.FormValue("address")), strings.TrimSpace(r.FormValue("nvt")),
 		due, dueTime, claims.UserID)
 	if err != nil {
-		return "Greška: " + err.Error()
+		return "Error: " + err.Error()
 	}
 	logUserEvent(claims.UserID, userID, "task-create", fmt.Sprintf("task %d project %d", newID, projectID))
 	if userID > 0 {
 		notifyTaskAssigned(userID, newID)
 	}
-	return "Zadatak kreiran."
+	return "Task created."
 }
 
 func applyTaskStatus(id int64, status string) string {
@@ -551,9 +551,9 @@ func applyTaskStatus(id int64, status string) string {
 			completed_at = CASE WHEN $1 = 'done' THEN NOW() ELSE NULL END
 		WHERE id = $2`, status, id)
 	if err != nil {
-		return "Greška: " + err.Error()
+		return "Error: " + err.Error()
 	}
-	return "Status zadatka promenjen."
+	return "Task status changed."
 }
 
 func userBelongsToOrg(userID, orgID int64) bool {
@@ -576,12 +576,16 @@ func userBelongsToOrg(userID, orgID int64) bool {
 //	POST /tasks/view  action=update|set-status|link-protocol|unlink-protocol
 func TaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
-	if id <= 0 {
+	if id <= 0 && r.Method == http.MethodPost {
 		id, _ = strconv.ParseInt(r.FormValue("id"), 10, 64)
+	}
+	if id <= 0 {
+		http.Error(w, "Missing task id", http.StatusBadRequest)
+		return
 	}
 	t, err := loadTask(id)
 	if err != nil {
-		http.Error(w, "Zadatak nije nađen", http.StatusNotFound)
+		http.Error(w, "Task not found", http.StatusNotFound)
 		return
 	}
 	if !canSeeTask(r, t) {
@@ -668,27 +672,27 @@ func TaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 func handleTaskDetailAction(r *http.Request, t taskRow) string {
 	claims := GetAuthClaims(r)
 	if claims == nil {
-		return "Sesija je istekla."
+		return "Your session has expired."
 	}
 
 	switch r.FormValue("action") {
 	case "set-status":
 		if !canChangeTaskStatus(r, t) {
-			return "Nemaš pravo da menjaš status."
+			return "You are not allowed to change the status."
 		}
 		status := r.FormValue("status")
 		if !validTaskStatus(status) {
-			return "Nepoznat status."
+			return "Unknown status."
 		}
 		return applyTaskStatus(t.ID, status)
 
 	case "update":
 		if !canManageTask(r, t) {
-			return "Nemaš pravo da menjaš ovaj zadatak."
+			return "You are not allowed to change this task."
 		}
 		title := strings.TrimSpace(r.FormValue("title"))
 		if title == "" {
-			return "Naslov je obavezan."
+			return "Title is required."
 		}
 		if len(title) > 200 {
 			title = title[:200]
@@ -716,7 +720,7 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 		if v, err := strconv.ParseInt(r.FormValue("user_id"), 10, 64); err == nil && v > 0 {
 			userID = v
 			if !userBelongsToOrg(userID, orgID) {
-				return "Izabrani korisnik nije u toj organizaciji."
+				return "The selected user is not in that organisation."
 			}
 		}
 
@@ -729,42 +733,42 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 			strings.TrimSpace(r.FormValue("address")), strings.TrimSpace(r.FormValue("nvt")),
 			due, dueTime, sqlNullInt64(orgID), sqlNullInt64(userID), t.ID)
 		if err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		// Novo dodeljenom korisniku stiže obaveštenje.
 		if userID > 0 && (!t.UserID.Valid || t.UserID.Int64 != userID) {
 			notifyTaskAssigned(userID, t.ID)
 		}
-		return "Zadatak sačuvan."
+		return "Task saved."
 
 	case "link-protocol":
 		if !canManageTask(r, t) {
-			return "Nemaš pravo da menjaš ovaj zadatak."
+			return "You are not allowed to change this task."
 		}
 		pid, err := strconv.Atoi(strings.TrimSpace(r.FormValue("protocol_id")))
 		if err != nil || pid <= 0 {
-			return "Unesi ispravan ID protokola."
+			return "Enter a valid protocol ID."
 		}
 		if !protocolVisibleToUser(claims, pid) {
-			return "Taj protokol nije vidljiv tvom nalogu."
+			return "That protocol is not visible to your account."
 		}
 		if _, err := db.Exec(`INSERT INTO task_protocols (task_id, protocol_id)
 			VALUES ($1,$2) ON CONFLICT DO NOTHING`, t.ID, pid); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
-		return "Protokol povezan sa zadatkom."
+		return "Protocol linked to the task."
 
 	case "unlink-protocol":
 		if !canManageTask(r, t) {
-			return "Nemaš pravo da menjaš ovaj zadatak."
+			return "You are not allowed to change this task."
 		}
 		pid, _ := strconv.Atoi(r.FormValue("protocol_id"))
 		if _, err := db.Exec(`DELETE FROM task_protocols WHERE task_id=$1 AND protocol_id=$2`, t.ID, pid); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
-		return "Veza sa protokolom uklonjena."
+		return "Protocol link removed."
 	}
-	return "Nepoznata akcija."
+	return "Unknown action."
 }
 
 // protocolVisibleToUser proverava vidljivost protokola istim pravilom kao liste
@@ -798,19 +802,19 @@ func parseDue(r *http.Request) (date, clock, errMsg string) {
 	clock = strings.TrimSpace(r.FormValue("due_time"))
 	if date != "" {
 		if _, err := time.Parse("2006-01-02", date); err != nil {
-			return "", "", "Datum roka nije ispravan."
+			return "", "", "Due date is not valid."
 		}
 	}
 	if clock != "" {
 		clock = strings.ReplaceAll(clock, ".", ":") // 09.30 → 09:30 (nemačka notacija)
 		t, err := time.Parse("15:04", clock)
 		if err != nil {
-			return "", "", "Vreme roka mora biti u formatu HH.MM (npr. 09.30 ili 14.05)."
+			return "", "", "Due time must be in HH.MM format (e.g. 09.30 or 14.05)."
 		}
 		clock = t.Format("15:04")
 	}
 	if date == "" && clock != "" {
-		return "", "", "Vreme bez datuma nema smisla — unesi i datum."
+		return "", "", "A time without a date makes no sense — enter a date as well."
 	}
 	return date, clock, ""
 }
@@ -828,20 +832,20 @@ func notifyTaskAssigned(userID, taskID int64) {
 	if err != nil {
 		return
 	}
-	text := fmt.Sprintf("Dodeljen ti je zadatak.\n\nProjekat: %s\nZadatak: %s\n", t.Project, t.Title)
+	text := fmt.Sprintf("You have been assigned a task.\n\nProject: %s\nTask: %s\n", t.Project, t.Title)
 	if t.Address != "" {
-		text += "Adresa: " + t.Address + "\n"
+		text += "Address: " + t.Address + "\n"
 	}
 	if t.NVT != "" {
 		text += "NVT: " + t.NVT + "\n"
 	}
 	if t.DueDate.Valid {
-		text += "Rok: " + t.DueDate.String
+		text += "Due: " + t.DueDate.String
 		if t.DueTime.Valid {
 			text += " " + strings.ReplaceAll(t.DueTime.String, ":", ".")
 		}
 		text += "\n"
 	}
-	text += "\nOtvori: " + mail.link("/tasks/view?id="+strconv.FormatInt(taskID, 10)) + "\n"
-	mail.Send([]string{email}, "Novi zadatak: "+t.Title, text)
+	text += "\nOpen: " + mail.link("/tasks/view?id="+strconv.FormatInt(taskID, 10)) + "\n"
+	mail.Send([]string{email}, "New task: "+t.Title, text)
 }

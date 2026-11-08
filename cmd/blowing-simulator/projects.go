@@ -194,68 +194,68 @@ func handleProjectAction(r *http.Request) string {
 		number := strings.TrimSpace(r.FormValue("number"))
 		name := strings.TrimSpace(r.FormValue("name"))
 		if number == "" {
-			return "Broj projekta je obavezan."
+			return "Project number is required."
 		}
 		var id int64
 		if err := db.Get(&id, `INSERT INTO projects (number, name) VALUES ($1, $2)
 			ON CONFLICT (number) DO UPDATE SET name = EXCLUDED.name RETURNING id`, number, name); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
 		if _, err := db.Exec(`UPDATE protocols SET project_id = $1
 			WHERE project_id IS NULL AND trim(project_number) = $2`, id, number); err != nil {
-			return "Projekat sačuvan, ali povezivanje protokola nije uspelo: " + err.Error()
+			return "Project saved, but linking protocols failed: " + err.Error()
 		}
-		return "Projekat sačuvan: " + number
+		return "Project saved: " + number
 
 	case "add-org":
 		orgID, _ := strconv.ParseInt(r.FormValue("org_id"), 10, 64)
 		role := r.FormValue("org_role")
 		if projectID <= 0 || orgID <= 0 {
-			return "Izaberi projekat i organizaciju."
+			return "Choose a project and an organisation."
 		}
 		if role != ProjectOrgRoleContractor && role != ProjectOrgRoleClient && role != ProjectOrgRoleInternal {
 			role = ProjectOrgRoleContractor
 		}
 		if _, err := db.Exec(`INSERT INTO project_orgs (project_id, org_id, role) VALUES ($1,$2,$3)
 			ON CONFLICT (project_id, org_id) DO UPDATE SET role = EXCLUDED.role`, projectID, orgID, role); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
-		return "Organizacija dodeljena projektu."
+		return "Organisation assigned to the project."
 
 	case "remove-org":
 		orgID, _ := strconv.ParseInt(r.FormValue("org_id"), 10, 64)
 		if _, err := db.Exec(`DELETE FROM project_orgs WHERE project_id = $1 AND org_id = $2`, projectID, orgID); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
-		return "Organizacija uklonjena sa projekta."
+		return "Organisation removed from the project."
 
 	case "add-user":
 		userID, _ := strconv.ParseInt(r.FormValue("user_id"), 10, 64)
 		if projectID <= 0 || userID <= 0 {
-			return "Izaberi projekat i korisnika."
+			return "Choose a project and a user."
 		}
 		if _, err := db.Exec(`INSERT INTO project_users (project_id, user_id) VALUES ($1,$2)
 			ON CONFLICT DO NOTHING`, projectID, userID); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
-		return "Korisnik dodeljen projektu."
+		return "User assigned to the project."
 
 	case "remove-user":
 		userID, _ := strconv.ParseInt(r.FormValue("user_id"), 10, 64)
 		if _, err := db.Exec(`DELETE FROM project_users WHERE project_id = $1 AND user_id = $2`, projectID, userID); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
-		return "Korisnik uklonjen sa projekta."
+		return "User removed from the project."
 
 	case "set-status":
 		status := r.FormValue("status")
 		if status != ProjectStatusActive && status != ProjectStatusClosed {
-			return "Nepoznat status."
+			return "Unknown status."
 		}
 		if _, err := db.Exec(`UPDATE projects SET status = $1 WHERE id = $2`, status, projectID); err != nil {
-			return "Greška: " + err.Error()
+			return "Error: " + err.Error()
 		}
-		return "Status projekta promenjen."
+		return "Project status changed."
 	}
 	return "Nepoznata akcija."
 }

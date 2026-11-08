@@ -78,6 +78,7 @@
                 <form method="POST" action="/tasks/view" class="filters" style="margin:0;border:0;padding:0;background:transparent;">
                     <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                     <input type="hidden" name="action" value="update">
+                    <input type="hidden" name="id" value="{{.Task.ID}}">
                     <label class="field" style="flex:2 1 260px;"><span>Title *</span>
                         <input type="text" name="title" maxlength="200" value="{{.Task.Title}}" required>
                     </label>

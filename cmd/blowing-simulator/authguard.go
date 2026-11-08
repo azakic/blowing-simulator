@@ -287,7 +287,7 @@ var authGuardState authGuard
 func initAuthGuard() authGuard {
 	addr := strings.TrimSpace(os.Getenv("REDIS_ADDR"))
 	if addr == "" {
-		log.Println("auth guard: REDIS_ADDR nije postavljen — koristi se memorija (samo za jedan pod)")
+		log.Println("auth guard: REDIS_ADDR not set — using in-memory state (single pod only)")
 		return newMemoryGuard()
 	}
 	db := 0
@@ -298,7 +298,7 @@ func initAuthGuard() authGuard {
 	}
 	g := newRedisGuard(addr, os.Getenv("REDIS_PASSWORD"), db)
 	if err := g.ping(); err != nil {
-		log.Printf("auth guard: Redis %s nije dostupan (%v) — prelazim na memoriju", addr, err)
+		log.Printf("auth guard: Redis %s unavailable (%v) — falling back to memory", addr, err)
 		return newMemoryGuard()
 	}
 	log.Printf("auth guard: Redis %s (db %d)", addr, db)
