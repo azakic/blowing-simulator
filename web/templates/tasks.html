@@ -107,7 +107,10 @@
                         </select>
                     </label>
                     <label class="field"><span>Due date</span><input type="date" name="due_date"></label>
-                    <label class="field"><span>Time</span><input type="time" name="due_time" step="300"></label>
+                    <label class="field"><span>Time (24 h)</span>
+                        <input type="text" name="due_time" inputmode="numeric" maxlength="5"
+                               placeholder="09.30" autocomplete="off">
+                    </label>
                     <label class="field" style="flex:2 1 220px;"><span>Address</span><input type="text" name="address" placeholder="Street, no., city"></label>
                     <label class="field"><span>NVT</span><input type="text" name="nvt" placeholder="NVT 1V3400"></label>
                     <label class="field" style="flex:1 1 100%;"><span>Description</span>

@@ -805,7 +805,7 @@ func parseDue(r *http.Request) (date, clock, errMsg string) {
 		clock = strings.ReplaceAll(clock, ".", ":") // 09.30 → 09:30 (nemačka notacija)
 		t, err := time.Parse("15:04", clock)
 		if err != nil {
-			return "", "", "Vreme roka mora biti u formatu HH:MM."
+			return "", "", "Vreme roka mora biti u formatu HH.MM (npr. 09.30 ili 14.05)."
 		}
 		clock = t.Format("15:04")
 	}

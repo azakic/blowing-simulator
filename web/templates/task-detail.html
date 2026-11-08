@@ -87,7 +87,11 @@
                         </select>
                     </label>
                     <label class="field"><span>Due date</span><input type="date" name="due_date" value="{{if .Task.DueDate.Valid}}{{.Task.DueDate.String}}{{end}}"></label>
-                    <label class="field"><span>Time</span><input type="time" name="due_time" step="300" value="{{if .Task.DueTime.Valid}}{{.Task.DueTime.String}}{{end}}"></label>
+                    <label class="field"><span>Time (24 h)</span>
+                        <input type="text" name="due_time" inputmode="numeric" maxlength="5"
+                               placeholder="09.30" autocomplete="off"
+                               value="{{if .Task.DueTime.Valid}}{{dotTime .Task.DueTime.String}}{{end}}">
+                    </label>
                     {{if .IsStaff}}
                     <label class="field"><span>Organisation</span>
                         <select name="org_id">
