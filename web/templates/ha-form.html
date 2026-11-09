@@ -8,6 +8,13 @@
     <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+    <style>
+        .swatch-row { display:flex; flex-wrap:wrap; gap:.45rem; margin-top:.45rem; }
+        .swatch-row label { position:relative; display:inline-flex; cursor:pointer; }
+        .swatch-row input { position:absolute; opacity:0; width:0; height:0; }
+        .swatch-row .sw { display:inline-block; width:1.1rem; height:1.1rem; border:1px solid #888; border-radius:2px; text-align:center; line-height:1.05rem; font-size:.7rem; color:#555; }
+        .swatch-row input:checked + .sw { outline:2px solid #000; outline-offset:1px; }
+    </style>
     <header class="topbar">
         <a class="brand" href="/">Wolken-ASM Reports</a>
         <input type="checkbox" id="nav-toggle" class="nav-toggle">
@@ -117,6 +124,9 @@
                         <label class="field"><span>Zugehöriger GVS</span>
                             <input type="text" name="gvs" value="{{.HA.GVS}}" placeholder="N-1.31">
                         </label>
+                        <label class="field"><span>Rohr (1–4)</span>
+                            <input type="number" name="rohr" min="1" max="4" value="{{if .HA.Rohr.Valid}}{{.HA.Rohr.Int64}}{{end}}">
+                        </label>
                         <label class="field"><span>Kasette B-Seite</span>
                             <input type="text" name="kassette_b" value="{{.HA.KassetteB}}" placeholder="R38">
                         </label>
@@ -135,6 +145,26 @@
                         <label class="field"><span>GF Kabel Länge (m)</span>
                             <input type="number" step="0.1" min="0" name="cable_length_m" value="{{if .HA.CableLength.Valid}}{{.HA.CableLength.Float64}}{{end}}">
                         </label>
+                    </div>
+
+                    <div style="margin-top:.9rem;">
+                        <span style="font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">Rohrfarbe</span>
+                        <div class="swatch-row">
+                            <label title="keine"><input type="radio" name="rohr_color" value="" {{if eq $.HA.RohrColor ""}}checked{{end}}><span class="sw">–</span></label>
+                            {{range .RohrColors}}
+                            <label title="{{.Label}}"><input type="radio" name="rohr_color" value="{{.Key}}" {{if eq $.HA.RohrColor .Key}}checked{{end}}><span class="sw" style="{{if .Striped}}background:linear-gradient(135deg, rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}}) 0 40%, #fff 40% 60%, rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}}) 60% 100%);{{else}}background:rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}});{{end}}"></span></label>
+                            {{end}}
+                        </div>
+                    </div>
+
+                    <div style="margin-top:.9rem;">
+                        <span style="font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">Röhrchenfarbe</span>
+                        <div class="swatch-row">
+                            <label title="keine"><input type="radio" name="roehrchen_color" value="" {{if eq $.HA.RoehrchenColor ""}}checked{{end}}><span class="sw">–</span></label>
+                            {{range .RoehrchenColors}}
+                            <label title="{{.Label}}"><input type="radio" name="roehrchen_color" value="{{.Key}}" {{if eq $.HA.RoehrchenColor .Key}}checked{{end}}><span class="sw" style="{{if .Striped}}background:linear-gradient(135deg, rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}}) 0 40%, #fff 40% 60%, rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}}) 60% 100%);{{else}}background:rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}});{{end}}"></span></label>
+                            {{end}}
+                        </div>
                     </div>
 
                     <div style="margin-top:.9rem;">

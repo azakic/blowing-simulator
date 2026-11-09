@@ -100,6 +100,9 @@ func ensureHASchema(db *sqlx.DB) error {
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS client_mobile TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS apl_codes TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS geo_address TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS rohr INTEGER`,
+		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS rohr_color TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS roehrchen_color TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_photos ADD COLUMN IF NOT EXISTS geo_address TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_photos ADD COLUMN IF NOT EXISTS ocr_text TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_photos ADD COLUMN IF NOT EXISTS ocr_time TEXT NOT NULL DEFAULT ''`,
@@ -151,6 +154,9 @@ type haRow struct {
 	Pruefer         string          `db:"pruefer"`
 	ProjectNumber   string          `db:"project_number"`
 	GVS             string          `db:"gvs"`
+	Rohr            sql.NullInt64   `db:"rohr"`
+	RohrColor       string          `db:"rohr_color"`
+	RoehrchenColor  string          `db:"roehrchen_color"`
 	KassetteB       string          `db:"kassette_b"`
 	MuxNumber       string          `db:"mux_number"`
 	MuxFibers       string          `db:"mux_fibers"`
@@ -173,7 +179,8 @@ const haSelect = `
 	       h.client_last_name, h.client_first_name, h.client_phone, h.client_mobile,
 	       h.apl_codes, h.nvt, h.units,
 	       to_char(h.protocol_date, 'YYYY-MM-DD') AS protocol_date,
-	       h.monteur, h.pruefer, h.project_number, h.gvs, h.kassette_b,
+	       h.monteur, h.pruefer, h.project_number, h.gvs,
+	       h.rohr, h.rohr_color, h.roehrchen_color, h.kassette_b,
 	       h.mux_number, h.mux_fibers, h.splices, h.fiber_colors,
 	       h.cable_charge, h.cable_length_m,
 	       h.check_fiber, h.check_complete, h.check_clean,
@@ -399,22 +406,24 @@ func renderHAForm(w http.ResponseWriter, r *http.Request, claims *AuthClaims, h 
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = tmpl.Execute(w, map[string]any{
-		"Message":        message,
-		"HA":             h,
-		"IsEdit":         isEdit,
-		"PhotoKinds":     haSlotPhotoKinds,
-		"ONTs":           onts,
-		"FiberColors":    haFiberColors,
-		"Selected":       splitColors(h.FiberColors),
-		"Projects":       projects,
-		"Orgs":           orgs,
-		"DefaultDate":    defDate,
-		"DefaultFirma":   defFirma,
-		"DefaultMonteur": defMonteur,
-		"IsAdmin":        isAdminRole(r),
-		"IsOrgAdmin":     isOrgAdminRequest(r),
-		"IsStaff":        claims != nil && seesAllProtocols(claims.Role),
-		"UserRole":       userRole(r),
+		"Message":         message,
+		"HA":              h,
+		"IsEdit":          isEdit,
+		"PhotoKinds":      haSlotPhotoKinds,
+		"ONTs":            onts,
+		"FiberColors":     haFiberColors,
+		"RohrColors":      haRohrColors,
+		"RoehrchenColors": haRoehrchenColors,
+		"Selected":        splitColors(h.FiberColors),
+		"Projects":        projects,
+		"Orgs":            orgs,
+		"DefaultDate":     defDate,
+		"DefaultFirma":    defFirma,
+		"DefaultMonteur":  defMonteur,
+		"IsAdmin":         isAdminRole(r),
+		"IsOrgAdmin":      isOrgAdminRequest(r),
+		"IsStaff":         claims != nil && seesAllProtocols(claims.Role),
+		"UserRole":        userRole(r),
 	})
 }
 
@@ -506,11 +515,12 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 			 project_number, gvs, kassette_b, mux_number, mux_fibers, splices,
 			 fiber_colors, cable_charge, cable_length_m,
 			 nvt, client_phone, client_mobile,
-			 check_fiber, check_complete, check_clean, created_by)
+			 check_fiber, check_complete, check_clean, created_by,
+			 rohr, rohr_color, roehrchen_color)
 		VALUES ($1, $2, $3, $4,$5,$6,$7,$8,$9,
 		        NULLIF($10,'')::int, $11::date, $12,$13,$14,$15,$16,$17,$18,
 		        NULLIF($19,'')::int, $20,$21,NULLIF($22,'')::numeric,
-		        $23,$24,$25, $26,$27,$28,$29)
+		        $23,$24,$25, $26,$27,$28,$29, $30,$31,$32)
 		RETURNING id`,
 		nullableID(taskID), nullableID(projectID), nullableID(orgID),
 		strings.TrimSpace(r.FormValue("auftragnehmer")),
@@ -538,7 +548,10 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 		r.FormValue("check_fiber") != "",
 		r.FormValue("check_complete") != "",
 		r.FormValue("check_clean") != "",
-		claims.UserID)
+		claims.UserID,
+		parseRohr(r.FormValue("rohr")),
+		strings.TrimSpace(r.FormValue("rohr_color")),
+		strings.TrimSpace(r.FormValue("roehrchen_color")))
 	if err != nil {
 		return 0, "Could not save: " + err.Error()
 	}
@@ -576,6 +589,15 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 		msg += fmt.Sprintf(" %d ONT(s) failed.", ontFailed)
 	}
 	return id, msg
+}
+
+// parseRohr prihvata samo 1–4; sve ostalo je NULL.
+func parseRohr(v string) any {
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || n < 1 || n > 4 {
+		return nil
+	}
+	return n
 }
 
 // photoCaptionLine vraća natpis ispod fotografije u HTML pregledu: adresa
@@ -807,6 +829,7 @@ func updateHA(r *http.Request, h haRow) string {
 			cable_length_m=NULLIF($19,'')::numeric,
 			nvt=$20, client_phone=$21, client_mobile=$22,
 			check_fiber=$23, check_complete=$24, check_clean=$25,
+			rohr=$27, rohr_color=$28, roehrchen_color=$29,
 			updated_at=NOW()
 		WHERE id=$26`,
 		strings.TrimSpace(r.FormValue("auftragnehmer")),
@@ -834,7 +857,10 @@ func updateHA(r *http.Request, h haRow) string {
 		r.FormValue("check_fiber") != "",
 		r.FormValue("check_complete") != "",
 		r.FormValue("check_clean") != "",
-		h.ID)
+		h.ID,
+		parseRohr(r.FormValue("rohr")),
+		strings.TrimSpace(r.FormValue("rohr_color")),
+		strings.TrimSpace(r.FormValue("roehrchen_color")))
 	if err != nil {
 		return "Could not save: " + err.Error()
 	}
