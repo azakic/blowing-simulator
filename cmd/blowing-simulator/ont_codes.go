@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
@@ -37,6 +38,11 @@ type ontCodeInfo struct {
 const (
 	ontDecodeMaxSide = 2400
 	ontDecodeBands   = 8
+	// ontDecodeMaxPixels ograničava dekodiranje ogromnih telefonskih slika.
+	// JPEG dekoder alocira celu sliku pre skaliranja, pa 48 MP+ može da
+	// probije memorijski limit aplikacije. Klijent ipak šalje smanjenu
+	// kopiju na /ha/ont/scan; ovo je zaštita za save sa originalom.
+	ontDecodeMaxPixels = 28000000
 )
 
 type ontReaderSpec struct {
@@ -75,6 +81,13 @@ func ontBandReaders() []ontReaderSpec {
 
 // decodeONTImage vraća sve barkodove koje uspe da pročita sa slike.
 func decodeONTImage(data []byte) ([]ontCode, error) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	if cfg.Width*cfg.Height > ontDecodeMaxPixels {
+		return nil, fmt.Errorf("image too large (%dx%d)", cfg.Width, cfg.Height)
+	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, err

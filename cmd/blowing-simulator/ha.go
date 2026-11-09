@@ -428,6 +428,7 @@ func HAEditHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	h, err := loadHA(id)
 	if err != nil {
+		log.Printf("ha edit load %d: %v", id, err)
 		http.Error(w, "HaP not found", http.StatusNotFound)
 		return
 	}
@@ -444,9 +445,12 @@ func HAEditHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
-	if err := r.ParseMultipartForm(64 << 20); err != nil {
+	// 8 MB ostaje u memoriji; veći fajlovi idu u privremene fajlove. Ranije
+	// je 64 MB držano u RAM-u, što je uz dekodiranje slika dovodilo do OOM.
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		return 0, "Upload failed: " + err.Error()
 	}
+	defer removeMultipartFiles(r)
 	address := strings.TrimSpace(r.FormValue("address"))
 	if address == "" {
 		return 0, "Address is required."
@@ -556,6 +560,14 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 		msg += fmt.Sprintf(" %d ONT(s) failed.", ontFailed)
 	}
 	return id, msg
+}
+
+// removeMultipartFiles briše privremene fajlove koje je Go napravio za
+// multipart delove veće od memorijskog praga.
+func removeMultipartFiles(r *http.Request) {
+	if r.MultipartForm != nil {
+		_ = r.MultipartForm.RemoveAll()
+	}
 }
 
 // nullableID vraća nil za 0 (SQL NULL) ili int64 — sprečava cast "" u int.
@@ -744,9 +756,11 @@ func HAViewHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func updateHA(r *http.Request, h haRow) string {
-	if err := r.ParseMultipartForm(64 << 20); err != nil {
+	// 8 MB ostaje u memoriji; veći fajlovi idu u privremene fajlove.
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		return "Upload failed: " + err.Error()
 	}
+	defer removeMultipartFiles(r)
 	date := strings.TrimSpace(r.FormValue("protocol_date"))
 	if date == "" {
 		date = h.ProtocolDate

@@ -183,7 +183,7 @@
                                 <input type="text" name="ont_sn_{{$i}}" value="{{$o.SN}}" placeholder="z. B. 48575443…">
                             </label>
                             <label class="field" style="flex:1 1 220px;"><span>Foto (Aufkleber)</span>
-                                <input type="file" name="ont_photo_{{$i}}" accept="image/jpeg,image/png" capture="environment">
+                                <input type="file" name="ont_photo_{{$i}}" accept="image/jpeg,image/png">
                             </label>
                             {{if $o.ObjectKey}}<a class="btn btn-ghost btn-small" href="/ha/ont?id={{$o.ID}}" target="_blank" rel="noopener">Photo</a>{{end}}
                             <button type="button" class="btn btn-danger btn-small" onclick="this.closest('.ont-row').remove()">Remove</button>
@@ -208,6 +208,7 @@
                         </label>
                         <button type="button" class="btn btn-ghost" id="apl-add">Add</button>
                     </div>
+                    <p class="muted" id="apl-status" style="margin:.6rem 0 0;font-size:.78rem;display:none;"></p>
                     <p class="muted" style="margin:.6rem 0 0;font-size:.78rem;">Beim Auswählen von Bild 3 werden alle Barcodes automatisch gelesen; Codes können auch manuell ergänzt oder entfernt werden.</p>
                 </div>
             </section>
@@ -220,7 +221,7 @@
                         <label class="field">
                             <span>{{.Label}}</span>
                             <input type="file" name="photo_{{.Key}}" accept="image/jpeg,image/png"
-                                   capture="environment" class="ha-photo" data-kind="{{.Key}}">
+                                   class="ha-photo" data-kind="{{.Key}}">
                             <input type="hidden" name="geo_{{.Key}}" value="" id="geo_{{.Key}}">
                             <span class="geo-hint" id="hint_{{.Key}}" style="font-size:.72rem;color:var(--muted);"></span>
                         </label>
@@ -237,29 +238,52 @@
     </main>
 
     <script>
-        // Geolokacija pri uploadu: pokušaj da je zabeležimo za svaku fotografiju.
-        // Server ipak preferira EXIF iz same slike.
-        if (navigator.geolocation) {
-            document.querySelectorAll('input.ha-photo').forEach(function (input) {
+        // GPS: EXIF iz fotografije ima prednost. Geolokacija pregledača je
+        // samo rezerva — na telefonu često nije dostupna dok je kamera
+        // otvorena, pa se greška ne prikazuje kao problem.
+        (function () {
+            var cached = null;
+            var inputs = document.querySelectorAll('input.ha-photo');
+            var supported = navigator.geolocation && window.isSecureContext;
+
+            function setNeutral(kind) {
+                var hint = document.getElementById('hint_' + kind);
+                if (hint && !hint.textContent.trim()) {
+                    hint.textContent = 'GPS: aus EXIF (falls vorhanden).';
+                }
+            }
+            function apply(kind, value, accuracy) {
+                var hidden = document.getElementById('geo_' + kind);
+                var hint = document.getElementById('hint_' + kind);
+                if (hidden) { hidden.value = value; }
+                if (hint) {
+                    hint.textContent = '📍 ' + value +
+                        (accuracy ? ' (±' + Math.round(accuracy) + ' m)' : '');
+                }
+            }
+            if (!supported) {
+                inputs.forEach(function (input) { setNeutral(input.dataset.kind); });
+                return;
+            }
+            inputs.forEach(function (input) {
                 input.addEventListener('change', function () {
                     var kind = input.dataset.kind;
-                    var hint = document.getElementById('hint_' + kind);
-                    var hidden = document.getElementById('geo_' + kind);
                     if (!input.files || !input.files.length) { return; }
-                    if (hint) { hint.textContent = 'Getting location…'; }
+                    if (cached && Date.now() - cached.at < 120000) {
+                        apply(kind, cached.value, cached.accuracy);
+                        return;
+                    }
+                    setNeutral(kind);
                     navigator.geolocation.getCurrentPosition(function (pos) {
                         var v = pos.coords.latitude.toFixed(6) + ', ' + pos.coords.longitude.toFixed(6);
-                        if (hidden) { hidden.value = v; }
-                        if (hint) {
-                            hint.textContent = '📍 ' + v +
-                                (pos.coords.accuracy ? ' (±' + Math.round(pos.coords.accuracy) + ' m)' : '');
-                        }
+                        cached = { value: v, at: Date.now(), accuracy: pos.coords.accuracy };
+                        apply(kind, v, pos.coords.accuracy);
                     }, function () {
-                        if (hint) { hint.textContent = 'Location unavailable — EXIF from the photo will be used.'; }
-                    }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+                        setNeutral(kind);
+                    }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 120000 });
                 });
             });
-        }
+        })();
     </script>
     <script>
         // Prediktivno popunjavanje iz direktorijuma klijenata (/admin/import).
@@ -481,7 +505,7 @@
                     '<input type="hidden" name="ont_id_' + i + '" value="0">' +
                     '<input type="hidden" name="ont_codes_' + i + '" value="">' +
                     '<label class="field" style="flex:1 1 180px;"><span>SN</span><input type="text" name="ont_sn_' + i + '"></label>' +
-                    '<label class="field" style="flex:1 1 220px;"><span>Foto (Aufkleber)</span><input type="file" name="ont_photo_' + i + '" accept="image/jpeg,image/png" capture="environment"></label>' +
+                    '<label class="field" style="flex:1 1 220px;"><span>Foto (Aufkleber)</span><input type="file" name="ont_photo_' + i + '" accept="image/jpeg,image/png"></label>' +
                     '<div class="ont-codes" style="display:none;flex-wrap:wrap;gap:.35rem;flex:1 1 100%;"></div>' +
                     '<button type="button" class="btn btn-danger btn-small" onclick="this.closest(\'.ont-row\').remove()">Remove</button>';
                 rows.appendChild(row);
@@ -517,7 +541,14 @@
             var aplBox = document.getElementById('apl-chips');
             var aplInput = document.getElementById('apl-code-input');
             var aplAdd = document.getElementById('apl-add');
+            var aplStatusEl = document.getElementById('apl-status');
             var bild3 = document.querySelector('input[name="photo_bild3"]');
+
+            function aplStatus(text) {
+                if (!aplStatusEl) { return; }
+                aplStatusEl.textContent = text || '';
+                aplStatusEl.style.display = text ? 'block' : 'none';
+            }
 
             function aplParse() {
                 try { return JSON.parse((aplHidden && aplHidden.value) || '[]') || []; } catch (e) { return []; }
@@ -552,7 +583,18 @@
                 if (aplHidden) { aplHidden.value = out.length ? JSON.stringify(out) : ''; }
                 aplRender();
             }
-            function aplMerge(values) { aplSet(aplParse().concat(values)); aplMark(); }
+            function aplMerge(values, scanned) {
+                var before = aplParse().length;
+                aplSet(aplParse().concat(values));
+                var added = aplParse().length - before;
+                if (added > 0) {
+                    aplMark();
+                    aplStatus(scanned ? added + ' Barcode(s) gelesen.' : 'Code hinzugefügt.');
+                } else if ((values || []).length) {
+                    aplStatus('Code bereits vorhanden.');
+                }
+                return added;
+            }
 
             if (aplBox) {
                 aplBox.addEventListener('click', function (e) {
@@ -576,6 +618,7 @@
                 });
             }
             function aplServerScan(file) {
+                aplStatus('Lese Barcodes aus Bild 3 …');
                 resizeFile(file, 1400).then(function (blob) {
                     var form = document.getElementById('ha-form');
                     var token = form ? form.querySelector('input[name="csrf_token"]') : null;
@@ -586,13 +629,21 @@
                         .then(function (r) { return r.ok ? r.json() : null; })
                         .then(function (d) {
                             if (d && d.codes && d.codes.length) {
-                                aplMerge(d.codes.map(function (c) { return c.value || c; }));
+                                aplMerge(d.codes.map(function (c) { return c.value || c; }), true);
+                            } else {
+                                aplStatus('Keine Barcodes erkannt — Foto schärfer aufnehmen oder Codes manuell eingeben.');
                             }
+                        })
+                        .catch(function () {
+                            aplStatus('Scan fehlgeschlagen — Codes manuell eingeben.');
                         });
-                }).catch(function () {});
+                }).catch(function () {
+                    aplStatus('Bild konnte nicht gelesen werden — Codes manuell eingeben.');
+                });
             }
             function aplScan(file) {
                 if (!file) { return; }
+                aplStatus('Lese Barcodes aus Bild 3 …');
                 if (!('BarcodeDetector' in window)) { aplServerScan(file); return; }
                 createImageBitmap(file).then(function (bitmap) {
                     var det = null;
@@ -604,7 +655,7 @@
                     if (!det) { aplServerScan(file); return; }
                     det.detect(bitmap).then(function (found) {
                         if (found && found.length) {
-                            aplMerge(found.map(function (f) { return f.rawValue; }));
+                            aplMerge(found.map(function (f) { return f.rawValue; }), true);
                         } else {
                             aplServerScan(file);
                         }

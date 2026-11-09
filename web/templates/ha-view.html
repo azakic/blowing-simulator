@@ -96,14 +96,12 @@
             </div>
         </section>
 
-        {{if .APLCodes}}
         <section class="panel">
-            <div class="panel-head"><h2>APL-Codes</h2><span class="hint">{{len .APLCodes}}</span></div>
+            <div class="panel-head"><h2>APL-Codes</h2><span class="hint">{{len .APLCodes}} aus Bild 3</span></div>
             <div class="panel-body" style="display:flex;flex-wrap:wrap;gap:.35rem;">
-                {{range .APLCodes}}<span class="pill">{{.}}</span>{{end}}
+                {{if .APLCodes}}{{range .APLCodes}}<span class="pill">{{.}}</span>{{end}}{{else}}<p class="muted" style="margin:0;">No APL codes recorded yet.</p>{{end}}
             </div>
         </section>
-        {{end}}
 
         <section class="panel">
             <div class="panel-head"><h2>Fotos</h2><span class="hint">{{len .Photos}} uploaded</span></div>

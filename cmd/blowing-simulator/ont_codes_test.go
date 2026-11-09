@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"hash/crc32"
 	"image"
 	"image/color"
 	"image/draw"
@@ -94,5 +95,41 @@ func TestAPLCodesJSON(t *testing.T) {
 	}
 	if parseAPLCodesJSON("") != nil {
 		t.Fatal("prazan APL string mora dati nil")
+	}
+}
+
+// minimalni PNG sa samo IHDR chunk-om: DecodeConfig ga prihvata, pa test
+// proverava pixel guard bez alokacije ogromne slike.
+func hugePNGHeader(w, h uint32) []byte {
+	var b bytes.Buffer
+	b.Write([]byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'})
+	payload := make([]byte, 13)
+	payload[0] = byte(w >> 24)
+	payload[1] = byte(w >> 16)
+	payload[2] = byte(w >> 8)
+	payload[3] = byte(w)
+	payload[4] = byte(h >> 24)
+	payload[5] = byte(h >> 16)
+	payload[6] = byte(h >> 8)
+	payload[7] = byte(h)
+	payload[8] = 8 // bit depth
+	payload[9] = 2 // truecolor
+	crc := crc32.NewIEEE()
+	crc.Write([]byte("IHDR"))
+	crc.Write(payload)
+	chunk := make([]byte, 0, 12+13)
+	chunk = append(chunk, byte(0), byte(0), byte(0), byte(13))
+	chunk = append(chunk, []byte("IHDR")...)
+	chunk = append(chunk, payload...)
+	sum := crc.Sum32()
+	chunk = append(chunk, byte(sum>>24), byte(sum>>16), byte(sum>>8), byte(sum))
+	b.Write(chunk)
+	return b.Bytes()
+}
+
+func TestDecodeONTImageRejectsHugeImages(t *testing.T) {
+	_, err := decodeONTImage(hugePNGHeader(8000, 6000))
+	if err == nil {
+		t.Fatal("očekivana greška za sliku veću od limita")
 	}
 }

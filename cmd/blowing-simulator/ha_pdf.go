@@ -346,6 +346,34 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte, onts []o
 		}
 	}
 
+	// --- aneks: APL kodovi pročitani iz Bild 3 ---
+	if len(aplCodes) > 0 {
+		pdf.AddPage()
+		aplHeader := func() {
+			pdf.SetFont("Helvetica", "B", 13)
+			pdf.CellFormat(0, 8, tr("APL-Codes / Anhang"), "", 1, "L", false, 0, "")
+			pdf.SetFont("Helvetica", "", 8)
+			pdf.CellFormat(0, 4, tr(fmt.Sprintf("%s · %s", h.Address, h.ProtocolDate)), "", 1, "L", false, 0, "")
+			pdf.CellFormat(0, 4, tr("Gelesen aus Bild 3 — APL geschlossen / Aufkleber"), "", 1, "L", false, 0, "")
+			pdf.Ln(2)
+			pdf.SetFont("Helvetica", "B", 9)
+			pdf.SetFillColor(235, 235, 235)
+			pdf.CellFormat(12, 6, "#", "1", 0, "C", true, 0, "")
+			pdf.CellFormat(178, 6, tr("APL-Code"), "1", 1, "L", true, 0, "")
+			pdf.SetFillColor(255, 255, 255)
+		}
+		aplHeader()
+		for i, code := range aplCodes {
+			if pdf.GetY()+8 > 280 {
+				pdf.AddPage()
+				aplHeader()
+			}
+			pdf.SetFont("Helvetica", "", 9)
+			pdf.CellFormat(12, 8, fmt.Sprintf("%d", i+1), "1", 0, "C", false, 0, "")
+			pdf.CellFormat(178, 8, tr(code), "1", 1, "L", false, 0, "")
+		}
+	}
+
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {
 		return nil, err

@@ -77,15 +77,21 @@ func storedBild3Data(r *http.Request, haID int64) []byte {
 }
 
 // resolveAPLCodes: ako je korisnik menjao listu (touched=1), veruje se formi;
-// inače se kodovi dekodiraju iz nove ili već sačuvane Bild 3 fotografije.
+// ako je poslata nova Bild 3 slika, kodovi se dopunjuju dekodiranjem; ako
+// kodovi već postoje, sačuvana slika se ne dekodira ponovo (skupo je i troši
+// memoriju). Stara HaP-a bez kodova dobija backfill iz sačuvane slike.
 func resolveAPLCodes(r *http.Request, bild3 []byte, haID int64) []string {
-	if r.FormValue("apl_codes_touched") == "1" {
-		return parseAPLCodesJSON(r.FormValue("apl_codes"))
-	}
 	codes := parseAPLCodesJSON(r.FormValue("apl_codes"))
+	if r.FormValue("apl_codes_touched") == "1" {
+		return codes
+	}
 	if len(bild3) > 0 {
-		codes = append(codes, decodeAPLCodes(bild3)...)
-	} else if data := storedBild3Data(r, haID); len(data) > 0 {
+		return normalizeAPLCodes(append(codes, decodeAPLCodes(bild3)...))
+	}
+	if len(codes) > 0 {
+		return codes
+	}
+	if data := storedBild3Data(r, haID); len(data) > 0 {
 		codes = append(codes, decodeAPLCodes(data)...)
 	}
 	return normalizeAPLCodes(codes)

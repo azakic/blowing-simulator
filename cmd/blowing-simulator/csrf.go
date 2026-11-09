@@ -82,7 +82,7 @@ func csrfTemplateFuncs(r *http.Request) map[string]any {
 // csrfTokenFromRequest traži token u telu zahteva (form ili multipart).
 func csrfTokenFromRequest(r *http.Request) string {
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
-		if err := r.ParseMultipartForm(32 << 20); err == nil && r.MultipartForm != nil {
+		if err := r.ParseMultipartForm(8 << 20); err == nil && r.MultipartForm != nil {
 			if v := r.MultipartForm.Value[csrfFormField]; len(v) > 0 {
 				return strings.TrimSpace(v[0])
 			}
