@@ -32,21 +32,28 @@ func renderHAView(t *testing.T, h haRow, p haPhotoRow) string {
 		"csrfToken":        func() string { return "" },
 		"dateShort":        dateShort,
 		"photoCaptionLine": photoCaptionLine,
+		"formatHaDate":     formatHaDate,
+		"swatchStyle":      haSwatchStyle,
+		"dash":             dash,
 	}).ParseFiles("../../web/templates/ha-view.html")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var buf bytes.Buffer
 	err = tmpl.Execute(&buf, map[string]any{
-		"HA":          h,
-		"Photos":      []haPhotoRow{p},
-		"PhotoByKind": map[string]haPhotoRow{"bild1": p},
-		"PhotoKinds":  haSlotPhotoKinds,
-		"ONTs":        []ontRow{},
-		"APLCodes":    []string{},
-		"FiberColors": haFiberColors,
-		"Selected":    []string{},
-		"CanEdit":     true,
+		"HA":                h,
+		"Photos":            []haPhotoRow{p},
+		"PhotoByKind":       map[string]haPhotoRow{"bild1": p},
+		"PhotoKinds":        haSlotPhotoKinds,
+		"ONTs":              []ontRow{},
+		"APLCodes":          []string{},
+		"FiberColors":       haFiberColors,
+		"Selected":          []string{},
+		"SelectedColors":    selectedHAFibers(h.FiberColors),
+		"RohrColorOpt":      nil,
+		"RoehrchenColorOpt": nil,
+		"OrgName":           "",
+		"CanEdit":           true,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -1,11 +1,115 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1976d2">
-    <title>HaP #{{.HA.ID}} - Wolken-ASM Reports</title>
+    <title>HaP #{{.HA.ID}} · {{.HA.Address}}{{if .HA.City}}, {{.HA.City}}{{end}} — Wolken-ASM Reports</title>
     <link rel="stylesheet" href="/static/app.css">
+    <style>
+        .hap-hero {
+            background: linear-gradient(135deg, #0d47a1 0%, #1976d2 55%, #2f8fe0 100%);
+            color: #fff;
+            border-radius: 20px;
+            padding: 1.4rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1.2rem;
+            flex-wrap: wrap;
+            box-shadow: 0 14px 34px rgba(21, 101, 192, .22);
+            margin-bottom: 1.1rem;
+        }
+        .hap-kicker { font-size: .7rem; letter-spacing: .14em; text-transform: uppercase; opacity: .82; }
+        .hap-hero h1 { margin: .2rem 0 .25rem; font-size: 1.6rem; line-height: 1.15; }
+        .hap-sub { margin: 0; opacity: .92; font-size: .9rem; }
+        .hap-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .75rem; }
+        .hap-chip {
+            display: inline-flex; align-items: center; gap: .3rem;
+            background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.26);
+            color: #fff; padding: .22rem .58rem; border-radius: 999px; font-size: .74rem;
+        }
+        .hap-actions { display: flex; align-items: flex-start; gap: .5rem; flex-wrap: wrap; }
+        .hap-actions .btn { background: rgba(255,255,255,.14); color: #fff; border: 1px solid rgba(255,255,255,.35); }
+        .hap-actions .btn:hover { background: rgba(255,255,255,.24); }
+        .hap-actions .btn-primary { background: #fff; color: #0d47a1; border-color: #fff; }
+        .hap-actions .btn-danger { background: rgba(198,40,40,.9); border-color: rgba(198,40,40,.95); }
+
+        .hap-note {
+            background: #e8f1fb; border: 1px solid #cfe2f7; color: #145ea8;
+            border-radius: 12px; padding: .7rem .9rem; font-size: .85rem; margin-bottom: 1rem;
+        }
+
+        .hap-grid { display: grid; gap: 1rem; margin-bottom: 1rem; }
+        .hap-grid-4 { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+        .hap-grid-2 { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+
+        .hap-card {
+            background: var(--surface); border: 1px solid var(--line);
+            border-radius: 16px; padding: 1rem 1.15rem;
+            box-shadow: 0 2px 10px rgba(15, 23, 42, .04);
+        }
+        .hap-card h2 {
+            margin: 0 0 .85rem; font-size: .72rem; letter-spacing: .09em;
+            text-transform: uppercase; color: var(--muted);
+        }
+        .hap-stat-label { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+        .hap-stat-value { font-size: 1.02rem; font-weight: 700; margin-top: .18rem; line-height: 1.3; }
+        .hap-stat-sub { font-size: .78rem; color: var(--muted); margin-top: .15rem; }
+
+        .hap-def { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: .9rem 1.2rem; }
+        .hap-def .k { font-size: .67rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+        .hap-def .v { font-size: .9rem; font-weight: 600; margin-top: .2rem; display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+        .hap-dot { width: .9rem; height: .9rem; border-radius: 50%; border: 1px solid rgba(0,0,0,.18); display: inline-block; flex: 0 0 auto; }
+        .hap-dot-sq { border-radius: 3px; width: .82rem; height: .82rem; }
+        .hap-fiber {
+            display: inline-flex; align-items: center; gap: .35rem; padding: .18rem .5rem;
+            border: 1px solid var(--line); border-radius: 999px; font-size: .74rem; background: #fafbfd;
+        }
+        .hap-check { display: flex; align-items: flex-start; gap: .55rem; font-size: .85rem; padding: .28rem 0; }
+        .hap-check .ok { color: var(--green); font-weight: 800; }
+        .hap-check .no { color: var(--red); font-weight: 800; }
+
+        .hap-photos { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
+        .hap-photo {
+            margin: 0; border: 1px solid var(--line); border-radius: 14px;
+            overflow: hidden; background: #fff; display: flex; flex-direction: column;
+        }
+        .hap-photo img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: #eef2f7; }
+        .hap-photo-empty {
+            aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center;
+            background: repeating-linear-gradient(45deg, #f6f8fb, #f6f8fb 10px, #eef2f7 10px, #eef2f7 20px);
+            color: var(--muted); font-size: .8rem;
+        }
+        .hap-photo figcaption { padding: .65rem .8rem .75rem; }
+        .hap-photo-label { display: block; font-size: .8rem; font-weight: 700; }
+        .hap-photo-meta { display: block; font-size: .73rem; color: var(--muted); margin-top: .2rem; }
+
+        .hap-ont-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .8rem; }
+        .hap-ont {
+            border: 1px solid var(--line); border-radius: 12px; padding: .7rem;
+            display: flex; gap: .7rem; align-items: flex-start; background: #fcfdff;
+        }
+        .hap-ont img { width: 70px; height: 70px; object-fit: cover; border-radius: 8px; background: #eef2f7; display: block; }
+        .hap-ont .sn { font-weight: 800; font-size: .9rem; }
+        .hap-pills { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .35rem; }
+        .hap-pill {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .72rem;
+            background: #eef4fb; color: #145ea8; border: 1px solid #d7e5f5;
+            padding: .14rem .45rem; border-radius: 6px;
+        }
+        .hap-meta { display: flex; flex-wrap: wrap; gap: .45rem 1.2rem; color: var(--muted); font-size: .74rem; margin: 1.1rem .2rem 0; }
+        .hap-empty { margin: 0; color: var(--muted); font-size: .85rem; }
+
+        @media (max-width: 900px) { .hap-grid-2 { grid-template-columns: 1fr; } }
+        @media print {
+            .topbar, .hap-actions, .back { display: none !important; }
+            body { background: #fff; }
+            .hap-hero { background: #fff !important; color: #000; border: 1px solid #000; box-shadow: none; }
+            .hap-chip { color: #000; border-color: #000; background: #fff; }
+            .hap-card { box-shadow: none; break-inside: avoid; }
+        }
+    </style>
 </head>
 <body>
     <header class="topbar">
@@ -26,109 +130,179 @@
     </header>
 
     <main class="page">
-        <a class="back" href="/ha">← All HA protocols</a>
+        <a class="back" href="/ha">← Alle Hausanschlussprotokolle</a>
 
-        <div class="head">
+        <section class="hap-hero">
             <div>
-                <h1>HaP #{{.HA.ID}} · {{.HA.Address}}{{if .HA.City}}, {{.HA.City}}{{end}}</h1>
-                <p class="sub">{{.HA.ClientFirstName}} {{.HA.ClientLastName}} · {{.HA.ProtocolDate}} · Monteur: {{.HA.Monteur}}{{if .HA.Pruefer}} · Prüfer: {{.HA.Pruefer}}{{end}}</p>
-                {{if .HA.TaskID.Valid}}<p class="sub">From <a class="link" href="/tasks/view?id={{.HA.TaskID.Int64}}">task #{{.HA.TaskID.Int64}}</a></p>{{end}}
-                {{if or .HA.NVT .HA.ClientPhone .HA.ClientMobile}}<p class="sub">{{if .HA.NVT}}NVT {{.HA.NVT}}{{end}}{{if .HA.ClientPhone}}{{if .HA.NVT}} · {{end}}Tel {{.HA.ClientPhone}}{{end}}{{if .HA.ClientMobile}}{{if or .HA.NVT .HA.ClientPhone}} · {{end}}Mobil {{.HA.ClientMobile}}{{end}}</p>{{end}}
+                <span class="hap-kicker">Hausanschlussprotokoll · HaP #{{.HA.ID}}</span>
+                <h1>{{if .HA.Address}}{{.HA.Address}}{{if .HA.City}}, {{.HA.City}}{{end}}{{else}}HaP #{{.HA.ID}}{{end}}</h1>
+                <p class="hap-sub">
+                    {{if or .HA.ClientFirstName .HA.ClientLastName}}{{.HA.ClientFirstName}} {{.HA.ClientLastName}}{{else}}—{{end}}
+                    · {{if .HA.ProtocolDate}}{{formatHaDate .HA.ProtocolDate}}{{else}}—{{end}}
+                </p>
+                <div class="hap-chips">
+                    {{if .HA.NVT}}<span class="hap-chip">NVT {{.HA.NVT}}</span>{{end}}
+                    {{if .HA.Units.Valid}}<span class="hap-chip">{{.HA.Units.Int64}} WE</span>{{end}}
+                    {{if .HA.Monteur}}<span class="hap-chip">Monteur: {{.HA.Monteur}}</span>{{end}}
+                    {{if .HA.Pruefer}}<span class="hap-chip">Prüfer: {{.HA.Pruefer}}</span>{{end}}
+                    {{if .HA.ProjectNumber}}<span class="hap-chip">Projekt {{.HA.ProjectNumber}}</span>{{end}}
+                </div>
             </div>
-            <div class="actions">
-                <a class="btn btn-primary" href="/ha/pdf?id={{.HA.ID}}">⬇ Create HaP (PDF)</a>
-                {{if .CanEdit}}<a class="btn btn-ghost" href="/ha/edit?id={{.HA.ID}}">Edit</a>{{end}}
+            <div class="hap-actions">
+                <a class="btn btn-primary" href="/ha/pdf?id={{.HA.ID}}">PDF erstellen</a>
+                {{if .CanEdit}}<a class="btn" href="/ha/edit?id={{.HA.ID}}">Bearbeiten</a>{{end}}
                 {{if .CanEdit}}
-                <form method="POST" action="/ha/delete" style="display:inline;" onsubmit="return confirm('Delete this HaP and all its photos? This cannot be undone.');">
+                <form method="POST" action="/ha/delete" onsubmit="return confirm('HaP und alle Fotos löschen? Das kann nicht rückgängig gemacht werden.');">
                     <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                     <input type="hidden" name="id" value="{{.HA.ID}}">
-                    <button class="btn btn-danger" type="submit">Delete</button>
+                    <button class="btn btn-danger" type="submit">Löschen</button>
                 </form>
                 {{end}}
             </div>
+        </section>
+
+        {{if .Message}}<div class="hap-note">{{.Message}}</div>{{end}}
+
+        <div class="hap-grid hap-grid-4">
+            <div class="hap-card">
+                <div class="hap-stat-label">Anschlussnehmer</div>
+                <div class="hap-stat-value">{{if or .HA.ClientFirstName .HA.ClientLastName}}{{.HA.ClientFirstName}} {{.HA.ClientLastName}}{{else}}—{{end}}</div>
+                <div class="hap-stat-sub">
+                    {{if .HA.ClientPhone}}Tel. {{.HA.ClientPhone}}{{end}}
+                    {{if and .HA.ClientPhone .HA.ClientMobile}} · {{end}}
+                    {{if .HA.ClientMobile}}Mobil {{.HA.ClientMobile}}{{end}}
+                    {{if and .HA.NVT (or .HA.ClientPhone .HA.ClientMobile)}} · {{end}}
+                    {{if .HA.NVT}}NVT {{.HA.NVT}}{{end}}
+                    {{if not (or .HA.ClientPhone .HA.ClientMobile .HA.NVT)}}Keine Kontaktdaten{{end}}
+                </div>
+            </div>
+            <div class="hap-card">
+                <div class="hap-stat-label">Objekt</div>
+                <div class="hap-stat-value">{{if .HA.City}}{{.HA.City}}{{else}}—{{end}}</div>
+                <div class="hap-stat-sub">Bauabschnitt: {{dash .HA.Bauabschnitt}} · {{if .HA.Units.Valid}}{{.HA.Units.Int64}} WE{{else}}—{{end}}</div>
+            </div>
+            <div class="hap-card">
+                <div class="hap-stat-label">Termin & Team</div>
+                <div class="hap-stat-value">{{if .HA.ProtocolDate}}{{formatHaDate .HA.ProtocolDate}}{{else}}—{{end}}</div>
+                <div class="hap-stat-sub">Monteur: {{dash .HA.Monteur}} · Prüfer: {{dash .HA.Pruefer}}</div>
+            </div>
+            <div class="hap-card">
+                <div class="hap-stat-label">Auftragnehmer</div>
+                <div class="hap-stat-value">{{dash .HA.Auftragnehmer}}</div>
+                <div class="hap-stat-sub">{{if .OrgName}}{{.OrgName}}{{else}}—{{end}}{{if .HA.ProjectNumber}} · Projekt {{.HA.ProjectNumber}}{{end}}</div>
+            </div>
         </div>
 
-        {{if .Message}}<p class="note">{{.Message}}</p>{{end}}
-
-        <section class="kpis">
-            <div class="kpi"><div class="label">GVS</div><div class="value" style="font-size:.95rem;">{{if .HA.GVS}}{{.HA.GVS}}{{else}}—{{end}}</div></div>
-            <div class="kpi"><div class="label">Kasette B</div><div class="value" style="font-size:.95rem;">{{if .HA.KassetteB}}{{.HA.KassetteB}}{{else}}—{{end}}</div></div>
-            <div class="kpi"><div class="label">Splitter</div><div class="value" style="font-size:.95rem;">{{if .HA.MuxNumber}}{{.HA.MuxNumber}}{{else}}—{{end}}{{if .HA.MuxFibers}} / {{.HA.MuxFibers}}{{end}}</div></div>
-            <div class="kpi"><div class="label">Kabel</div><div class="value" style="font-size:.95rem;">{{if .HA.CableLength.Valid}}{{printf "%.1f" .HA.CableLength.Float64}} m{{else}}—{{end}}</div></div>
-            <div class="kpi"><div class="label">Spleiße</div><div class="value" style="font-size:.95rem;">{{if .HA.Splices.Valid}}{{.HA.Splices.Int64}}{{else}}—{{end}}</div></div>
-        </section>
-
-        <section class="panel">
-            <div class="panel-head"><h2>Checklist</h2></div>
-            <div class="panel-body" style="display:flex;flex-direction:column;gap:.4rem;font-size:.86rem;">
-                <div>{{if .HA.CheckFiber}}☑{{else}}☐{{end}} Die Durchgängigkeit der Faser wurde überprüft</div>
-                <div>{{if .HA.CheckComplete}}☑{{else}}☐{{end}} Die Arbeiten wurden vollständig abgeschlossen</div>
-                <div>{{if .HA.CheckClean}}☑{{else}}☐{{end}} Die Arbeitstelle wurde ordentlich und sauber hinterlassen</div>
-            </div>
-        </section>
-
-        <section class="panel">
-            <div class="panel-head"><h2>ONT-Geräte</h2><span class="hint">{{len .ONTs}} recorded</span></div>
-            <div class="panel-body">
-                {{if .ONTs}}
-                <div class="table-scroll">
-                    <table>
-                        <thead><tr><th>#</th><th>SN</th><th>Foto</th></tr></thead>
-                        <tbody>
-                            {{range .ONTs}}
-                            <tr>
-                                <td data-label="#">{{.Position}}</td>
-                                <td data-label="SN">
-                                    {{if .SN}}{{.SN}}{{else}}<span class="muted">—</span>{{end}}
-                                    {{if .CodeList}}<div style="display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.3rem;">{{range .CodeList}}<span class="pill" style="font-size:.68rem;">{{.Value}}</span>{{end}}</div>{{end}}
-                                </td>
-                                <td data-label="Foto">
-                                    {{if .ObjectKey}}<a href="/ha/ont?id={{.ID}}" target="_blank" rel="noopener"><img src="/ha/ont?id={{.ID}}" alt="ONT {{.SN}}" style="height:64px;border-radius:6px;display:block;"></a>{{else}}<span class="muted">—</span>{{end}}
-                                </td>
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
+        <div class="hap-grid hap-grid-2">
+            <section class="hap-card">
+                <h2>Technik</h2></h2>
+                <div class="hap-def">
+                    <div><div class="k">Zugehöriger GVS</div><div class="v">{{dash .HA.GVS}}</div></div>
+                    <div><div class="k">Rohr</div><div class="v">
+                        {{if .HA.Rohr.Valid}}{{.HA.Rohr.Int64}}{{else}}—{{end}}
+                        {{with .RohrColorOpt}}<span class="hap-dot" style="{{swatchStyle .}}"></span><span style="font-weight:500;color:var(--muted);">{{.Label}}</span>{{end}}
+                    </div></div>
+                    <div><div class="k">Röhrchenfarbe</div><div class="v">
+                        {{with .RoehrchenColorOpt}}<span class="hap-dot" style="{{swatchStyle .}}"></span><span style="font-weight:500;">{{.Label}}</span>{{else}}—{{end}}
+                    </div></div>
+                    <div><div class="k">Kasette B-Seite</div><div class="v">{{dash .HA.KassetteB}}</div></div>
+                    <div><div class="k">Splitter (MUX) Nummer</div><div class="v">{{dash .HA.MuxNumber}}</div></div>
+                    <div><div class="k">Splitter (MUX) Fasern</div><div class="v">{{dash .HA.MuxFibers}}</div></div>
+                    <div><div class="k">Spleiße</div><div class="v">{{if .HA.Splices.Valid}}{{.HA.Splices.Int64}} Stück{{else}}—{{end}}</div></div>
+                    <div><div class="k">GF Kabel Charge</div><div class="v">{{dash .HA.CableCharge}}</div></div>
+                    <div><div class="k">GF Kabel Länge</div><div class="v">{{if .HA.CableLength.Valid}}{{printf "%.1f m" .HA.CableLength.Float64}}{{else}}—{{end}}</div></div>
                 </div>
-                {{else}}
-                <p class="muted" style="margin:0;">No ONTs recorded yet.</p>
+
+                <div style="margin-top:1.1rem;">
+                    <div class="k" style="font-size:.67rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;">Genutzte Faserfarben</div>
+                    <div class="hap-pills">
+                        {{if .SelectedColors}}{{range .SelectedColors}}<span class="hap-fiber"><span class="hap-dot hap-dot-sq" style="{{swatchStyle .}}"></span>{{.Label}}</span>{{end}}{{else}}<span class="hap-empty">Keine Farben ausgewählt.</span>{{end}}
+                    </div>
+                </div>
+
+                <div style="margin-top:1.1rem;">
+                    <div class="k" style="font-size:.67rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;">Checkliste</div>
+                    <div class="hap-check"><span class="{{if .HA.CheckFiber}}ok{{else}}no{{end}}">{{if .HA.CheckFiber}}✓{{else}}✗{{end}}</span><span>Die Durchg</span>ängigkeit der Faser wurde überprüft</span></div>
+                    <div class="hap-check"><span class="{{if .HA.CheckComplete}}ok{{else}}no{{end}}">{{if .HA.CheckComplete}}✓{{else}}✗{{end}}</span><span>Die Arbeiten wurden vollständ</span>ig abgeschlossen</span></div>
+                    <div class="hap-check"><span class="{{if .HA.CheckClean}}ok{{else}}no{{end}}">{{if .HA.CheckClean}}✓{{else}}✗{{end}}</span><span></span>Die Arbeitsstelle wurde ordentlich und sauber hinterlassen</span></div>
+                </div>
+            </section>
+
+            <section class="hap-card">
+                <h2>Dok</h2>ument</h2>
+                <div class="hap-def" style="grid-template-columns:1fr 1fr;">
+                    <div><div class="k">HaP</div><div class="v">#{{.HA.ID}}</div></div>
+                    <div><div class="k">Datum</div><div class="v">{{if .HA.ProtocolDate}}{{formatHaDate .HA.ProtocolDate}}{{else}}—{{end}}</div></div>
+                    <div><div class="k">Erstellt</div><div class="v" style="font-weight:500;">{{if .HA.CreatedAt}}{{dateShort .HA.CreatedAt}}{{else}}—{{end}}</div></div>
+                    <div><div class="k">Ersteller</div><div class="v" style="font-weight:500;font-size:.82rem;">{{dash .HA.CreatorEmail.String}}</div></div>
+                    <div><div class="k">Projektnummer</div><div class="v">{{dash .HA.ProjectNumber}}</div></div>
+                    <div><div class="k">Organisation</div><div class="v" style="font-weight:500;">{{if .OrgName}}{{.OrgName}}{{else}}—{{end}}</div></div>
+                </div>
+                {{if .HA.TaskID.Valid}}
+                <div style="margin-top:.9rem;font-size:.82rem;">
+                    Zugehöriger Task: <a class="link" href="/tasks/view?id={{.HA.TaskID.Int64}}">Task #{{.HA.TaskID.Int64}}</a>
+                </div>
+                {{end}}
+                <div style="margin-top:.9rem;font-size:.82rem;color:var(--muted);">
+                    Anschluss: {{if .HA.Address}}{{.HA.Address}}{{else}}—{{end}}{{if .HA.City}}, {{.HA.City}}{{end}}
+                </div>
+            </section>
+        </div>
+
+        <section class="hap-card" style="margin-bottom:1rem;">
+            <h2>Fotos · {{len .Photos}} hochgeladen</h2>
+            <div class="hap-photos">
+                {{range .PhotoKinds}}
+                {{$p := index $.PhotoByKind .Key}}
+                <figure class="hap-photo">
+                    {{if $p.ID}}
+                    <a href="/ha/photo?id={{$p.ID}}" target="_blank" rel="noopener"{{if and $p.Lat.Valid $p.Lon.Valid}} title="{{printf "%.5f, %.5f" $p.Lat.Float64 $p.Lon.Float64}}"{{end}}>
+                        <img src="/ha/photo?id={{$p.ID}}" alt="{{.Label}}" loading="lazy">
+                    </a>
+                    {{else}}
+                    <div class="hap-photo-empty">Kein Foto</div>
+                    {{end}}
+                    <figcaption>
+                        <span class="hap-photo-label">{{.Label}}</span>
+                        {{if $p.ID}}{{$cap := photoCaptionLine $p}}{{if $cap}}<span class="hap-photo-meta">{{$cap}}</span>{{end}}{{end}}
+                    </figcaption>
+                </figure>
                 {{end}}
             </div>
         </section>
 
-        <section class="panel">
-            <div class="panel-head"><h2>APL-Codes</h2><span class="hint">{{len .APLCodes}} aus Bild 3</span></div>
-            <div class="panel-body" style="display:flex;flex-wrap:wrap;gap:.35rem;">
-                {{if .APLCodes}}{{range .APLCodes}}<span class="pill">{{.}}</span>{{end}}{{else}}<p class="muted" style="margin:0;">No APL codes recorded yet.</p>{{end}}
-            </div>
-        </section>
-
-        <section class="panel">
-            <div class="panel-head"><h2>Fotos</h2><span class="hint">{{len .Photos}} uploaded</span></div>
-            <div class="panel-body">
-                <div class="tiles" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
-                    {{range .PhotoKinds}}
-                    {{$p := index $.PhotoByKind .Key}}
-                    <div class="tile" style="cursor:default;">
-                        {{if $p.ID}}
-                        <a href="/ha/photo?id={{$p.ID}}" target="_blank" rel="noopener"{{if and $p.Lat.Valid $p.Lon.Valid}} title="{{printf "%.5f, %.5f" $p.Lat.Float64 $p.Lon.Float64}}"{{end}}>
-                            <img src="/ha/photo?id={{$p.ID}}" alt="{{.Label}}" style="width:100%;border-radius:8px;display:block;">
-                        </a>
-                        {{else}}
-                        <div style="width:100%;height:120px;border:1px dashed #c7d2de;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem;">no photo</div>
-                        {{end}}
-                        <span class="t" style="margin-top:.45rem;font-size:.82rem;">{{.Label}}</span>
-                        {{if $p.ID}}
-                        {{$cap := photoCaptionLine $p}}
-                        {{if $cap}}
-                        <span class="d" style="font-size:.72rem;">{{$cap}}</span>
-                        {{end}}
-                        {{end}}
+        <div class="hap-grid hap-grid-2">
+            <section class="hap-card">
+                <h2>ONT-Geräte · {{len .ONTs}}</h2>
+                {{if .ONTs}}
+                <div class="hap-ont-grid">
+                    {{range .ONTs}}
+                    <div class="hap-ont">
+                        {{if .ObjectKey}}<a href="/ha/ont?id={{.ID}}" target="_blank" rel="noopener"><img src="/ha/ont?id={{.ID}}" alt="ONT {{.SN}}" loading="lazy"></a>{{end}}
+                        <div style="min-width:0;">
+                            <div class="sn">{{if .SN}}{{.SN}}{{else}}ONT {{.Position}}{{end}}</div>
+                            {{if .CodeList}}<div class="hap-pills">{{range .CodeList}}<span class="hap-pill">{{.Value}}</span>{{end}}</div>{{end}}
+                        </div>
                     </div>
                     {{end}}
                 </div>
-            </div>
-        </section>
+                {{else}}<p class="hap-empty">Keine ONT-Geräte erfasst.</p>{{end}}
+            </section>
+
+            <section class="hap-card">
+                <h2>APL-Codes · {{len .APLCodes}}</h2>
+                {{if .APLCodes}}
+                <div class="hap-pills">{{range .APLCodes}}<span class="hap-pill">{{.}}</span>{{end}}</div>
+                {{else}}<p class="hap-empty">Keine APL-Codes erfasst.</p>{{end}}
+            </section>
+        </div>
+
+        <div class="hap-meta">
+            <span>Ha</span>P #{{.HA.ID}}</span>
+            {{if .HA.CreatedAt}}<span>Er</span>stellt {{dateShort .HA.CreatedAt}}{{if .HA.CreatorEmail.String}} von {{.HA.CreatorEmail.String}}{{end}}</span>{{end}}
+            {{if .OrgName}}<span>{{.OrgName}}</span>{{end}}
+            <span></span>Wolken-ASM Reports</span>
+        </div>
     </main>
 </body>
 </html>

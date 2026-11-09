@@ -591,6 +591,14 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 	return id, msg
 }
 
+// dash vraća „—“ za prazan string (za pregled).
+func dash(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "—"
+	}
+	return s
+}
+
 // parseRohr prihvata samo 1–4; sve ostalo je NULL.
 func parseRohr(v string) any {
 	n, err := strconv.Atoi(strings.TrimSpace(v))
@@ -787,26 +795,47 @@ func HAViewHandler(w http.ResponseWriter, r *http.Request) {
 	onts, _ := listONTs(h.ID)
 	tmpl, err := template.New("ha-view.html").
 		Funcs(template.FuncMap(csrfTemplateFuncs(r))).
-		Funcs(template.FuncMap{"dateShort": dateShort, "photoCaptionLine": photoCaptionLine}).
+		Funcs(template.FuncMap{
+			"dateShort":        dateShort,
+			"photoCaptionLine": photoCaptionLine,
+			"formatHaDate":     formatHaDate,
+			"swatchStyle":      haSwatchStyle,
+			"dash":             dash,
+		}).
 		ParseFiles("web/templates/ha-view.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	orgName := ""
+	if h.OrgID.Valid {
+		orgName = orgNameByID(h.OrgID.Int64)
+	}
+	var rohrOpt, roehrOpt *haColorOption
+	if h.RohrColor != "" {
+		rohrOpt = findHaColor(haRohrColors, h.RohrColor)
+	}
+	if h.RoehrchenColor != "" {
+		roehrOpt = findHaColor(haRoehrchenColors, h.RoehrchenColor)
+	}
 	_ = tmpl.Execute(w, map[string]any{
-		"HA":          h,
-		"Photos":      photos,
-		"PhotoByKind": byKind,
-		"PhotoKinds":  haSlotPhotoKinds,
-		"ONTs":        onts,
-		"APLCodes":    parseAPLCodesJSON(h.APLCodes),
-		"FiberColors": haFiberColors,
-		"Selected":    strings.Split(h.FiberColors, ","),
-		"CanEdit":     canEditHA(r, h),
-		"IsAdmin":     isAdminRole(r),
-		"IsOrgAdmin":  isOrgAdminRequest(r),
-		"UserRole":    userRole(r),
-		"Message":     r.URL.Query().Get("msg"),
+		"HA":                h,
+		"OrgName":           orgName,
+		"RohrColorOpt":      rohrOpt,
+		"RoehrchenColorOpt": roehrOpt,
+		"SelectedColors":    selectedHAFibers(h.FiberColors),
+		"Photos":            photos,
+		"PhotoByKind":       byKind,
+		"PhotoKinds":        haSlotPhotoKinds,
+		"ONTs":              onts,
+		"APLCodes":          parseAPLCodesJSON(h.APLCodes),
+		"FiberColors":       haFiberColors,
+		"Selected":          strings.Split(h.FiberColors, ","),
+		"CanEdit":           canEditHA(r, h),
+		"IsAdmin":           isAdminRole(r),
+		"IsOrgAdmin":        isOrgAdminRequest(r),
+		"UserRole":          userRole(r),
+		"Message":           r.URL.Query().Get("msg"),
 	})
 }
 
