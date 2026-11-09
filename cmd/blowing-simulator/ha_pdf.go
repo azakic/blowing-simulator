@@ -401,12 +401,16 @@ func findPhoto(photos []haPhotoRow, kind string) *haPhotoRow {
 // nema adresu (adresa je inače obavezna).
 func photoStampText(p *haPhotoRow, h haRow) string {
 	var parts []string
-	addr := strings.TrimSpace(h.Address)
-	if city := strings.TrimSpace(h.City); city != "" {
-		if addr != "" {
-			addr += ", "
+	// Adresa iz reverse geocoding-a (GPS) ima prednost nad ručno unetom.
+	addr := strings.TrimSpace(h.GeoAddress)
+	if addr == "" {
+		addr = strings.TrimSpace(h.Address)
+		if city := strings.TrimSpace(h.City); city != "" {
+			if addr != "" {
+				addr += ", "
+			}
+			addr += city
 		}
-		addr += city
 	}
 	if addr != "" {
 		parts = append(parts, addr)

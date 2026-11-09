@@ -795,6 +795,10 @@ func main() {
 	if err := ensureHASchema(db); err != nil {
 		log.Fatal("Failed to ensure HA schema:", err)
 	}
+	// Keš za reverse geocoding (koordinate → adresa).
+	if err := ensureGeocodeSchema(db); err != nil {
+		log.Fatal("Failed to ensure geocode schema:", err)
+	}
 	// Više ONT uređaja po HaP-u (SN + fotografija nalepnice).
 	if err := ensureONTSchema(db); err != nil {
 		log.Fatal("Failed to ensure ONT schema:", err)

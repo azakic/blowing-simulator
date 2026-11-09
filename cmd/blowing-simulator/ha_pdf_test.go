@@ -197,6 +197,11 @@ func TestPhotoStampText(t *testing.T) {
 	if strings.Contains(got, "51.361800") {
 		t.Fatalf("na slici ne smeju biti koordinate kad postoji adresa: %q", got)
 	}
+	// Adresa iz reverse geocoding-a ima prednost nad ručnom adresom.
+	h.GeoAddress = "Osthausstraße 48, 58300 Wetter (Ruhr)"
+	if got := photoStampText(p, h); !strings.Contains(got, "Osthausstraße 48") {
+		t.Fatalf("geo adresa: %q", got)
+	}
 	// Bez adrese (ne bi trebalo da se desi) ostaju koordinate.
 	if got := photoStampText(p, haRow{}); !strings.Contains(got, "51.361800") {
 		t.Fatalf("bez adrese: %q", got)
