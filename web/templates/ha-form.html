@@ -216,6 +216,10 @@
             <section class="panel">
                 <div class="panel-head"><h2>Fotos</h2><span class="hint">GPS se čita iz EXIF-a; ako ga nema, koristi se lokacija telefona</span></div>
                 <div class="panel-body">
+                    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.6rem;">
+                        <button type="button" class="btn btn-ghost btn-small" id="geo-btn">📍 Standort ermitteln</button>
+                        <span class="muted" id="geo-status" style="font-size:.78rem;"></span>
+                    </div>
                     <div class="filters" style="margin:0;border:0;padding:0;background:transparent;">
                         {{range .PhotoKinds}}
                         <label class="field">
@@ -238,51 +242,100 @@
     </main>
 
     <script>
-        // GPS: EXIF iz fotografije ima prednost. Geolokacija pregledača je
-        // samo rezerva — na telefonu često nije dostupna dok je kamera
-        // otvorena, pa se greška ne prikazuje kao problem.
+        // Standort: EXIF iz fotografije ima prednost; geolokacija pregledača je
+        // rezerva. Na telefonu se često blokira dok je kamera u fokusu, pa
+        // postoji dugme za ponovni pokušaj i pokušaj pri slanju forme.
         (function () {
-            var cached = null;
             var inputs = document.querySelectorAll('input.ha-photo');
-            var supported = navigator.geolocation && window.isSecureContext;
+            var btn = document.getElementById('geo-btn');
+            var statusEl = document.getElementById('geo-status');
+            var form = document.getElementById('ha-form');
+            var current = null;
 
-            function setNeutral(kind) {
-                var hint = document.getElementById('hint_' + kind);
-                if (hint && !hint.textContent.trim()) {
-                    hint.textContent = 'GPS: aus EXIF (falls vorhanden).';
+            function setStatus(text) { if (statusEl) { statusEl.textContent = text || ''; } }
+            function fillAll(value, label) {
+                inputs.forEach(function (input) {
+                    var hidden = document.getElementById('geo_' + input.dataset.kind);
+                    var hint = document.getElementById('hint_' + input.dataset.kind);
+                    if (hidden) { hidden.value = value; }
+                    if (hint) { hint.textContent = label; }
+                });
+            }
+            function neutralHints() {
+                inputs.forEach(function (input) {
+                    var hint = document.getElementById('hint_' + input.dataset.kind);
+                    if (hint && !hint.textContent.trim()) {
+                        hint.textContent = 'GPS: aus EXIF (falls vorhanden).';
+                    }
+                });
+            }
+            function errorText(err) {
+                if (!err) { return 'Standort nicht verfügbar.'; }
+                if (err.code === 1) { return 'Standort verweigert — bitte in den Browser-Einstellungen für diese Seite erlauben.'; }
+                if (err.code === 2) { return 'Standort nicht verfügbar — GPS am Gerät einschalten.'; }
+                if (err.code === 3) { return 'Standort-Timeout — bitte erneut versuchen.'; }
+                return 'Standort nicht verfügbar.';
+            }
+            function gotPosition(pos, done) {
+                var v = pos.coords.latitude.toFixed(6) + ', ' + pos.coords.longitude.toFixed(6);
+                current = v;
+                var label = '📍 ' + v + (pos.coords.accuracy ? ' (±' + Math.round(pos.coords.accuracy) + ' m)' : '');
+                fillAll(v, label);
+                setStatus('Standort erfasst.');
+                if (done) { done(); }
+            }
+            function request(done, timeout) {
+                if (!navigator.geolocation || !window.isSecureContext) {
+                    setStatus('Standort nicht verfügbar — Browser unterstützt keine Geolokation.');
+                    neutralHints();
+                    if (done) { done(); }
+                    return;
                 }
+                setStatus('Standort wird ermittelt …');
+                navigator.geolocation.getCurrentPosition(
+                    function (pos) { gotPosition(pos, done); },
+                    function (err) { setStatus(errorText(err)); neutralHints(); if (done) { done(); } },
+                    { enableHighAccuracy: true, timeout: timeout || 15000, maximumAge: 0 });
             }
-            function apply(kind, value, accuracy) {
-                var hidden = document.getElementById('geo_' + kind);
-                var hint = document.getElementById('hint_' + kind);
-                if (hidden) { hidden.value = value; }
-                if (hint) {
-                    hint.textContent = '📍 ' + value +
-                        (accuracy ? ' (±' + Math.round(accuracy) + ' m)' : '');
-                }
-            }
-            if (!supported) {
-                inputs.forEach(function (input) { setNeutral(input.dataset.kind); });
-                return;
-            }
+
             inputs.forEach(function (input) {
                 input.addEventListener('change', function () {
-                    var kind = input.dataset.kind;
                     if (!input.files || !input.files.length) { return; }
-                    if (cached && Date.now() - cached.at < 120000) {
-                        apply(kind, cached.value, cached.accuracy);
+                    if (current) {
+                        var hidden = document.getElementById('geo_' + input.dataset.kind);
+                        var hint = document.getElementById('hint_' + input.dataset.kind);
+                        if (hidden) { hidden.value = current; }
+                        if (hint) { hint.textContent = '📍 ' + current; }
                         return;
                     }
-                    setNeutral(kind);
-                    navigator.geolocation.getCurrentPosition(function (pos) {
-                        var v = pos.coords.latitude.toFixed(6) + ', ' + pos.coords.longitude.toFixed(6);
-                        cached = { value: v, at: Date.now(), accuracy: pos.coords.accuracy };
-                        apply(kind, v, pos.coords.accuracy);
-                    }, function () {
-                        setNeutral(kind);
-                    }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 120000 });
+                    request(null, 15000);
                 });
             });
+            if (btn) {
+                btn.addEventListener('click', function () { current = null; request(null, 15000); });
+            }
+            // Ako lokacija još nije zabeležena, pokušaj je pre slanja forme.
+            var submitting = false;
+            if (form) {
+                form.addEventListener('submit', function (e) {
+                    if (submitting || current) { return; }
+                    if (!navigator.geolocation || !window.isSecureContext) { return; }
+                    e.preventDefault();
+                    submitting = true;
+                    var finished = false;
+                    var finish = function () { if (!finished) { finished = true; form.submit(); } };
+                    request(finish, 5000);
+                    setTimeout(finish, 5500);
+                });
+            }
+            if (navigator.permissions && navigator.permissions.query) {
+                navigator.permissions.query({ name: 'geolocation' }).then(function (st) {
+                    if (st.state === 'denied' && !current) {
+                        setStatus('Standort verweigert — bitte in den Browser-Einstellungen für diese Seite erlauben.');
+                    }
+                }).catch(function () {});
+            }
+            neutralHints();
         })();
     </script>
     <script>

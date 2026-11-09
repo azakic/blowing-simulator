@@ -194,13 +194,19 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte, onts []o
 		pdf.SetFont("Helvetica", "", 7)
 		pdf.SetXY(px+1, top+0.9)
 		pdf.CellFormat(halfW-2, capH-1, tr(caption), "", 0, "L", false, 0, "")
-		drawImageFit(pdf, "ph-"+kind, images[kind], px+2, top+capH+1, halfW-4, photoH-4)
+		rx, ry, rw, rh := drawImageFit(pdf, "ph-"+kind, images[kind], px+2, top+capH+1, halfW-4, photoH-4)
 		if p := findPhoto(photos, kind); p != nil {
-			if c := photoCaption(p); c != "" && tr(c) != "" {
-				pdf.SetFont("Helvetica", "", 5.6)
-				pdf.SetTextColor(90, 90, 90)
-				pdf.SetXY(px+2, top+capH+photoH-3.4)
-				pdf.CellFormat(halfW-4, 3, tr(c), "", 0, "L", false, 0, "")
+			if c := photoStampText(p, h); c != "" {
+				const barH = 4.2
+				pdf.SetAlpha(0.6, "Normal")
+				pdf.SetFillColor(0, 0, 0)
+				pdf.Rect(rx, ry+rh-barH, rw, barH, "F")
+				pdf.SetAlpha(1, "Normal")
+				pdf.SetFillColor(255, 255, 255)
+				pdf.SetTextColor(255, 255, 255)
+				pdf.SetFont("Helvetica", "", 6.3)
+				pdf.SetXY(rx+1.5, ry+rh-barH+0.8)
+				pdf.CellFormat(rw-3, 3, tr(c), "", 0, "L", false, 0, "")
 				pdf.SetTextColor(0, 0, 0)
 			}
 		}
@@ -390,6 +396,34 @@ func findPhoto(photos []haPhotoRow, kind string) *haPhotoRow {
 	return nil
 }
 
+// photoStampText vraća tekst koji se ispisuje preko fotografije u PDF-u:
+// GPS + vreme ako postoje, inače adresa gradilišta.
+func photoStampText(p *haPhotoRow, h haRow) string {
+	var parts []string
+	if p.Lat.Valid && p.Lon.Valid {
+		parts = append(parts, fmt.Sprintf("%.6f, %.6f", p.Lat.Float64, p.Lon.Float64))
+		if p.Altitude.Valid && p.Altitude.Float64 != 0 {
+			parts = append(parts, fmt.Sprintf("%.0f m", p.Altitude.Float64))
+		}
+	}
+	if p.TakenAt.Valid && p.TakenAt.String != "" {
+		parts = append(parts, p.TakenAt.String)
+	}
+	if len(parts) == 0 {
+		addr := strings.TrimSpace(h.Address)
+		if h.City != "" {
+			if addr != "" {
+				addr += ", "
+			}
+			addr += h.City
+		}
+		if addr != "" {
+			parts = append(parts, addr)
+		}
+	}
+	return strings.Join(parts, " · ")
+}
+
 func photoCaption(p *haPhotoRow) string {
 	var parts []string
 	if p.TakenAt.Valid && p.TakenAt.String != "" {
@@ -405,16 +439,16 @@ func photoCaption(p *haPhotoRow) string {
 }
 
 // drawImageFit ubacuje sliku u okvir čuvajući odnos stranica.
-func drawImageFit(pdf *gofpdf.Fpdf, name string, data []byte, x, y, w, h float64) {
+func drawImageFit(pdf *gofpdf.Fpdf, name string, data []byte, x, y, w, h float64) (rx, ry, rw, rh float64) {
 	if len(data) == 0 {
 		pdf.SetDrawColor(205, 205, 205)
 		pdf.Rect(x, y, w, h, "D")
 		pdf.SetDrawColor(0, 0, 0)
-		return
+		return x, y, w, h
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || cfg.Width == 0 || cfg.Height == 0 {
-		return
+		return x, y, w, h
 	}
 	imgType := "JPG"
 	if format == "png" {
@@ -423,14 +457,18 @@ func drawImageFit(pdf *gofpdf.Fpdf, name string, data []byte, x, y, w, h float64
 	opts := gofpdf.ImageOptions{ImageType: imgType}
 	info := pdf.RegisterImageOptionsReader(name, opts, bytes.NewReader(data))
 	if info == nil {
-		return
+		return x, y, w, h
 	}
 	ratio := float64(cfg.Width) / float64(cfg.Height)
 	iw, ih := w, w/ratio
 	if ih > h {
 		ih, iw = h, h*ratio
 	}
-	pdf.ImageOptions(name, x+(w-iw)/2, y+(h-ih)/2, iw, ih, false, opts, 0, "")
+	rx = x + (w-iw)/2
+	ry = y + (h-ih)/2
+	rw, rh = iw, ih
+	pdf.ImageOptions(name, rx, ry, rw, rh, false, opts, 0, "")
+	return
 }
 
 func drawColorSwatches(pdf *gofpdf.Fpdf, x, y, maxW float64, selected []string, perRow int) int {

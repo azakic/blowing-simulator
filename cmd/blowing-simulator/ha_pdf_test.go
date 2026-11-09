@@ -3,6 +3,9 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"os"
+	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -175,5 +178,57 @@ func TestParseExifIgnoresNonJpeg(t *testing.T) {
 	}
 	if info := parseExif([]byte{0xFF, 0xD8, 0xFF, 0xD9}); info.HasLocation {
 		t.Error("JPEG bez EXIF-a ne sme da vrati lokaciju")
+	}
+}
+
+func TestPhotoStampText(t *testing.T) {
+	h := haRow{Address: "An der Borg 25", City: "Volmarstein"}
+	p := &haPhotoRow{}
+	if got := photoStampText(p, h); got != "An der Borg 25, Volmarstein" {
+		t.Fatalf("bez GPS-a: %q", got)
+	}
+	p.Lat.Valid, p.Lat.Float64 = true, 51.3618
+	p.Lon.Valid, p.Lon.Float64 = true, 7.3684
+	p.TakenAt.Valid, p.TakenAt.String = true, "2026-07-21 17:49"
+	got := photoStampText(p, h)
+	if !strings.Contains(got, "51.361800") || !strings.Contains(got, "7.368400") || !strings.Contains(got, "2026-07-21 17:49") {
+		t.Fatalf("sa GPS-om: %q", got)
+	}
+}
+
+func TestBuildHAPDFStampsLocationOnPhoto(t *testing.T) {
+	if _, err := exec.LookPath("pdftotext"); err != nil {
+		t.Skip("pdftotext nije instaliran")
+	}
+	h := haRow{
+		ID:            9,
+		Auftragnehmer: "Wolken ASM GmbH",
+		Address:       "An der Borg 25",
+		City:          "Volmarstein",
+		ProtocolDate:  "2026-07-21",
+	}
+	p := haPhotoRow{ID: 1, Kind: "bild1", Bytes: 1}
+	p.Lat.Valid, p.Lat.Float64 = true, 51.3618
+	p.Lon.Valid, p.Lon.Float64 = true, 7.3684
+	p.TakenAt.Valid, p.TakenAt.String = true, "2026-07-21 17:49"
+
+	img := makeONTSamplePNG(t, []string{"W006PF5Z"})
+	pdf, err := buildHAPDF(h, []haPhotoRow{p}, map[string][]byte{"bild1": img}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := t.TempDir() + "/stamp.pdf"
+	if err := os.WriteFile(path, pdf, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("pdftotext", path, "-").Output()
+	if err != nil {
+		t.Fatalf("pdftotext: %v", err)
+	}
+	text := string(out)
+	for _, want := range []string{"51.361800, 7.368400", "2026-07-21 17:49"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("u PDF-u nema %q", want)
+		}
 	}
 }
