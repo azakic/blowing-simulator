@@ -50,7 +50,6 @@ var haSlotPhotoKinds = []haPhotoKind{
 	{"bild2", "Bild 2 — APL offen"},
 	{"bild3", "Bild 3 — APL geschlossen / Aufkleber"},
 	{"bild4", "Bild 4 — Foto ONT"},
-	{"apl_label", "APL Aufkleber"},
 	{"light_test", "Licht test"},
 }
 
@@ -99,6 +98,7 @@ func ensureHASchema(db *sqlx.DB) error {
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS nvt TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS client_phone TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS client_mobile TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS apl_codes TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_ha_project ON ha_protocols(project_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_ha_org ON ha_protocols(org_id)`,
 		`CREATE TABLE IF NOT EXISTS ha_photos (
@@ -139,6 +139,7 @@ type haRow struct {
 	ClientFirstName string          `db:"client_first_name"`
 	ClientPhone     string          `db:"client_phone"`
 	ClientMobile    string          `db:"client_mobile"`
+	APLCodes        string          `db:"apl_codes"`
 	Units           sql.NullInt64   `db:"units"`
 	ProtocolDate    string          `db:"protocol_date"`
 	Monteur         string          `db:"monteur"`
@@ -165,7 +166,7 @@ const haSelect = `
 	SELECT h.id, h.task_id, h.project_id, h.org_id,
 	       h.auftragnehmer, h.address, h.city, h.bauabschnitt,
 	       h.client_last_name, h.client_first_name, h.client_phone, h.client_mobile,
-	       h.nvt, h.units,
+	       h.apl_codes, h.nvt, h.units,
 	       to_char(h.protocol_date, 'YYYY-MM-DD') AS protocol_date,
 	       h.monteur, h.pruefer, h.project_number, h.gvs, h.kassette_b,
 	       h.mux_number, h.mux_fibers, h.splices, h.fiber_colors,
@@ -533,7 +534,12 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 	// Zadatak iz kog je HaP nastao ostaje "in progress" dok HaP nije kompletan.
 	syncTaskFromHA(taskID)
 
-	saved, failed := saveHAPhotos(r, id)
+	saved, failed, bild3 := saveHAPhotos(r, id)
+	apl := resolveAPLCodes(r, bild3, id)
+	if _, err := db.Exec(`UPDATE ha_protocols SET apl_codes=$1 WHERE id=$2`,
+		encodeAPLCodesJSON(apl), id); err != nil {
+		log.Printf("apl codes %d: %v", id, err)
+	}
 	ontSaved, ontFailed := saveONTs(r, id)
 	logUserEvent(claims.UserID, 0, "hap-create", fmt.Sprintf("hap %d", id))
 	msg := "HaP created."
@@ -561,7 +567,7 @@ func nullableID(v int64) any {
 }
 
 // saveHAPhotos čuva sve priloge iz multipart forme.
-func saveHAPhotos(r *http.Request, haID int64) (saved, failed int) {
+func saveHAPhotos(r *http.Request, haID int64) (saved, failed int, bild3 []byte) {
 	for _, k := range haSlotPhotoKinds {
 		file, header, err := r.FormFile("photo_" + k.Key)
 		if err != nil || file == nil {
@@ -572,6 +578,9 @@ func saveHAPhotos(r *http.Request, haID int64) (saved, failed int) {
 		if err != nil || len(data) == 0 {
 			failed++
 			continue
+		}
+		if k.Key == "bild3" {
+			bild3 = data
 		}
 		info := parseExif(data)
 		ext := strings.ToLower(path.Ext(header.Filename))
@@ -617,7 +626,7 @@ func saveHAPhotos(r *http.Request, haID int64) (saved, failed int) {
 		}
 		saved++
 	}
-	return saved, failed
+	return saved, failed, bild3
 }
 
 func contentTypeOf(ext string) string {
@@ -723,6 +732,7 @@ func HAViewHandler(w http.ResponseWriter, r *http.Request) {
 		"PhotoByKind": byKind,
 		"PhotoKinds":  haSlotPhotoKinds,
 		"ONTs":        onts,
+		"APLCodes":    parseAPLCodesJSON(h.APLCodes),
 		"FiberColors": haFiberColors,
 		"Selected":    strings.Split(h.FiberColors, ","),
 		"CanEdit":     canEditHA(r, h),
@@ -781,7 +791,12 @@ func updateHA(r *http.Request, h haRow) string {
 	if err != nil {
 		return "Could not save: " + err.Error()
 	}
-	saved, failed := saveHAPhotos(r, h.ID)
+	saved, failed, bild3 := saveHAPhotos(r, h.ID)
+	apl := resolveAPLCodes(r, bild3, h.ID)
+	if _, err := db.Exec(`UPDATE ha_protocols SET apl_codes=$1 WHERE id=$2`,
+		encodeAPLCodesJSON(apl), h.ID); err != nil {
+		log.Printf("apl codes %d: %v", h.ID, err)
+	}
 	ontSaved, ontFailed := saveONTs(r, h.ID)
 	syncTaskFromHA(h.TaskID.Int64)
 	if saved == 0 && failed == 0 && ontSaved == 0 && ontFailed == 0 {

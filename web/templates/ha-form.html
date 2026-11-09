@@ -197,7 +197,23 @@
             </section>
 
             <section class="panel">
-                <div class="panel-head"><h2>Fotos &amp; Unterschriften</h2><span class="hint">GPS se čita iz EXIF-a; ako ga nema, koristi se lokacija telefona</span></div>
+                <div class="panel-head"><h2>APL-Codes</h2><span class="hint">werden aus „Bild 3 — APL geschlossen / Aufkleber“ gelesen</span></div>
+                <div class="panel-body">
+                    <input type="hidden" name="apl_codes" value="{{.HA.APLCodes}}">
+                    <input type="hidden" name="apl_codes_touched" id="apl-touched" value="0">
+                    <div id="apl-chips" style="display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.6rem;"></div>
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;">
+                        <label class="field" style="flex:1 1 220px;"><span>Code hinzufügen</span>
+                            <input type="text" id="apl-code-input" placeholder="z. B. W006PF5Z">
+                        </label>
+                        <button type="button" class="btn btn-ghost" id="apl-add">Add</button>
+                    </div>
+                    <p class="muted" style="margin:.6rem 0 0;font-size:.78rem;">Beim Auswählen von Bild 3 werden alle Barcodes automatisch gelesen; Codes können auch manuell ergänzt oder entfernt werden.</p>
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-head"><h2>Fotos</h2><span class="hint">GPS se čita iz EXIF-a; ako ga nema, koristi se lokacija telefona</span></div>
                 <div class="panel-body">
                     <div class="filters" style="margin:0;border:0;padding:0;background:transparent;">
                         {{range .PhotoKinds}}
@@ -494,6 +510,114 @@
 
             var existing = rows.querySelectorAll('.ont-row');
             for (var k = 0; k < existing.length; k++) { renderCodes(existing[k]); }
+
+            // --- APL-Codes: čitaju se iz Bild 3 i mogu se ručno uređivati ---
+            var aplHidden = document.querySelector('input[name="apl_codes"]');
+            var aplTouched = document.getElementById('apl-touched');
+            var aplBox = document.getElementById('apl-chips');
+            var aplInput = document.getElementById('apl-code-input');
+            var aplAdd = document.getElementById('apl-add');
+            var bild3 = document.querySelector('input[name="photo_bild3"]');
+
+            function aplParse() {
+                try { return JSON.parse((aplHidden && aplHidden.value) || '[]') || []; } catch (e) { return []; }
+            }
+            function aplMark() { if (aplTouched) { aplTouched.value = '1'; } }
+            function aplRender() {
+                if (!aplBox) { return; }
+                var codes = aplParse();
+                aplBox.innerHTML = '';
+                for (var i = 0; i < codes.length; i++) {
+                    var v = String(codes[i] || '');
+                    if (!v) { continue; }
+                    var chip = document.createElement('span');
+                    chip.className = 'pill';
+                    chip.style.cssText = 'display:inline-flex;align-items:center;gap:.3rem;font-size:.75rem;';
+                    chip.appendChild(document.createTextNode(v + ' '));
+                    var x = document.createElement('button');
+                    x.type = 'button';
+                    x.textContent = '×';
+                    x.style.cssText = 'background:none;border:0;color:inherit;cursor:pointer;font-weight:700;';
+                    x.setAttribute('data-apl-remove', v);
+                    chip.appendChild(x);
+                    aplBox.appendChild(chip);
+                }
+            }
+            function aplSet(values) {
+                var seen = {}, out = [];
+                for (var i = 0; i < (values || []).length; i++) {
+                    var v = String(values[i] || '').trim().toUpperCase();
+                    if (v && !seen[v]) { seen[v] = true; out.push(v); }
+                }
+                if (aplHidden) { aplHidden.value = out.length ? JSON.stringify(out) : ''; }
+                aplRender();
+            }
+            function aplMerge(values) { aplSet(aplParse().concat(values)); aplMark(); }
+
+            if (aplBox) {
+                aplBox.addEventListener('click', function (e) {
+                    var v = e.target && e.target.getAttribute && e.target.getAttribute('data-apl-remove');
+                    if (!v) { return; }
+                    var out = [];
+                    var codes = aplParse();
+                    for (var i = 0; i < codes.length; i++) {
+                        if (String(codes[i]) !== v) { out.push(codes[i]); }
+                    }
+                    aplSet(out);
+                    aplMark();
+                });
+            }
+            if (aplAdd && aplInput) {
+                aplAdd.addEventListener('click', function () {
+                    if (aplInput.value.trim()) { aplMerge([aplInput.value]); aplInput.value = ''; }
+                });
+                aplInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') { e.preventDefault(); aplAdd.click(); }
+                });
+            }
+            function aplServerScan(file) {
+                resizeFile(file, 1400).then(function (blob) {
+                    var form = document.getElementById('ha-form');
+                    var token = form ? form.querySelector('input[name="csrf_token"]') : null;
+                    var fd = new FormData();
+                    fd.append('csrf_token', token ? token.value : '');
+                    fd.append('file', blob, 'scan.jpg');
+                    return fetch('/ha/ont/scan', { method: 'POST', body: fd, credentials: 'same-origin' })
+                        .then(function (r) { return r.ok ? r.json() : null; })
+                        .then(function (d) {
+                            if (d && d.codes && d.codes.length) {
+                                aplMerge(d.codes.map(function (c) { return c.value || c; }));
+                            }
+                        });
+                }).catch(function () {});
+            }
+            function aplScan(file) {
+                if (!file) { return; }
+                if (!('BarcodeDetector' in window)) { aplServerScan(file); return; }
+                createImageBitmap(file).then(function (bitmap) {
+                    var det = null;
+                    try {
+                        det = new BarcodeDetector({ formats: ['code_128', 'code_39', 'code_93', 'itf', 'codabar', 'ean_13', 'ean_8', 'qr_code', 'data_matrix', 'aztec'] });
+                    } catch (e) {
+                        try { det = new BarcodeDetector(); } catch (e2) { det = null; }
+                    }
+                    if (!det) { aplServerScan(file); return; }
+                    det.detect(bitmap).then(function (found) {
+                        if (found && found.length) {
+                            aplMerge(found.map(function (f) { return f.rawValue; }));
+                        } else {
+                            aplServerScan(file);
+                        }
+                    }).catch(function () { aplServerScan(file); });
+                }).catch(function () { aplServerScan(file); });
+            }
+            if (bild3) {
+                bild3.addEventListener('change', function () {
+                    var f = bild3.files && bild3.files[0];
+                    if (f) { aplScan(f); }
+                });
+            }
+            aplRender();
         })();
     </script>
 </body>

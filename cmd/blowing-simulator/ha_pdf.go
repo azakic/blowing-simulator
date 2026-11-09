@@ -270,8 +270,14 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte, onts []o
 	// Licht test (desno), sa većim slikama.
 	pdf.SetFont("Helvetica", "", 7)
 	pdf.SetXY(x0+2, sigTop+1.2)
-	pdf.CellFormat(40, 4, tr("APL Aufkleber:"), "", 0, "L", false, 0, "")
-	drawImageFit(pdf, "apl", images["apl_label"], x0+2, sigTop+5.5, halfW-4, sigH-8)
+	pdf.CellFormat(40, 4, tr("APL-Codes:"), "", 0, "L", false, 0, "")
+	aplCodes := parseAPLCodesJSON(h.APLCodes)
+	if len(aplCodes) == 0 {
+		aplCodes = []string{"—"}
+	}
+	pdf.SetFont("Helvetica", "", 7.5)
+	pdf.SetXY(x0+2, sigTop+5.5)
+	pdf.MultiCell(halfW-4, 4, tr(strings.Join(aplCodes, "\n")), "", "L", false)
 
 	pdf.SetXY(x0+halfW+2, sigTop+1.2)
 	pdf.CellFormat(30, 4, tr("Licht test"), "", 0, "L", false, 0, "")

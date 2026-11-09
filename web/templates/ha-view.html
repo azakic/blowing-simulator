@@ -96,6 +96,15 @@
             </div>
         </section>
 
+        {{if .APLCodes}}
+        <section class="panel">
+            <div class="panel-head"><h2>APL-Codes</h2><span class="hint">{{len .APLCodes}}</span></div>
+            <div class="panel-body" style="display:flex;flex-wrap:wrap;gap:.35rem;">
+                {{range .APLCodes}}<span class="pill">{{.}}</span>{{end}}
+            </div>
+        </section>
+        {{end}}
+
         <section class="panel">
             <div class="panel-head"><h2>Fotos</h2><span class="hint">{{len .Photos}} uploaded</span></div>
             <div class="panel-body">

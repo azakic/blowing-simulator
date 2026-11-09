@@ -85,3 +85,14 @@ func TestONTCodesJSONRoundTrip(t *testing.T) {
 		t.Fatal("prazan string mora dati nil")
 	}
 }
+
+func TestAPLCodesJSON(t *testing.T) {
+	in := []string{" w006pf5z ", "W006PF4W", "w006pf5z", ""}
+	out := parseAPLCodesJSON(encodeAPLCodesJSON(in))
+	if len(out) != 2 || out[0] != "W006PF5Z" || out[1] != "W006PF4W" {
+		t.Fatalf("APL normalize = %+v", out)
+	}
+	if parseAPLCodesJSON("") != nil {
+		t.Fatal("prazan APL string mora dati nil")
+	}
+}
