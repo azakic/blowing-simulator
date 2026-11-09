@@ -195,7 +195,7 @@
 
         <div class="hap-grid hap-grid-2">
             <section class="hap-card">
-                <h2>Technik</h2></h2>
+                <h2>Technik</h2>
                 <div class="hap-def">
                     <div><div class="k">Zugehöriger GVS</div><div class="v">{{dash .HA.GVS}}</div></div>
                     <div><div class="k">Rohr</div><div class="v">
@@ -222,14 +222,14 @@
 
                 <div style="margin-top:1.1rem;">
                     <div class="k" style="font-size:.67rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;">Checkliste</div>
-                    <div class="hap-check"><span class="{{if .HA.CheckFiber}}ok{{else}}no{{end}}">{{if .HA.CheckFiber}}✓{{else}}✗{{end}}</span><span>Die Durchg</span>ängigkeit der Faser wurde überprüft</span></div>
-                    <div class="hap-check"><span class="{{if .HA.CheckComplete}}ok{{else}}no{{end}}">{{if .HA.CheckComplete}}✓{{else}}✗{{end}}</span><span>Die Arbeiten wurden vollständ</span>ig abgeschlossen</span></div>
-                    <div class="hap-check"><span class="{{if .HA.CheckClean}}ok{{else}}no{{end}}">{{if .HA.CheckClean}}✓{{else}}✗{{end}}</span><span></span>Die Arbeitsstelle wurde ordentlich und sauber hinterlassen</span></div>
+                    <div class="hap-check"><span class="{{if .HA.CheckFiber}}ok{{else}}no{{end}}">{{if .HA.CheckFiber}}✓{{else}}✗{{end}}</span><span>Die Durchgängigkeit der Faser wurde überprüft</span></div>
+                    <div class="hap-check"><span class="{{if .HA.CheckComplete}}ok{{else}}no{{end}}">{{if .HA.CheckComplete}}✓{{else}}✗{{end}}</span><span>Die Arbeiten wurden vollständig abgeschlossen</span></div>
+                    <div class="hap-check"><span class="{{if .HA.CheckClean}}ok{{else}}no{{end}}">{{if .HA.CheckClean}}✓{{else}}✗{{end}}</span><span>Die Arbeitsstelle wurde ordentlich und sauber hinterlassen</span></div>
                 </div>
             </section>
 
             <section class="hap-card">
-                <h2>Dok</h2>ument</h2>
+                <h2>Dokument</h2>
                 <div class="hap-def" style="grid-template-columns:1fr 1fr;">
                     <div><div class="k">HaP</div><div class="v">#{{.HA.ID}}</div></div>
                     <div><div class="k">Datum</div><div class="v">{{if .HA.ProtocolDate}}{{formatHaDate .HA.ProtocolDate}}{{else}}—{{end}}</div></div>
@@ -298,10 +298,10 @@
         </div>
 
         <div class="hap-meta">
-            <span>Ha</span>P #{{.HA.ID}}</span>
-            {{if .HA.CreatedAt}}<span>Er</span>stellt {{dateShort .HA.CreatedAt}}{{if .HA.CreatorEmail.String}} von {{.HA.CreatorEmail.String}}{{end}}</span>{{end}}
+            <span>HaP #{{.HA.ID}}</span>
+            {{if .HA.CreatedAt}}<span>Erstellt {{dateShort .HA.CreatedAt}}{{if .HA.CreatorEmail.String}} von {{.HA.CreatorEmail.String}}{{end}}</span>{{end}}
             {{if .OrgName}}<span>{{.OrgName}}</span>{{end}}
-            <span></span>Wolken-ASM Reports</span>
+            <span>Wolken-ASM Reports</span>
         </div>
     </main>
 </body>

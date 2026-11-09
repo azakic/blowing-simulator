@@ -50,9 +50,9 @@ func renderHAView(t *testing.T, h haRow, p haPhotoRow) string {
 		"FiberColors":       haFiberColors,
 		"Selected":          []string{},
 		"SelectedColors":    selectedHAFibers(h.FiberColors),
-		"RohrColorOpt":      nil,
-		"RoehrchenColorOpt": nil,
-		"OrgName":           "",
+		"RohrColorOpt":      findHaColor(haRohrColors, h.RohrColor),
+		"RoehrchenColorOpt": findHaColor(haRoehrchenColors, h.RoehrchenColor),
+		"OrgName":           "Wolken ASM",
 		"CanEdit":           true,
 	})
 	if err != nil {
@@ -87,5 +87,31 @@ func TestHAViewPhotoCaptionWithoutGPSIsEmpty(t *testing.T) {
 	out := renderHAView(t, h, p)
 	if strings.Contains(out, "Osthausstraße 48, Volmarstein · ") {
 		t.Fatalf("bez GPS-a ne treba prikazivati adresu HaP-a ispod slike")
+	}
+}
+
+func TestHAViewFullReportShowsAllTechnicalData(t *testing.T) {
+	h := haRow{
+		ID: 7, Address: "Bachstraße 42", City: "Volmarstein",
+		Auftragnehmer: "Wolken ASM GmbH", ClientLastName: "Rambau", ClientFirstName: "Frank",
+		ProtocolDate: "2026-09-01", Monteur: "Daniel Popovic", Pruefer: "Marko Zakic",
+		GVS: "N-1.23", KassetteB: "R22", MuxNumber: "2", MuxFibers: "22",
+		RohrColor: "blau", RoehrchenColor: "rot-weiss",
+		FiberColors: "rot,schwarz", CableCharge: "10293437",
+		CheckFiber: true, CheckClean: true,
+	}
+	h.Rohr.Valid, h.Rohr.Int64 = true, 2
+	h.Units.Valid, h.Units.Int64 = true, 1
+	h.Splices.Valid, h.Splices.Int64 = true, 1
+	h.CableLength.Valid, h.CableLength.Float64 = true, 128
+	p := haPhotoRow{ID: 1, Kind: "bild1"}
+	out := renderHAView(t, h, p)
+	for _, want := range []string{
+		"Bachstraße 42", "N-1.23", "R22", "10293437", "128.0 m",
+		"rot/weiß", "Genutzte Faserfarben", "Die Durchgängigkeit",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("izveštaj ne sadrži %q", want)
+		}
 	}
 }
