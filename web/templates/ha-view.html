@@ -119,11 +119,9 @@
                         {{end}}
                         <span class="t" style="margin-top:.45rem;font-size:.82rem;">{{.Label}}</span>
                         {{if $p.ID}}
-                        {{$addr := photoAddress $.HA}}
-                        {{if or $addr $p.TakenAt.Valid}}
-                        <span class="d" style="font-size:.72rem;">
-                            {{$addr}}{{if and $addr $p.TakenAt.Valid}} · {{end}}{{if $p.TakenAt.Valid}}{{dateShort $p.TakenAt.String}}{{end}}
-                        </span>
+                        {{$cap := photoCaptionLine $p}}
+                        {{if $cap}}
+                        <span class="d" style="font-size:.72rem;">{{$cap}}</span>
                         {{end}}
                         {{end}}
                     </div>

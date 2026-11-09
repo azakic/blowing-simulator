@@ -182,29 +182,20 @@ func TestParseExifIgnoresNonJpeg(t *testing.T) {
 }
 
 func TestPhotoStampText(t *testing.T) {
-	h := haRow{Address: "An der Borg 25", City: "Volmarstein"}
 	p := &haPhotoRow{}
-	if got := photoStampText(p, h); got != "An der Borg 25, Volmarstein" {
-		t.Fatalf("bez GPS-a: %q", got)
-	}
 	p.Lat.Valid, p.Lat.Float64 = true, 51.3618
 	p.Lon.Valid, p.Lon.Float64 = true, 7.3684
 	p.TakenAt.Valid, p.TakenAt.String = true, "2026-07-21 17:49"
-	got := photoStampText(p, h)
-	if !strings.Contains(got, "An der Borg 25, Volmarstein") || !strings.Contains(got, "2026-07-21 17:49") {
-		t.Fatalf("sa GPS-om: %q", got)
+	if got := photoStampText(p); !strings.Contains(got, "51.361800") || !strings.Contains(got, "2026-07-21 17:49") {
+		t.Fatalf("bez adrese: %q", got)
+	}
+	p.GeoAddress = "An der Borg 25, 58300 Wetter (Ruhr)"
+	got := photoStampText(p)
+	if !strings.Contains(got, "An der Borg 25, 58300 Wetter (Ruhr)") || !strings.Contains(got, "2026-07-21 17:49") {
+		t.Fatalf("sa adresom: %q", got)
 	}
 	if strings.Contains(got, "51.361800") {
 		t.Fatalf("na slici ne smeju biti koordinate kad postoji adresa: %q", got)
-	}
-	// Adresa iz reverse geocoding-a ima prednost nad ručnom adresom.
-	h.GeoAddress = "Osthausstraße 48, 58300 Wetter (Ruhr)"
-	if got := photoStampText(p, h); !strings.Contains(got, "Osthausstraße 48") {
-		t.Fatalf("geo adresa: %q", got)
-	}
-	// Bez adrese (ne bi trebalo da se desi) ostaju koordinate.
-	if got := photoStampText(p, haRow{}); !strings.Contains(got, "51.361800") {
-		t.Fatalf("bez adrese: %q", got)
 	}
 }
 
@@ -220,6 +211,7 @@ func TestBuildHAPDFStampsLocationOnPhoto(t *testing.T) {
 		ProtocolDate:  "2026-07-21",
 	}
 	p := haPhotoRow{ID: 1, Kind: "bild1", Bytes: 1}
+	p.GeoAddress = "An der Borg 25, 58300 Wetter (Ruhr)"
 	p.Lat.Valid, p.Lat.Float64 = true, 51.3618
 	p.Lon.Valid, p.Lon.Float64 = true, 7.3684
 	p.TakenAt.Valid, p.TakenAt.String = true, "2026-07-21 17:49"
@@ -238,7 +230,7 @@ func TestBuildHAPDFStampsLocationOnPhoto(t *testing.T) {
 		t.Fatalf("pdftotext: %v", err)
 	}
 	text := string(out)
-	for _, want := range []string{"An der Borg 25, Volmarstein", "2026-07-21 17:49"} {
+	for _, want := range []string{"An der Borg 25, 58300 Wetter (Ruhr)", "2026-07-21 17:49"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("u PDF-u nema %q", want)
 		}

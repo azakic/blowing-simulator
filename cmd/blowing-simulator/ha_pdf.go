@@ -196,7 +196,7 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte, onts []o
 		pdf.CellFormat(halfW-2, capH-1, tr(caption), "", 0, "L", false, 0, "")
 		rx, ry, rw, rh := drawImageFit(pdf, "ph-"+kind, images[kind], px+2, top+capH+1, halfW-4, photoH-4)
 		if p := findPhoto(photos, kind); p != nil {
-			if c := photoStampText(p, h); c != "" {
+			if c := photoStampText(p); c != "" {
 				const barH = 4.2
 				pdf.SetAlpha(0.6, "Normal")
 				pdf.SetFillColor(0, 0, 0)
@@ -399,10 +399,10 @@ func findPhoto(photos []haPhotoRow, kind string) *haPhotoRow {
 // photoStampText vraća tekst koji se ispisuje preko fotografije u PDF-u:
 // adresa gradilišta + vreme snimanja. Koordinate se koriste samo ako HaP
 // nema adresu (adresa je inače obavezna).
-func photoStampText(p *haPhotoRow, h haRow) string {
+func photoStampText(p *haPhotoRow) string {
 	var parts []string
-	if addr := photoAddress(h); addr != "" {
-		parts = append(parts, addr)
+	if s := strings.TrimSpace(p.GeoAddress); s != "" {
+		parts = append(parts, s)
 	} else if p.Lat.Valid && p.Lon.Valid {
 		parts = append(parts, fmt.Sprintf("%.6f, %.6f", p.Lat.Float64, p.Lon.Float64))
 	}

@@ -100,6 +100,7 @@ func ensureHASchema(db *sqlx.DB) error {
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS client_mobile TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS apl_codes TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS geo_address TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_photos ADD COLUMN IF NOT EXISTS geo_address TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_ha_project ON ha_protocols(project_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_ha_org ON ha_protocols(org_id)`,
 		`CREATE TABLE IF NOT EXISTS ha_photos (
@@ -141,7 +142,6 @@ type haRow struct {
 	ClientPhone     string          `db:"client_phone"`
 	ClientMobile    string          `db:"client_mobile"`
 	APLCodes        string          `db:"apl_codes"`
-	GeoAddress      string          `db:"geo_address"`
 	Units           sql.NullInt64   `db:"units"`
 	ProtocolDate    string          `db:"protocol_date"`
 	Monteur         string          `db:"monteur"`
@@ -168,7 +168,7 @@ const haSelect = `
 	SELECT h.id, h.task_id, h.project_id, h.org_id,
 	       h.auftragnehmer, h.address, h.city, h.bauabschnitt,
 	       h.client_last_name, h.client_first_name, h.client_phone, h.client_mobile,
-	       h.apl_codes, h.geo_address, h.nvt, h.units,
+	       h.apl_codes, h.nvt, h.units,
 	       to_char(h.protocol_date, 'YYYY-MM-DD') AS protocol_date,
 	       h.monteur, h.pruefer, h.project_number, h.gvs, h.kassette_b,
 	       h.mux_number, h.mux_fibers, h.splices, h.fiber_colors,
@@ -192,6 +192,7 @@ type haPhotoRow struct {
 	Altitude    sql.NullFloat64 `db:"altitude_m"`
 	Bearing     sql.NullFloat64 `db:"bearing_deg"`
 	TakenAt     sql.NullString  `db:"taken_at"`
+	GeoAddress  string          `db:"geo_address"`
 }
 
 func loadHA(id int64) (haRow, error) {
@@ -203,7 +204,7 @@ func loadHA(id int64) (haRow, error) {
 func listHAPhotos(haID int64) ([]haPhotoRow, error) {
 	var out []haPhotoRow
 	err := db.Select(&out, `SELECT id, ha_id, kind, object_key, content_type, bytes,
-			lat, lon, altitude_m, bearing_deg,
+			lat, lon, altitude_m, bearing_deg, geo_address,
 			to_char(taken_at, 'YYYY-MM-DD HH24:MI') AS taken_at
 		FROM ha_photos WHERE ha_id = $1`, haID)
 	return out, err
@@ -542,8 +543,8 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 
 	saved, failed, bild3 := saveHAPhotos(r, id)
 	// Adresa iz GPS-a (OpenStreetMap) — samo prvi put, sa kratkim timeoutom.
-	geoctx, geocancel := context.WithTimeout(r.Context(), 5*time.Second)
-	applyGeoAddress(geoctx, id)
+	geoctx, geocancel := context.WithTimeout(r.Context(), 10*time.Second)
+	applyPhotoGeoAddresses(geoctx, id)
 	geocancel()
 	apl := resolveAPLCodes(r, bild3, id)
 	if _, err := db.Exec(`UPDATE ha_protocols SET apl_codes=$1 WHERE id=$2`,
@@ -568,20 +569,19 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 	return id, msg
 }
 
-// photoAddress vraća adresu koja se prikazuje ispod fotografija: adresa iz
-// reverse geocoding-a (GPS), inače adresa i mesto iz HaP-a.
-func photoAddress(h haRow) string {
-	if s := strings.TrimSpace(h.GeoAddress); s != "" {
-		return s
+// photoCaptionLine vraća natpis ispod fotografije u HTML pregledu: adresa
+// dobijena iz GPS-a te slike + vreme snimanja. Ako slika nema ni jedno, natpis
+// se ne prikazuje (adresa HaP-a se ne koristi — slike mogu biti sa drugih
+// lokacija).
+func photoCaptionLine(p haPhotoRow) string {
+	var parts []string
+	if s := strings.TrimSpace(p.GeoAddress); s != "" {
+		parts = append(parts, s)
 	}
-	addr := strings.TrimSpace(h.Address)
-	if city := strings.TrimSpace(h.City); city != "" {
-		if addr != "" {
-			addr += ", "
-		}
-		addr += city
+	if p.TakenAt.Valid && strings.TrimSpace(p.TakenAt.String) != "" {
+		parts = append(parts, dateShort(p.TakenAt.String))
 	}
-	return addr
+	return strings.Join(parts, " · ")
 }
 
 // removeMultipartFiles briše privremene fajlove koje je Go napravio za
@@ -754,7 +754,7 @@ func HAViewHandler(w http.ResponseWriter, r *http.Request) {
 	onts, _ := listONTs(h.ID)
 	tmpl, err := template.New("ha-view.html").
 		Funcs(template.FuncMap(csrfTemplateFuncs(r))).
-		Funcs(template.FuncMap{"dateShort": dateShort, "photoAddress": photoAddress}).
+		Funcs(template.FuncMap{"dateShort": dateShort, "photoCaptionLine": photoCaptionLine}).
 		ParseFiles("web/templates/ha-view.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
@@ -828,8 +828,8 @@ func updateHA(r *http.Request, h haRow) string {
 		return "Could not save: " + err.Error()
 	}
 	saved, failed, bild3 := saveHAPhotos(r, h.ID)
-	geoctx, geocancel := context.WithTimeout(r.Context(), 5*time.Second)
-	applyGeoAddress(geoctx, h.ID)
+	geoctx, geocancel := context.WithTimeout(r.Context(), 10*time.Second)
+	applyPhotoGeoAddresses(geoctx, h.ID)
 	geocancel()
 	apl := resolveAPLCodes(r, bild3, h.ID)
 	if _, err := db.Exec(`UPDATE ha_protocols SET apl_codes=$1 WHERE id=$2`,

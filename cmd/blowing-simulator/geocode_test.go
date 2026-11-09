@@ -88,20 +88,3 @@ func TestGeocoderRateLimit(t *testing.T) {
 		t.Fatalf("dva poziva su bila brža od limita: %v", elapsed)
 	}
 }
-
-func TestStreetMatches(t *testing.T) {
-	cases := []struct {
-		hap, reverse string
-		want         bool
-	}{
-		{"An der Borg 25", "An der Borg 25, 58300 Wetter (Ruhr)", true},
-		{"Osthausstraße 48", "Osthausstrasse 48, 58300 Wetter", true}, // ß -> ss
-		{"An der Borg 25", "An der Zollschranke 4, 58300 Wetter (Ruhr)", false},
-		{"", "Irgendwo 1", true},
-	}
-	for _, c := range cases {
-		if got := streetMatches(c.hap, c.reverse); got != c.want {
-			t.Errorf("streetMatches(%q, %q) = %v, očekivano %v", c.hap, c.reverse, got, c.want)
-		}
-	}
-}

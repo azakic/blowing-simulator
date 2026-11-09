@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -186,92 +185,38 @@ func storeGeoAddress(ctx context.Context, lat, lon float64, address string) {
 	}
 }
 
-// normalizeAddress služi za poređenje ulice: mala slova, bez interpunkcije
-// i bez kućnih brojeva.
-func normalizeAddress(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	s = strings.ReplaceAll(s, "ß", "ss")
-	var b strings.Builder
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		default:
-			b.WriteByte(' ')
-		}
-	}
-	var keep []string
-	for _, tok := range strings.Fields(b.String()) {
-		if _, err := strconv.Atoi(tok); err == nil {
-			continue // kućni broj
-		}
-		keep = append(keep, tok)
-	}
-	return strings.Join(keep, " ")
-}
-
-// streetMatches proverava da li GPS adresa pripada istoj ulici kao HaP.
-// GPS može biti odsečen za nekoliko desetina metara, pa bi pogrešna kuća
-// završila na PDF-u.
-func streetMatches(hapAddress, reverse string) bool {
-	a := normalizeAddress(hapAddress)
-	if a == "" {
-		return true
-	}
-	b := normalizeAddress(reverse)
-	return strings.Contains(b, a) || strings.Contains(a, b)
-}
-
-// applyGeoAddress popunjava ha_protocols.geo_address iz prve fotografije koja
-// ima GPS. Ako adresa već postoji, ne poziva spoljni servis.
-func applyGeoAddress(ctx context.Context, haID int64) {
+// applyPhotoGeoAddresses popunjava ha_photos.geo_address za svaku fotografiju
+// koja ima GPS. Adresa je vezana za sliku, ne za HaP — fotografije mogu biti
+// sa različitih lokacija.
+func applyPhotoGeoAddresses(ctx context.Context, haID int64) {
 	if !geocoderEnabled() {
 		return
 	}
-	var row struct {
-		Address    string `db:"address"`
-		City       string `db:"city"`
-		GeoAddress string `db:"geo_address"`
-	}
-	if err := db.GetContext(ctx, &row, `SELECT address, city, geo_address FROM ha_protocols WHERE id = $1`, haID); err != nil {
-		return
-	}
-	if strings.TrimSpace(row.GeoAddress) != "" {
-		return
-	}
-	var coords struct {
-		Lat float64 `db:"lat"`
-		Lon float64 `db:"lon"`
-	}
-	if err := db.GetContext(ctx, &coords, `SELECT lat, lon FROM ha_photos
+	var photos []haPhotoRow
+	if err := db.SelectContext(ctx, &photos, `SELECT id, lat, lon, geo_address
+		FROM ha_photos
 		WHERE ha_id = $1 AND lat IS NOT NULL AND lon IS NOT NULL
-		ORDER BY id LIMIT 1`, haID); err != nil {
+		  AND COALESCE(geo_address, '') = ''
+		ORDER BY id LIMIT 10`, haID); err != nil {
 		return
 	}
-	addr, ok := cachedGeoAddress(ctx, coords.Lat, coords.Lon)
-	if !ok {
-		var err error
-		addr, err = reverseGeocode(ctx, coords.Lat, coords.Lon)
-		if err != nil {
-			log.Printf("geocode ha %d: %v", haID, err)
-			return
-		}
-		storeGeoAddress(ctx, coords.Lat, coords.Lon, addr)
-	}
-	if !streetMatches(row.Address, addr) {
-		log.Printf("geocode ha %d: %q ne odgovara ulici iz HaP-a %q — koristi se HaP adresa", haID, addr, row.Address)
-		addr = strings.TrimSpace(row.Address)
-		if city := strings.TrimSpace(row.City); city != "" {
-			if addr != "" {
-				addr += ", "
+	for _, p := range photos {
+		lat, lon := p.Lat.Float64, p.Lon.Float64
+		addr, ok := cachedGeoAddress(ctx, lat, lon)
+		if !ok {
+			var err error
+			addr, err = reverseGeocode(ctx, lat, lon)
+			if err != nil {
+				log.Printf("geocode photo %d: %v", p.ID, err)
+				continue
 			}
-			addr += city
+			storeGeoAddress(ctx, lat, lon, addr)
 		}
-	}
-	if strings.TrimSpace(addr) == "" {
-		return
-	}
-	if _, err := db.ExecContext(ctx, `UPDATE ha_protocols SET geo_address = $1 WHERE id = $2`, addr, haID); err != nil {
-		log.Printf("geocode ha %d save: %v", haID, err)
+		if strings.TrimSpace(addr) == "" {
+			continue
+		}
+		if _, err := db.ExecContext(ctx, `UPDATE ha_photos SET geo_address = $1 WHERE id = $2`, addr, p.ID); err != nil {
+			log.Printf("geocode photo %d save: %v", p.ID, err)
+		}
 	}
 }
