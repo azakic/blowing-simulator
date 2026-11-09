@@ -101,6 +101,9 @@ func ensureHASchema(db *sqlx.DB) error {
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS apl_codes TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS geo_address TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_photos ADD COLUMN IF NOT EXISTS geo_address TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_photos ADD COLUMN IF NOT EXISTS ocr_text TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_photos ADD COLUMN IF NOT EXISTS ocr_time TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_photos ADD COLUMN IF NOT EXISTS ocr_at TIMESTAMPTZ`,
 		`CREATE INDEX IF NOT EXISTS idx_ha_project ON ha_protocols(project_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_ha_org ON ha_protocols(org_id)`,
 		`CREATE TABLE IF NOT EXISTS ha_photos (
@@ -193,6 +196,7 @@ type haPhotoRow struct {
 	Bearing     sql.NullFloat64 `db:"bearing_deg"`
 	TakenAt     sql.NullString  `db:"taken_at"`
 	GeoAddress  string          `db:"geo_address"`
+	OCRTime     string          `db:"ocr_time"`
 }
 
 func loadHA(id int64) (haRow, error) {
@@ -204,7 +208,7 @@ func loadHA(id int64) (haRow, error) {
 func listHAPhotos(haID int64) ([]haPhotoRow, error) {
 	var out []haPhotoRow
 	err := db.Select(&out, `SELECT id, ha_id, kind, object_key, content_type, bytes,
-			lat, lon, altitude_m, bearing_deg, geo_address,
+			lat, lon, altitude_m, bearing_deg, geo_address, ocr_time,
 			to_char(taken_at, 'YYYY-MM-DD HH24:MI') AS taken_at
 		FROM ha_photos WHERE ha_id = $1`, haID)
 	return out, err
@@ -546,6 +550,11 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 	geoctx, geocancel := context.WithTimeout(r.Context(), 10*time.Second)
 	applyPhotoGeoAddresses(geoctx, id)
 	geocancel()
+	go func(haID int64) {
+		octx, ocancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer ocancel()
+		runPhotoOCR(octx, haID)
+	}(id)
 	apl := resolveAPLCodes(r, bild3, id)
 	if _, err := db.Exec(`UPDATE ha_protocols SET apl_codes=$1 WHERE id=$2`,
 		encodeAPLCodesJSON(apl), id); err != nil {
@@ -578,7 +587,9 @@ func photoCaptionLine(p haPhotoRow) string {
 	if s := strings.TrimSpace(p.GeoAddress); s != "" {
 		parts = append(parts, s)
 	}
-	if p.TakenAt.Valid && strings.TrimSpace(p.TakenAt.String) != "" {
+	if t := strings.TrimSpace(p.OCRTime); t != "" {
+		parts = append(parts, t)
+	} else if p.TakenAt.Valid && strings.TrimSpace(p.TakenAt.String) != "" {
 		parts = append(parts, dateShort(p.TakenAt.String))
 	}
 	return strings.Join(parts, " · ")
@@ -831,6 +842,11 @@ func updateHA(r *http.Request, h haRow) string {
 	geoctx, geocancel := context.WithTimeout(r.Context(), 10*time.Second)
 	applyPhotoGeoAddresses(geoctx, h.ID)
 	geocancel()
+	go func(haID int64) {
+		octx, ocancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer ocancel()
+		runPhotoOCR(octx, haID)
+	}(h.ID)
 	apl := resolveAPLCodes(r, bild3, h.ID)
 	if _, err := db.Exec(`UPDATE ha_protocols SET apl_codes=$1 WHERE id=$2`,
 		encodeAPLCodesJSON(apl), h.ID); err != nil {

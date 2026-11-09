@@ -406,7 +406,9 @@ func photoStampText(p *haPhotoRow) string {
 	} else if p.Lat.Valid && p.Lon.Valid {
 		parts = append(parts, fmt.Sprintf("%.6f, %.6f", p.Lat.Float64, p.Lon.Float64))
 	}
-	if p.TakenAt.Valid && p.TakenAt.String != "" {
+	if t := strings.TrimSpace(p.OCRTime); t != "" {
+		parts = append(parts, t)
+	} else if p.TakenAt.Valid && p.TakenAt.String != "" {
 		parts = append(parts, p.TakenAt.String)
 	}
 	return strings.Join(parts, " · ")
