@@ -626,7 +626,7 @@
                     if (e.key === 'Enter') { e.preventDefault(); aplAdd.click(); }
                 });
             }
-            function aplServerScan(file) {
+            function aplServerScan(file, dims) {
                 aplStatus('Lese Barcodes aus Bild 3 …');
                 scanBlob(file).then(function (blob) {
                     var form = document.getElementById('ha-form');
@@ -640,7 +640,7 @@
                             if (d && d.codes && d.codes.length) {
                                 aplMerge(d.codes.map(function (c) { return c.value || c; }), true);
                             } else {
-                                aplStatus('Keine Barcodes erkannt — Foto schärfer aufnehmen oder Codes manuell eingeben.');
+                                aplStatus(aplScanMsg(dims));
                             }
                         })
                         .catch(function () {
@@ -662,22 +662,25 @@
                     img.src = url;
                 });
             }
+            // Prenesene/kompresovane kopije (npr. 796×1070) imaju module
+            // barkoda od ~1 px; pokušavamo i njima, ali ako ne uspe poruka
+            // jasno kaže da je rezolucija problem.
+            function aplScanMsg(dims) {
+                if (dims && Math.max(dims.w, dims.h) < 1400) {
+                    return 'Foto hat zu wenig Auflösung (' + dims.w + '×' + dims.h +
+                        ') — die Barcodes sind zu klein. Bitte direkt mit der Kamera fotografieren oder das Originalfoto wählen.';
+                }
+                return 'Keine Barcodes erkannt — Foto schärfer aufnehmen oder Codes manuell eingeben.';
+            }
             function aplScan(file) {
                 if (!file) { return; }
                 aplStatus('Lese Barcodes aus Bild 3 …');
-                // Prenesene/kompresovane kopije (npr. 796×1070) imaju module
-                // barkoda od ~1 px — nijedan čitač ih ne može pročitati.
                 imageSize(file).then(function (dims) {
-                    if (dims && Math.max(dims.w, dims.h) < 1400) {
-                        aplStatus('Foto hat zu wenig Auflösung (' + dims.w + '×' + dims.h +
-                            ') — die Barcodes sind zu klein. Bitte das Originalfoto wählen oder neu fotografieren.');
-                        return;
-                    }
-                    aplScanHighRes(file);
+                    aplScanHighRes(file, dims);
                 });
             }
-            function aplScanHighRes(file) {
-                if (!('BarcodeDetector' in window)) { aplServerScan(file); return; }
+            function aplScanHighRes(file, dims) {
+                if (!('BarcodeDetector' in window)) { aplServerScan(file, dims); return; }
                 createImageBitmap(file).then(function (bitmap) {
                     var det = null;
                     try {
@@ -685,15 +688,15 @@
                     } catch (e) {
                         try { det = new BarcodeDetector(); } catch (e2) { det = null; }
                     }
-                    if (!det) { aplServerScan(file); return; }
+                    if (!det) { aplServerScan(file, dims); return; }
                     det.detect(bitmap).then(function (found) {
                         if (found && found.length) {
                             aplMerge(found.map(function (f) { return f.rawValue; }), true);
                         } else {
-                            aplServerScan(file);
+                            aplServerScan(file, dims);
                         }
-                    }).catch(function () { aplServerScan(file); });
-                }).catch(function () { aplServerScan(file); });
+                    }).catch(function () { aplServerScan(file, dims); });
+                }).catch(function () { aplServerScan(file, dims); });
             }
             if (bild3) {
                 bild3.addEventListener('change', function () {
