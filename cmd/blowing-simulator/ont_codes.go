@@ -104,9 +104,14 @@ func decodeONTImage(data []byte) ([]ontCode, error) {
 		}
 		return codes
 	}
+	codes := try(img)
+	// Male slike (stari klijenti su slali 1400 px): modul barkoda može biti
+	// ispod 2 px, pa uvećanje daje čitaču dovoljno uzoraka.
+	if len(codes) == 0 && imageLongestSide(img) < 1800 {
+		codes = try(scaleImageUp(img, ontDecodeMaxSide))
+	}
 	// JPEG dekoder ne primenjuje EXIF orijentaciju, pa original može biti
 	// rotiran; probaj sva četiri položaja pre nego što odustanemo.
-	codes := try(img)
 	for i := 0; i < 3 && len(codes) == 0; i++ {
 		img = rotateImage90(img)
 		codes = try(img)
@@ -192,6 +197,39 @@ func scaleImageDown(img image.Image, maxSide int) image.Image {
 		longest = h
 	}
 	if longest <= maxSide {
+		return img
+	}
+	ratio := float64(maxSide) / float64(longest)
+	nw, nh := int(float64(w)*ratio), int(float64(h)*ratio)
+	if nw < 1 {
+		nw = 1
+	}
+	if nh < 1 {
+		nh = 1
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, nw, nh))
+	draw.CatmullRom.Scale(dst, dst.Bounds(), img, b, draw.Src, nil)
+	return dst
+}
+
+func imageLongestSide(img image.Image) int {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if h > w {
+		return h
+	}
+	return w
+}
+
+// scaleImageUp uvećava malu sliku do maxSide (nikad je ne smanjuje).
+func scaleImageUp(img image.Image, maxSide int) image.Image {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	longest := w
+	if h > longest {
+		longest = h
+	}
+	if longest >= maxSide || longest == 0 {
 		return img
 	}
 	ratio := float64(maxSide) / float64(longest)

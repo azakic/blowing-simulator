@@ -835,6 +835,15 @@ func HAPhotoHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
+	// Objektni ključ se menja pri svakom uploadu, pa je ETag dovoljan da
+	// pregledač odmah vidi novu sliku (ranije je max-age=300 držao staru).
+	etag := `"` + p.ObjectKey + `"`
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "private, no-cache")
+	if match := r.Header.Get("If-None-Match"); match != "" && strings.Contains(match, etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
 	data, ct, err := sourceStore.GetRaw(r.Context(), p.ObjectKey)
 	if err != nil {
 		http.Error(w, "Photo unavailable", http.StatusBadGateway)
@@ -844,7 +853,6 @@ func HAPhotoHandler(w http.ResponseWriter, r *http.Request) {
 		ct = p.ContentType
 	}
 	w.Header().Set("Content-Type", ct)
-	w.Header().Set("Cache-Control", "private, max-age=300")
 	_, _ = w.Write(data)
 }
 

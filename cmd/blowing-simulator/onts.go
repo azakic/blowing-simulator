@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"io"
 	"log"
 	"net/http"
@@ -251,11 +253,22 @@ func HANTScanHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Empty file", http.StatusBadRequest)
 		return
 	}
+	if cfg, format, err := image.DecodeConfig(bytes.NewReader(data)); err == nil {
+		log.Printf("ont scan: %d bytes, %s %dx%d", len(data), format, cfg.Width, cfg.Height)
+	} else {
+		log.Printf("ont scan: %d bytes, decode config failed: %v", len(data), err)
+	}
 	codes, err := decodeONTImage(data)
 	if err != nil {
+		log.Printf("ont scan failed: %v", err)
 		writeJSON(w, map[string]any{"error": "Could not decode image: " + err.Error()})
 		return
 	}
+	values := make([]string, 0, len(codes))
+	for _, c := range codes {
+		values = append(values, c.Value)
+	}
+	log.Printf("ont scan result: %d code(s): %s", len(codes), strings.Join(values, ","))
 	info := classifyONTCodes(codes)
 	writeJSON(w, map[string]any{
 		"codes": codes,
@@ -311,6 +324,13 @@ func HANTOPhotoHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
+	etag := `"` + o.ObjectKey + `"`
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "private, no-cache")
+	if match := r.Header.Get("If-None-Match"); match != "" && strings.Contains(match, etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
 	data, ct, err := sourceStore.GetRaw(r.Context(), o.ObjectKey)
 	if err != nil {
 		http.Error(w, "Photo unavailable", http.StatusBadGateway)
@@ -320,6 +340,5 @@ func HANTOPhotoHandler(w http.ResponseWriter, r *http.Request) {
 		ct = o.ContentType
 	}
 	w.Header().Set("Content-Type", ct)
-	w.Header().Set("Cache-Control", "private, max-age=300")
 	_, _ = w.Write(data)
 }

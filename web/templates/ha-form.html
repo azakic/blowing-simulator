@@ -209,7 +209,7 @@
                         <button type="button" class="btn btn-ghost" id="apl-add">Add</button>
                     </div>
                     <p class="muted" id="apl-status" style="margin:.6rem 0 0;font-size:.78rem;display:none;"></p>
-                    <p class="muted" style="margin:.6rem 0 0;font-size:.78rem;">Beim Auswählen von Bild 3 werden alle Barcodes automatisch gelesen; Codes können auch manuell ergänzt oder entfernt werden.</p>
+                    <p class="muted" style="margin:.6rem 0 0;font-size:.78rem;">Beim Auswählen von Bild 3 werden alle Barcodes automatisch gelesen; Codes können auch manuell ergänzt oder entfernt werden. Bitte das <strong>Originalfoto</strong> verwenden — weitergeleitete oder komprimierte Kopien haben oft zu kleine Barcodes.</p>
                 </div>
             </section>
 
@@ -650,9 +650,33 @@
                     aplStatus('Bild konnte nicht gelesen werden — Codes manuell eingeben.');
                 });
             }
+            function imageSize(file) {
+                return new Promise(function (resolve) {
+                    var url = URL.createObjectURL(file);
+                    var img = new Image();
+                    img.onload = function () {
+                        resolve({ w: img.naturalWidth, h: img.naturalHeight });
+                        URL.revokeObjectURL(url);
+                    };
+                    img.onerror = function () { URL.revokeObjectURL(url); resolve(null); };
+                    img.src = url;
+                });
+            }
             function aplScan(file) {
                 if (!file) { return; }
                 aplStatus('Lese Barcodes aus Bild 3 …');
+                // Prenesene/kompresovane kopije (npr. 796×1070) imaju module
+                // barkoda od ~1 px — nijedan čitač ih ne može pročitati.
+                imageSize(file).then(function (dims) {
+                    if (dims && Math.max(dims.w, dims.h) < 1400) {
+                        aplStatus('Foto hat zu wenig Auflösung (' + dims.w + '×' + dims.h +
+                            ') — die Barcodes sind zu klein. Bitte das Originalfoto wählen oder neu fotografieren.');
+                        return;
+                    }
+                    aplScanHighRes(file);
+                });
+            }
+            function aplScanHighRes(file) {
                 if (!('BarcodeDetector' in window)) { aplServerScan(file); return; }
                 createImageBitmap(file).then(function (bitmap) {
                     var det = null;
