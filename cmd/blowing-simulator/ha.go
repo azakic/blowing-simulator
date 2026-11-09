@@ -568,6 +568,22 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 	return id, msg
 }
 
+// photoAddress vraća adresu koja se prikazuje ispod fotografija: adresa iz
+// reverse geocoding-a (GPS), inače adresa i mesto iz HaP-a.
+func photoAddress(h haRow) string {
+	if s := strings.TrimSpace(h.GeoAddress); s != "" {
+		return s
+	}
+	addr := strings.TrimSpace(h.Address)
+	if city := strings.TrimSpace(h.City); city != "" {
+		if addr != "" {
+			addr += ", "
+		}
+		addr += city
+	}
+	return addr
+}
+
 // removeMultipartFiles briše privremene fajlove koje je Go napravio za
 // multipart delove veće od memorijskog praga.
 func removeMultipartFiles(r *http.Request) {
@@ -738,7 +754,7 @@ func HAViewHandler(w http.ResponseWriter, r *http.Request) {
 	onts, _ := listONTs(h.ID)
 	tmpl, err := template.New("ha-view.html").
 		Funcs(template.FuncMap(csrfTemplateFuncs(r))).
-		Funcs(template.FuncMap{"dateShort": dateShort}).
+		Funcs(template.FuncMap{"dateShort": dateShort, "photoAddress": photoAddress}).
 		ParseFiles("web/templates/ha-view.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)

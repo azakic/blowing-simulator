@@ -111,7 +111,7 @@
                     {{$p := index $.PhotoByKind .Key}}
                     <div class="tile" style="cursor:default;">
                         {{if $p.ID}}
-                        <a href="/ha/photo?id={{$p.ID}}" target="_blank" rel="noopener">
+                        <a href="/ha/photo?id={{$p.ID}}" target="_blank" rel="noopener"{{if and $p.Lat.Valid $p.Lon.Valid}} title="{{printf "%.5f, %.5f" $p.Lat.Float64 $p.Lon.Float64}}"{{end}}>
                             <img src="/ha/photo?id={{$p.ID}}" alt="{{.Label}}" style="width:100%;border-radius:8px;display:block;">
                         </a>
                         {{else}}
@@ -119,12 +119,12 @@
                         {{end}}
                         <span class="t" style="margin-top:.45rem;font-size:.82rem;">{{.Label}}</span>
                         {{if $p.ID}}
+                        {{$addr := photoAddress $.HA}}
+                        {{if or $addr $p.TakenAt.Valid}}
                         <span class="d" style="font-size:.72rem;">
-                            {{if $p.TakenAt.Valid}}{{dateShort $p.TakenAt.String}}{{end}}
-                            {{if and $p.Lat.Valid $p.Lon.Valid}}
-                            · {{printf "%.5f" $p.Lat.Float64}}, {{printf "%.5f" $p.Lon.Float64}}{{if $p.Altitude.Valid}} · {{printf "%.0f" $p.Altitude.Float64}} m{{end}}
-                            {{end}}
+                            {{$addr}}{{if and $addr $p.TakenAt.Valid}} · {{end}}{{if $p.TakenAt.Valid}}{{dateShort $p.TakenAt.String}}{{end}}
                         </span>
+                        {{end}}
                         {{end}}
                     </div>
                     {{end}}
