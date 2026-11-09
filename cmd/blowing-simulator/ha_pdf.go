@@ -266,24 +266,16 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte, onts []o
 	pdf.Line(x0, sigTop+sigH, x0+haTableW, sigTop+sigH)
 	pdf.Line(x0+halfW, sigTop, x0+halfW, sigTop+sigH)
 
+	// Bez digitalnih potpisa: donji blok koriste APL nalepnica (levo) i
+	// Licht test (desno), sa većim slikama.
 	pdf.SetFont("Helvetica", "", 7)
 	pdf.SetXY(x0+2, sigTop+1.2)
-	pdf.CellFormat(30, 4, tr("Unterschriften:"), "", 0, "L", false, 0, "")
-	drawImageFit(pdf, "sig-m", images["sig_monteur"], x0+2, sigTop+5.5, 55, sigH-9)
-	drawImageFit(pdf, "sig-p", images["sig_pruefer"], x0+60, sigTop+5.5, 45, sigH-9)
-	pdf.SetFont("Helvetica", "", 6.5)
-	pdf.SetXY(x0+2, sigTop+sigH-4)
-	pdf.CellFormat(40, 3, tr("Monteur"), "", 0, "L", false, 0, "")
-	pdf.SetXY(x0+60, sigTop+sigH-4)
-	pdf.CellFormat(40, 3, tr("Prüfer:"), "", 0, "L", false, 0, "")
-
-	pdf.SetFont("Helvetica", "", 7)
-	pdf.SetXY(x0+halfW+2, sigTop+1.2)
 	pdf.CellFormat(40, 4, tr("APL Aufkleber:"), "", 0, "L", false, 0, "")
-	pdf.SetXY(x0+halfW+62, sigTop+1.2)
+	drawImageFit(pdf, "apl", images["apl_label"], x0+2, sigTop+5.5, halfW-4, sigH-8)
+
+	pdf.SetXY(x0+halfW+2, sigTop+1.2)
 	pdf.CellFormat(30, 4, tr("Licht test"), "", 0, "L", false, 0, "")
-	drawImageFit(pdf, "apl", images["apl_label"], x0+halfW+2, sigTop+5.5, 55, sigH-8)
-	drawImageFit(pdf, "light", images["light_test"], x0+halfW+62, sigTop+5.5, 35, sigH-8)
+	drawImageFit(pdf, "light", images["light_test"], x0+halfW+2, sigTop+5.5, halfW-4, sigH-8)
 
 	// Spoljni okvir tabele — od zaglavlja do kraja bloka potpisa.
 	pdf.Rect(x0, 20, haTableW, (sigTop+sigH)-20, "D")

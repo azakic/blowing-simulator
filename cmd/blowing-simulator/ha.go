@@ -52,8 +52,6 @@ var haSlotPhotoKinds = []haPhotoKind{
 	{"bild4", "Bild 4 — Foto ONT"},
 	{"apl_label", "APL Aufkleber"},
 	{"light_test", "Licht test"},
-	{"sig_monteur", "Unterschrift Monteur"},
-	{"sig_pruefer", "Unterschrift Prüfer"},
 }
 
 func validHAKind(kind string) bool {
