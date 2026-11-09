@@ -449,15 +449,24 @@
                         canvas.height = Math.max(1, Math.round(h * scale));
                         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
                         URL.revokeObjectURL(url);
-                        canvas.toBlob(function (blob) { blob ? resolve(blob) : reject(); }, 'image/jpeg', 0.9);
+                        canvas.toBlob(function (blob) { blob ? resolve(blob) : reject(); }, 'image/jpeg', 0.92);
                     };
                     img.onerror = function () { URL.revokeObjectURL(url); reject(); };
                     img.src = url;
                 });
             }
 
+            // Za skeniranje šaljemo originalni JPEG/PNG kada nije prevelik —
+            // svako smanjivanje smanjuje module barkoda i čitač promaši.
+            function scanBlob(file) {
+                var type = (file.type || '').toLowerCase();
+                if ((type === 'image/jpeg' || type === 'image/png') && file.size <= 10485760) {
+                    return Promise.resolve(file);
+                }
+                return resizeFile(file, 3000);
+            }
             function serverScan(row, file) {
-                resizeFile(file, 1400).then(function (blob) {
+                scanBlob(file).then(function (blob) {
                     var form = document.getElementById('ha-form');
                     var token = form ? form.querySelector('input[name="csrf_token"]') : null;
                     var fd = new FormData();
@@ -619,7 +628,7 @@
             }
             function aplServerScan(file) {
                 aplStatus('Lese Barcodes aus Bild 3 …');
-                resizeFile(file, 1400).then(function (blob) {
+                scanBlob(file).then(function (blob) {
                     var form = document.getElementById('ha-form');
                     var token = form ? form.querySelector('input[name="csrf_token"]') : null;
                     var fd = new FormData();

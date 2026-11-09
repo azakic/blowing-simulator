@@ -36,7 +36,9 @@ type ontCodeInfo struct {
 }
 
 const (
-	ontDecodeMaxSide = 2400
+	// 3000 px zadržava dovoljno piksela po modulu i za Code 39 nalepnice
+	// snimljene telefonom; 2400 je bilo premalo za sitne barkodove.
+	ontDecodeMaxSide = 3000
 	ontDecodeBands   = 8
 	// ontDecodeMaxPixels ograničava dekodiranje ogromnih telefonskih slika.
 	// JPEG dekoder alocira celu sliku pre skaliranja, pa 48 MP+ može da
@@ -93,9 +95,21 @@ func decodeONTImage(data []byte) ([]ontCode, error) {
 		return nil, err
 	}
 	img = scaleImageDown(img, ontDecodeMaxSide)
-	codes := decodeONTBitmap(img)
-	if len(codes) == 0 {
-		codes = decodeONTBitmap(rotateImage90(img))
+	try := func(i image.Image) []ontCode {
+		codes := decodeONTBitmap(i)
+		if len(codes) == 0 {
+			// Global histogram je bolji za ravnomerno osvetljene nalepnice na
+			// fotografijama sa senkama; hibridni binarizer promaši kod.
+			codes = decodeONTGlobalBitmap(i)
+		}
+		return codes
+	}
+	// JPEG dekoder ne primenjuje EXIF orijentaciju, pa original može biti
+	// rotiran; probaj sva četiri položaja pre nego što odustanemo.
+	codes := try(img)
+	for i := 0; i < 3 && len(codes) == 0; i++ {
+		img = rotateImage90(img)
+		codes = try(img)
 	}
 	return codes, nil
 }
@@ -105,6 +119,19 @@ func decodeONTBitmap(img image.Image) []ontCode {
 	if err != nil {
 		return nil
 	}
+	return decodeONTBinaryBitmap(bitmap)
+}
+
+func decodeONTGlobalBitmap(img image.Image) []ontCode {
+	src := gozxing.NewLuminanceSourceFromImage(img)
+	bitmap, err := gozxing.NewBinaryBitmap(gozxing.NewGlobalHistgramBinarizer(src))
+	if err != nil {
+		return nil
+	}
+	return decodeONTBinaryBitmap(bitmap)
+}
+
+func decodeONTBinaryBitmap(bitmap *gozxing.BinaryBitmap) []ontCode {
 	w, h := bitmap.GetWidth(), bitmap.GetHeight()
 	hints := map[gozxing.DecodeHintType]interface{}{
 		gozxing.DecodeHintType_TRY_HARDER: true,
