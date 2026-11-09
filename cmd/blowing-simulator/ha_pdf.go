@@ -397,29 +397,24 @@ func findPhoto(photos []haPhotoRow, kind string) *haPhotoRow {
 }
 
 // photoStampText vraća tekst koji se ispisuje preko fotografije u PDF-u:
-// GPS + vreme ako postoje, inače adresa gradilišta.
+// adresa gradilišta + vreme snimanja. Koordinate se koriste samo ako HaP
+// nema adresu (adresa je inače obavezna).
 func photoStampText(p *haPhotoRow, h haRow) string {
 	var parts []string
-	if p.Lat.Valid && p.Lon.Valid {
-		parts = append(parts, fmt.Sprintf("%.6f, %.6f", p.Lat.Float64, p.Lon.Float64))
-		if p.Altitude.Valid && p.Altitude.Float64 != 0 {
-			parts = append(parts, fmt.Sprintf("%.0f m", p.Altitude.Float64))
+	addr := strings.TrimSpace(h.Address)
+	if city := strings.TrimSpace(h.City); city != "" {
+		if addr != "" {
+			addr += ", "
 		}
+		addr += city
+	}
+	if addr != "" {
+		parts = append(parts, addr)
+	} else if p.Lat.Valid && p.Lon.Valid {
+		parts = append(parts, fmt.Sprintf("%.6f, %.6f", p.Lat.Float64, p.Lon.Float64))
 	}
 	if p.TakenAt.Valid && p.TakenAt.String != "" {
 		parts = append(parts, p.TakenAt.String)
-	}
-	if len(parts) == 0 {
-		addr := strings.TrimSpace(h.Address)
-		if h.City != "" {
-			if addr != "" {
-				addr += ", "
-			}
-			addr += h.City
-		}
-		if addr != "" {
-			parts = append(parts, addr)
-		}
 	}
 	return strings.Join(parts, " · ")
 }

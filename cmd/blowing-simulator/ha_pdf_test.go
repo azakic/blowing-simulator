@@ -191,8 +191,15 @@ func TestPhotoStampText(t *testing.T) {
 	p.Lon.Valid, p.Lon.Float64 = true, 7.3684
 	p.TakenAt.Valid, p.TakenAt.String = true, "2026-07-21 17:49"
 	got := photoStampText(p, h)
-	if !strings.Contains(got, "51.361800") || !strings.Contains(got, "7.368400") || !strings.Contains(got, "2026-07-21 17:49") {
+	if !strings.Contains(got, "An der Borg 25, Volmarstein") || !strings.Contains(got, "2026-07-21 17:49") {
 		t.Fatalf("sa GPS-om: %q", got)
+	}
+	if strings.Contains(got, "51.361800") {
+		t.Fatalf("na slici ne smeju biti koordinate kad postoji adresa: %q", got)
+	}
+	// Bez adrese (ne bi trebalo da se desi) ostaju koordinate.
+	if got := photoStampText(p, haRow{}); !strings.Contains(got, "51.361800") {
+		t.Fatalf("bez adrese: %q", got)
 	}
 }
 
@@ -226,9 +233,12 @@ func TestBuildHAPDFStampsLocationOnPhoto(t *testing.T) {
 		t.Fatalf("pdftotext: %v", err)
 	}
 	text := string(out)
-	for _, want := range []string{"51.361800, 7.368400", "2026-07-21 17:49"} {
+	for _, want := range []string{"An der Borg 25, Volmarstein", "2026-07-21 17:49"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("u PDF-u nema %q", want)
 		}
+	}
+	if strings.Contains(text, "51.361800") {
+		t.Errorf("koordinate ne treba da budu ispisane preko slike")
 	}
 }
