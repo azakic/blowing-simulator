@@ -70,7 +70,7 @@
         .hap-check .ok { color: var(--green); font-weight: 800; }
         .hap-check .no { color: var(--red); font-weight: 800; }
 
-        .hap-photos { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
+        .hap-photos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
         .hap-photo {
             margin: 0; border: 1px solid var(--line); border-radius: 14px;
             overflow: hidden; background: #fff; display: flex; flex-direction: column;
@@ -102,6 +102,7 @@
         .hap-empty { margin: 0; color: var(--muted); font-size: .85rem; }
 
         @media (max-width: 900px) { .hap-grid-2 { grid-template-columns: 1fr; } }
+        @media (max-width: 700px) { .hap-photos { grid-template-columns: 1fr; } }
         @media print {
             .topbar, .hap-actions, .back { display: none !important; }
             body { background: #fff; }
@@ -250,7 +251,7 @@
         </div>
 
         <section class="hap-card" style="margin-bottom:1rem;">
-            <h2>Fotos · {{len .Photos}} hochgeladen</h2>
+            <h2>Fotos · {{.PhotoUploaded}} / {{len .PhotoKinds}}</h2>
             <div class="hap-photos">
                 {{range .PhotoKinds}}
                 {{$p := index $.PhotoByKind .Key}}

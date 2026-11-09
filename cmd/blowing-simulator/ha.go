@@ -818,8 +818,15 @@ func HAViewHandler(w http.ResponseWriter, r *http.Request) {
 	if h.RoehrchenColor != "" {
 		roehrOpt = findHaColor(haRoehrchenColors, h.RoehrchenColor)
 	}
+	uploaded := 0
+	for _, k := range haSlotPhotoKinds {
+		if _, ok := byKind[k.Key]; ok {
+			uploaded++
+		}
+	}
 	_ = tmpl.Execute(w, map[string]any{
 		"HA":                h,
+		"PhotoUploaded":     uploaded,
 		"OrgName":           orgName,
 		"RohrColorOpt":      rohrOpt,
 		"RoehrchenColorOpt": roehrOpt,
