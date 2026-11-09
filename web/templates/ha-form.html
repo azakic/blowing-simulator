@@ -172,6 +172,31 @@
             </section>
 
             <section class="panel">
+                <div class="panel-head"><h2>ONT Geräte</h2><span class="hint">SN + Foto der Nalepnica; mehrere ONT möglich</span></div>
+                <div class="panel-body">
+                    <div id="ont-rows">
+                        {{range $i, $o := .ONTs}}
+                        <div class="ont-row" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:.6rem;">
+                            <input type="hidden" name="ont_id_{{$i}}" value="{{$o.ID}}">
+                            <input type="hidden" name="ont_codes_{{$i}}" value="{{$o.Codes}}">
+                            <label class="field" style="flex:1 1 180px;"><span>SN</span>
+                                <input type="text" name="ont_sn_{{$i}}" value="{{$o.SN}}" placeholder="z. B. 48575443…">
+                            </label>
+                            <label class="field" style="flex:1 1 220px;"><span>Foto (Aufkleber)</span>
+                                <input type="file" name="ont_photo_{{$i}}" accept="image/jpeg,image/png" capture="environment">
+                            </label>
+                            {{if $o.ObjectKey}}<a class="btn btn-ghost btn-small" href="/ha/ont?id={{$o.ID}}" target="_blank" rel="noopener">Photo</a>{{end}}
+                            <button type="button" class="btn btn-danger btn-small" onclick="this.closest('.ont-row').remove()">Remove</button>
+                            <div class="ont-codes" style="display:none;flex-wrap:wrap;gap:.35rem;flex:1 1 100%;"></div>
+                        </div>
+                        {{end}}
+                    </div>
+                    <button type="button" class="btn btn-ghost" id="add-ont">+ Add ONT</button>
+                    <p class="muted" style="margin:.6rem 0 0;font-size:.78rem;">Maximum 20 ONTs per HaP; empty rows are ignored. Removing a row deletes its photo on save.</p>
+                </div>
+            </section>
+
+            <section class="panel">
                 <div class="panel-head"><h2>Fotos &amp; Unterschriften</h2><span class="hint">GPS se čita iz EXIF-a; ako ga nema, koristi se lokacija telefona</span></div>
                 <div class="panel-body">
                     <div class="filters" style="margin:0;border:0;padding:0;background:transparent;">
@@ -277,6 +302,198 @@
             if (nvt.value.trim() || (address.value || '').trim().length >= 3) {
                 lookup();
             }
+        })();
+    </script>
+    <script>
+        // Više ONT uređaja + automatsko čitanje barkodova sa nalepnice.
+        (function () {
+            var rows = document.getElementById('ont-rows');
+            var add = document.getElementById('add-ont');
+            if (!rows || !add) { return; }
+            var next = {{len .ONTs}};
+
+            function codesInput(row) { return row.querySelector('input[name^="ont_codes_"]'); }
+            function snInput(row) { return row.querySelector('input[name^="ont_sn_"]'); }
+            function codesBox(row) { return row.querySelector('.ont-codes'); }
+
+            function parseCodes(row) {
+                var el = codesInput(row);
+                if (!el) { return []; }
+                try { return JSON.parse(el.value || '[]') || []; } catch (e) { return []; }
+            }
+
+            function isHex12(v) {
+                if (v.length !== 12) { return false; }
+                for (var i = 0; i < v.length; i++) {
+                    var c = v.charAt(i);
+                    if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F'))) { return false; }
+                }
+                return true;
+            }
+            function isPN(v) { return v.length === 12 && v.indexOf('3FE') === 0 && isHex12(v); }
+            function hasSNPrefix(v) {
+                var p = ['ALCL', 'ZTEG', 'HWTC', 'FHTT', 'GNXS', '48575443'];
+                for (var i = 0; i < p.length; i++) { if (v.indexOf(p[i]) === 0) { return true; } }
+                return false;
+            }
+            function suggestSN(values) {
+                var i, v;
+                for (i = 0; i < values.length; i++) {
+                    v = String(values[i] || '').toUpperCase();
+                    if (hasSNPrefix(v)) { return v; }
+                }
+                var best = '', bestScore = -1;
+                for (i = 0; i < values.length; i++) {
+                    v = String(values[i] || '').toUpperCase();
+                    if (!v || isHex12(v) || isPN(v)) { continue; }
+                    var score = 0, digit = false, letter = false;
+                    for (var j = 0; j < v.length; j++) {
+                        var c = v.charAt(j);
+                        if (c >= '0' && c <= '9') { digit = true; }
+                        else if (c >= 'A' && c <= 'Z') { letter = true; }
+                    }
+                    if (digit && letter) { score += 2; }
+                    if (v.length >= 10 && v.length <= 16) { score += 2; }
+                    if (v.length >= 8 && v.length <= 24) { score += 1; }
+                    if (score > bestScore) { best = v; bestScore = score; }
+                }
+                return best;
+            }
+
+            function renderCodes(row) {
+                var box = codesBox(row);
+                if (!box) { return; }
+                var codes = parseCodes(row);
+                var sn = snInput(row);
+                var current = sn ? String(sn.value || '').toUpperCase() : '';
+                box.innerHTML = '';
+                if (!codes.length) { box.style.display = 'none'; return; }
+                box.style.display = 'flex';
+                for (var i = 0; i < codes.length; i++) {
+                    var value = String(codes[i] && codes[i].value ? codes[i].value : codes[i] || '').toUpperCase();
+                    if (!value) { continue; }
+                    var b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'btn btn-ghost btn-small' + (value === current ? ' btn-primary' : '');
+                    b.textContent = value;
+                    b.setAttribute('data-code', value);
+                    box.appendChild(b);
+                }
+            }
+
+            function setCodes(row, codes, suggested) {
+                var input = codesInput(row);
+                var norm = [];
+                for (var i = 0; i < (codes || []).length; i++) {
+                    var c = codes[i];
+                    var v = String(c && c.value ? c.value : c || '').toUpperCase();
+                    if (v) { norm.push({ value: v, format: (c && c.format) || '' }); }
+                }
+                if (input) { input.value = norm.length ? JSON.stringify(norm) : ''; }
+                var sn = snInput(row);
+                if (sn && !String(sn.value || '').trim()) {
+                    sn.value = suggested || suggestSN(norm.map(function (x) { return x.value; }));
+                }
+                renderCodes(row);
+            }
+
+            function resizeFile(file, max) {
+                return new Promise(function (resolve, reject) {
+                    var url = URL.createObjectURL(file);
+                    var img = new Image();
+                    img.onload = function () {
+                        var w = img.naturalWidth, h = img.naturalHeight;
+                        var scale = Math.min(1, max / Math.max(w, h));
+                        var canvas = document.createElement('canvas');
+                        canvas.width = Math.max(1, Math.round(w * scale));
+                        canvas.height = Math.max(1, Math.round(h * scale));
+                        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                        URL.revokeObjectURL(url);
+                        canvas.toBlob(function (blob) { blob ? resolve(blob) : reject(); }, 'image/jpeg', 0.9);
+                    };
+                    img.onerror = function () { URL.revokeObjectURL(url); reject(); };
+                    img.src = url;
+                });
+            }
+
+            function serverScan(row, file) {
+                resizeFile(file, 1400).then(function (blob) {
+                    var form = document.getElementById('ha-form');
+                    var token = form ? form.querySelector('input[name="csrf_token"]') : null;
+                    var fd = new FormData();
+                    fd.append('csrf_token', token ? token.value : '');
+                    fd.append('file', blob, 'scan.jpg');
+                    return fetch('/ha/ont/scan', { method: 'POST', body: fd, credentials: 'same-origin' })
+                        .then(function (r) { return r.ok ? r.json() : null; })
+                        .then(function (d) {
+                            if (d && d.codes && d.codes.length) { setCodes(row, d.codes, d.sn); }
+                        });
+                }).catch(function () {});
+            }
+
+            function scanFile(row, file) {
+                if (!('BarcodeDetector' in window)) { serverScan(row, file); return; }
+                createImageBitmap(file).then(function (bitmap) {
+                    var detector = null;
+                    try {
+                        detector = new BarcodeDetector({ formats: ['code_128', 'code_39', 'code_93', 'itf', 'codabar', 'ean_13', 'ean_8', 'qr_code', 'data_matrix', 'aztec'] });
+                    } catch (e) {
+                        try { detector = new BarcodeDetector(); } catch (e2) { detector = null; }
+                    }
+                    if (!detector) { serverScan(row, file); return; }
+                    detector.detect(bitmap).then(function (found) {
+                        if (found && found.length) {
+                            var values = [], codes = [];
+                            for (var i = 0; i < found.length; i++) {
+                                values.push(found[i].rawValue);
+                                codes.push({ value: found[i].rawValue, format: found[i].format });
+                            }
+                            setCodes(row, codes, suggestSN(values));
+                        } else {
+                            serverScan(row, file);
+                        }
+                    }).catch(function () { serverScan(row, file); });
+                }).catch(function () { serverScan(row, file); });
+            }
+
+            add.addEventListener('click', function () {
+                var i = next++;
+                var row = document.createElement('div');
+                row.className = 'ont-row';
+                row.style.cssText = 'display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:.6rem;';
+                row.innerHTML =
+                    '<input type="hidden" name="ont_id_' + i + '" value="0">' +
+                    '<input type="hidden" name="ont_codes_' + i + '" value="">' +
+                    '<label class="field" style="flex:1 1 180px;"><span>SN</span><input type="text" name="ont_sn_' + i + '"></label>' +
+                    '<label class="field" style="flex:1 1 220px;"><span>Foto (Aufkleber)</span><input type="file" name="ont_photo_' + i + '" accept="image/jpeg,image/png" capture="environment"></label>' +
+                    '<div class="ont-codes" style="display:none;flex-wrap:wrap;gap:.35rem;flex:1 1 100%;"></div>' +
+                    '<button type="button" class="btn btn-danger btn-small" onclick="this.closest(\'.ont-row\').remove()">Remove</button>';
+                rows.appendChild(row);
+            });
+
+            rows.addEventListener('change', function (e) {
+                if (e.target && e.target.type === 'file') {
+                    var row = e.target.closest('.ont-row');
+                    var file = e.target.files && e.target.files[0];
+                    if (row && file) { scanFile(row, file); }
+                }
+            });
+            rows.addEventListener('click', function (e) {
+                var chip = e.target;
+                if (!chip || !chip.getAttribute || !chip.getAttribute('data-code')) { return; }
+                var row = chip.closest('.ont-row');
+                var sn = row ? snInput(row) : null;
+                if (sn) { sn.value = chip.getAttribute('data-code'); renderCodes(row); }
+            });
+            rows.addEventListener('input', function (e) {
+                if (e.target && e.target.name && e.target.name.indexOf('ont_sn_') === 0) {
+                    var row = e.target.closest('.ont-row');
+                    if (row) { renderCodes(row); }
+                }
+            });
+
+            var existing = rows.querySelectorAll('.ont-row');
+            for (var k = 0; k < existing.length; k++) { renderCodes(existing[k]); }
         })();
     </script>
 </body>

@@ -26,15 +26,30 @@ import (
 // Forma pokriva sva tekstualna polja, izbor boja vlakana, tri potvrdna polja i
 // devet priloga (4 fotografije, 2 nalepnice, Licht test, 2 potpisa).
 
-// haPhotoKinds su fiksni slotovi; redosled je redosled u PDF-u.
-var haPhotoKinds = []struct {
+type haPhotoKind struct {
 	Key, Label string
-}{
+}
+
+// haPhotoKinds sadrži i stari fiksni ONT slot (migracija + PDF fallback).
+var haPhotoKinds = []haPhotoKind{
 	{"bild1", "Bild 1 — Hausanschluss gesamt"},
 	{"bild2", "Bild 2 — APL offen"},
 	{"bild3", "Bild 3 — APL geschlossen / Aufkleber"},
 	{"bild4", "Bild 4 — Foto ONT"},
 	{"ont_label", "ONT Aufkleber"},
+	{"apl_label", "APL Aufkleber"},
+	{"light_test", "Licht test"},
+	{"sig_monteur", "Unterschrift Monteur"},
+	{"sig_pruefer", "Unterschrift Prüfer"},
+}
+
+// haSlotPhotoKinds su fiksni slotovi koje forma prikazuje i čuva. ONT se sada
+// unosi kroz ha_onts (više uređaja po HaP-u).
+var haSlotPhotoKinds = []haPhotoKind{
+	{"bild1", "Bild 1 — Hausanschluss gesamt"},
+	{"bild2", "Bild 2 — APL offen"},
+	{"bild3", "Bild 3 — APL geschlossen / Aufkleber"},
+	{"bild4", "Bild 4 — Foto ONT"},
 	{"apl_label", "APL Aufkleber"},
 	{"light_test", "Licht test"},
 	{"sig_monteur", "Unterschrift Monteur"},
@@ -366,6 +381,11 @@ func renderHAForm(w http.ResponseWriter, r *http.Request, claims *AuthClaims, h 
 		defDate = time.Now().Format("2006-01-02")
 	}
 
+	var onts []ontRow
+	if h.ID > 0 {
+		onts, _ = listONTs(h.ID)
+	}
+
 	tmpl, err := template.New("ha-form.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/ha-form.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
@@ -376,7 +396,8 @@ func renderHAForm(w http.ResponseWriter, r *http.Request, claims *AuthClaims, h 
 		"Message":        message,
 		"HA":             h,
 		"IsEdit":         isEdit,
-		"PhotoKinds":     haPhotoKinds,
+		"PhotoKinds":     haSlotPhotoKinds,
+		"ONTs":           onts,
 		"FiberColors":    haFiberColors,
 		"Selected":       splitColors(h.FiberColors),
 		"Projects":       projects,
@@ -515,6 +536,7 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 	syncTaskFromHA(taskID)
 
 	saved, failed := saveHAPhotos(r, id)
+	ontSaved, ontFailed := saveONTs(r, id)
 	logUserEvent(claims.UserID, 0, "hap-create", fmt.Sprintf("hap %d", id))
 	msg := "HaP created."
 	if saved > 0 {
@@ -522,6 +544,12 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 	}
 	if failed > 0 {
 		msg += fmt.Sprintf(" %d photo(s) could not be stored.", failed)
+	}
+	if ontSaved > 0 {
+		msg += fmt.Sprintf(" %d ONT(s) saved.", ontSaved)
+	}
+	if ontFailed > 0 {
+		msg += fmt.Sprintf(" %d ONT(s) failed.", ontFailed)
 	}
 	return id, msg
 }
@@ -536,7 +564,7 @@ func nullableID(v int64) any {
 
 // saveHAPhotos čuva sve priloge iz multipart forme.
 func saveHAPhotos(r *http.Request, haID int64) (saved, failed int) {
-	for _, k := range haPhotoKinds {
+	for _, k := range haSlotPhotoKinds {
 		file, header, err := r.FormFile("photo_" + k.Key)
 		if err != nil || file == nil {
 			continue
@@ -640,6 +668,15 @@ func HADeleteHandler(w http.ResponseWriter, r *http.Request) {
 			log.Printf("ha delete object %s: %v", p.ObjectKey, err)
 		}
 	}
+	onts, _ := listONTs(h.ID)
+	for _, o := range onts {
+		if o.ObjectKey == "" {
+			continue
+		}
+		if err := sourceStore.DeleteRaw(r.Context(), o.ObjectKey); err != nil {
+			log.Printf("ha delete ont object %s: %v", o.ObjectKey, err)
+		}
+	}
 	if _, err := db.Exec(`DELETE FROM ha_protocols WHERE id = $1`, h.ID); err != nil {
 		http.Error(w, "Delete failed: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -673,6 +710,7 @@ func HAViewHandler(w http.ResponseWriter, r *http.Request) {
 	for _, p := range photos {
 		byKind[p.Kind] = p
 	}
+	onts, _ := listONTs(h.ID)
 	tmpl, err := template.New("ha-view.html").
 		Funcs(template.FuncMap(csrfTemplateFuncs(r))).
 		Funcs(template.FuncMap{"dateShort": dateShort}).
@@ -685,7 +723,8 @@ func HAViewHandler(w http.ResponseWriter, r *http.Request) {
 		"HA":          h,
 		"Photos":      photos,
 		"PhotoByKind": byKind,
-		"PhotoKinds":  haPhotoKinds,
+		"PhotoKinds":  haSlotPhotoKinds,
+		"ONTs":        onts,
 		"FiberColors": haFiberColors,
 		"Selected":    strings.Split(h.FiberColors, ","),
 		"CanEdit":     canEditHA(r, h),
@@ -745,11 +784,13 @@ func updateHA(r *http.Request, h haRow) string {
 		return "Could not save: " + err.Error()
 	}
 	saved, failed := saveHAPhotos(r, h.ID)
+	ontSaved, ontFailed := saveONTs(r, h.ID)
 	syncTaskFromHA(h.TaskID.Int64)
-	if saved == 0 && failed == 0 {
+	if saved == 0 && failed == 0 && ontSaved == 0 && ontFailed == 0 {
 		return "HaP saved."
 	}
-	return fmt.Sprintf("HaP saved. Photos stored: %d, failed: %d.", saved, failed)
+	return fmt.Sprintf("HaP saved. Photos: %d (failed %d). ONTs: %d (failed %d).",
+		saved, failed, ontSaved, ontFailed)
 }
 
 // HAPhotoHandler servira sliku iz Object Storage-a (uz proveru vidljivosti).
@@ -803,7 +844,17 @@ func HAPDFHandler(w http.ResponseWriter, r *http.Request) {
 			images[p.Kind] = data
 		}
 	}
-	pdf, err := buildHAPDF(h, photos, images)
+	onts, _ := listONTs(h.ID)
+	ontImages := map[int64][]byte{}
+	for _, o := range onts {
+		if o.ObjectKey == "" {
+			continue
+		}
+		if data, _, err := sourceStore.GetRaw(r.Context(), o.ObjectKey); err == nil {
+			ontImages[o.ID] = data
+		}
+	}
+	pdf, err := buildHAPDF(h, photos, images, onts, ontImages)
 	if err != nil {
 		http.Error(w, "PDF error: "+err.Error(), http.StatusInternalServerError)
 		return

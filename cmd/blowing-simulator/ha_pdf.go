@@ -43,7 +43,7 @@ const (
 )
 
 // buildHAPDF generiše obrazac u rasporedu Westnetz obrasca 1.5.1.
-func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte) ([]byte, error) {
+func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte, onts []ontRow, ontImages map[int64][]byte) ([]byte, error) {
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.SetMargins(haMarginX, 10, haMarginX)
 	pdf.SetAutoPageBreak(false, 0)
@@ -248,7 +248,15 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte) ([]byte,
 	pdf.SetFont("Helvetica", "", 7)
 	pdf.SetXY(x0+halfW+2, checkTop+1.2)
 	pdf.CellFormat(halfW-4, 4, tr("ONT Aufkleber:"), "", 0, "L", false, 0, "")
-	drawImageFit(pdf, "ont", images["ont_label"], x0+halfW+2, checkTop+5.5, halfW-4, checkH-7)
+	// Prva ONT nalepnica; ako je nema, koristi se stari fiksni slot.
+	ontImg := images["ont_label"]
+	for _, o := range onts {
+		if d := ontImages[o.ID]; len(d) > 0 {
+			ontImg = d
+			break
+		}
+	}
+	drawImageFit(pdf, "ont", ontImg, x0+halfW+2, checkTop+5.5, halfW-4, checkH-7)
 
 	y = checkTop + checkH
 
@@ -299,6 +307,46 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte) ([]byte,
 	footTop += 5
 	footerRow("Freigabe:", x0+1, 20, "Roland Wehn", x0+22, 70)
 	footerRow("Stand:", x0+150, 14, "22.05.2023", x0+164, 26)
+
+	// --- aneks: svi ONT uređaji (SN + nalepnica) ---
+	if len(onts) > 0 {
+		pdf.AddPage()
+		header := func() {
+			pdf.SetFont("Helvetica", "B", 13)
+			pdf.CellFormat(0, 8, tr("ONT-Geräte / Anhang"), "", 1, "L", false, 0, "")
+			pdf.SetFont("Helvetica", "", 8)
+			pdf.CellFormat(0, 4, tr(fmt.Sprintf("%s · %s", h.Address, h.ProtocolDate)), "", 1, "L", false, 0, "")
+			pdf.Ln(2)
+			pdf.SetFont("Helvetica", "B", 9)
+			pdf.SetFillColor(235, 235, 235)
+			pdf.CellFormat(10, 6, "#", "1", 0, "C", true, 0, "")
+			pdf.CellFormat(75, 6, tr("Seriennummer (SN)"), "1", 0, "L", true, 0, "")
+			pdf.CellFormat(105, 6, tr("Foto der Nalepnica"), "1", 1, "L", true, 0, "")
+			pdf.SetFillColor(255, 255, 255)
+		}
+		header()
+		for i, o := range onts {
+			const rowH = 32.0
+			if pdf.GetY()+rowH > 280 {
+				pdf.AddPage()
+				header()
+			}
+			y := pdf.GetY()
+			pdf.SetFont("Helvetica", "", 9)
+			pdf.CellFormat(10, rowH, fmt.Sprintf("%d", i+1), "1", 0, "C", false, 0, "")
+			xSN := pdf.GetX()
+			pdf.CellFormat(75, rowH, "", "1", 0, "L", false, 0, "")
+			pdf.SetFont("Helvetica", "", 7.5)
+			pdf.SetXY(xSN+1.5, y+2)
+			pdf.MultiCell(72, 4, tr(strings.Join(ontAnnexLines(o), "\n")), "", "L", false)
+			pdf.SetXY(xSN+75, y)
+			x := pdf.GetX()
+			pdf.CellFormat(105, rowH, "", "1", 1, "L", false, 0, "")
+			if data := ontImages[o.ID]; len(data) > 0 {
+				drawImageFit(pdf, fmt.Sprintf("ont-annex-%d", o.ID), data, x+2, y+2, 101, rowH-4)
+			}
+		}
+	}
 
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {

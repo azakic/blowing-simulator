@@ -68,6 +68,35 @@
         </section>
 
         <section class="panel">
+            <div class="panel-head"><h2>ONT-Geräte</h2><span class="hint">{{len .ONTs}} recorded</span></div>
+            <div class="panel-body">
+                {{if .ONTs}}
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr><th>#</th><th>SN</th><th>Foto</th></tr></thead>
+                        <tbody>
+                            {{range .ONTs}}
+                            <tr>
+                                <td data-label="#">{{.Position}}</td>
+                                <td data-label="SN">
+                                    {{if .SN}}{{.SN}}{{else}}<span class="muted">—</span>{{end}}
+                                    {{if .CodeList}}<div style="display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.3rem;">{{range .CodeList}}<span class="pill" style="font-size:.68rem;">{{.Value}}</span>{{end}}</div>{{end}}
+                                </td>
+                                <td data-label="Foto">
+                                    {{if .ObjectKey}}<a href="/ha/ont?id={{.ID}}" target="_blank" rel="noopener"><img src="/ha/ont?id={{.ID}}" alt="ONT {{.SN}}" style="height:64px;border-radius:6px;display:block;"></a>{{else}}<span class="muted">—</span>{{end}}
+                                </td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+                {{else}}
+                <p class="muted" style="margin:0;">No ONTs recorded yet.</p>
+                {{end}}
+            </div>
+        </section>
+
+        <section class="panel">
             <div class="panel-head"><h2>Fotos</h2><span class="hint">{{len .Photos}} uploaded</span></div>
             <div class="panel-body">
                 <div class="tiles" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">

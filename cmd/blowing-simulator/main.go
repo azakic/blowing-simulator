@@ -795,6 +795,10 @@ func main() {
 	if err := ensureHASchema(db); err != nil {
 		log.Fatal("Failed to ensure HA schema:", err)
 	}
+	// Više ONT uređaja po HaP-u (SN + fotografija nalepnice).
+	if err := ensureONTSchema(db); err != nil {
+		log.Fatal("Failed to ensure ONT schema:", err)
+	}
 	// Direktorijum klijenata (Adresse/NVT/Kunde/Telefon/Mobil) za prediktivno
 	// popunjavanje HaP forme; import je dozvoljen samo administratoru.
 	if err := ensureCustomerSchema(db); err != nil {
@@ -859,6 +863,8 @@ func main() {
 	http.HandleFunc("/ha/edit", requireAuth(withCSRF(HAEditHandler), "editor", "partner", "admin"))
 	http.HandleFunc("/ha/view", requireAuth(HAViewHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/ha/photo", requireAuth(HAPhotoHandler, "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/ha/ont", requireAuth(HANTOPhotoHandler, "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/ha/ont/scan", requireAuth(withCSRF(HANTScanHandler), "editor", "partner", "admin"))
 	http.HandleFunc("/ha/pdf", requireAuth(HAPDFHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/ha/delete", requireAuth(withCSRF(HADeleteHandler), "editor", "partner", "admin"))
 	http.HandleFunc("/ha/lookup", requireAuth(HALookupHandler, "viewer", "editor", "partner", "admin"))

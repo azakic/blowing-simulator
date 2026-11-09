@@ -59,7 +59,7 @@ func TestPreviewPDF(t *testing.T) {
 		TakenAt:  sql.NullString{String: "2026-07-21 12:13", Valid: true},
 	}}
 
-	pdf, err := buildHAPDF(h, photos, images)
+	pdf, err := buildHAPDF(h, photos, images, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

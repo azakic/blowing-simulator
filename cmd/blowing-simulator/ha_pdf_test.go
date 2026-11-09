@@ -56,7 +56,7 @@ func TestBuildHAPDFProducesPDF(t *testing.T) {
 	h.Splices.Valid, h.Splices.Int64 = true, 1
 	h.CableLength.Valid, h.CableLength.Float64 = true, 379
 
-	pdf, err := buildHAPDF(h, nil, nil)
+	pdf, err := buildHAPDF(h, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
