@@ -107,6 +107,8 @@ func ensureHASchema(db *sqlx.DB) error {
 		`ALTER TABLE ha_photos ADD COLUMN IF NOT EXISTS ocr_text TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_photos ADD COLUMN IF NOT EXISTS ocr_time TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_photos ADD COLUMN IF NOT EXISTS ocr_at TIMESTAMPTZ`,
+		// Odakle su koordinate: exif | browser | overlay (OCR iz slike).
+		`ALTER TABLE ha_photos ADD COLUMN IF NOT EXISTS geo_source TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_ha_project ON ha_protocols(project_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_ha_org ON ha_protocols(org_id)`,
 		`CREATE TABLE IF NOT EXISTS ha_photos (
@@ -669,12 +671,15 @@ func saveHAPhotos(r *http.Request, haID int64) (saved, failed int, bild3 []byte)
 			continue
 		}
 		// EXIF (koordinate iz kamere) ima prednost; ako ga nema, koristi se
-		// geolokacija koju je pretraživač zabeležio pri uploadu.
+		// geolokacija koju je pretraživač zabeležio pri uploadu. Izvor se
+		// pamti: overlay iz slike sme da prepiše lokaciju uređaja, ali EXIF
+		// samo ako se poklapa (vidi overlayWins).
 		var lat, lon any
+		var geoSource string
 		if info.HasLocation {
-			lat, lon = info.Lat, info.Lon
+			lat, lon, geoSource = info.Lat, info.Lon, "exif"
 		} else if la, lo, ok := parseLatLonText(r.FormValue("geo_" + k.Key)); ok {
-			lat, lon = la, lo
+			lat, lon, geoSource = la, lo, "browser"
 		}
 		var alt, brg, taken any
 		if info.HasLocation && info.Altitude != 0 {
@@ -687,17 +692,18 @@ func saveHAPhotos(r *http.Request, haID int64) (saved, failed int, bild3 []byte)
 			taken = info.TakenAt
 		}
 		if _, err := db.Exec(`INSERT INTO ha_photos
-				(ha_id, kind, object_key, content_type, bytes, lat, lon, altitude_m, bearing_deg, taken_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+				(ha_id, kind, object_key, content_type, bytes, lat, lon, altitude_m, bearing_deg, taken_at, geo_source)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 			ON CONFLICT (ha_id, kind) DO UPDATE SET
 				object_key = EXCLUDED.object_key, content_type = EXCLUDED.content_type,
 				bytes = EXCLUDED.bytes, lat = EXCLUDED.lat, lon = EXCLUDED.lon,
+				geo_source = EXCLUDED.geo_source,
 				altitude_m = EXCLUDED.altitude_m, bearing_deg = EXCLUDED.bearing_deg,
 				taken_at = EXCLUDED.taken_at,
 				-- Zamenjena slika nosi novu lokaciju i vreme: stari OCR i
 				-- adresa više ne važe, pa se resetuju da bi se ponovo izračunali.
 				ocr_text = '', ocr_time = '', ocr_at = NULL, geo_address = ''`,
-			haID, k.Key, key, contentTypeOf(ext), len(data), lat, lon, alt, brg, taken); err != nil {
+			haID, k.Key, key, contentTypeOf(ext), len(data), lat, lon, alt, brg, taken, geoSource); err != nil {
 			log.Printf("ha photo db %s: %v", k.Key, err)
 			failed++
 			continue

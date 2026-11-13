@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"image"
 	"image/png"
 	"log"
+	"math"
 	"os"
 	"os/exec"
 	"regexp"
@@ -54,11 +56,14 @@ func runPhotoOCR(ctx context.Context, haID int64) {
 	defer photoOCRMu.Unlock()
 
 	var photos []struct {
-		ID        int64  `db:"id"`
-		ObjectKey string `db:"object_key"`
+		ID        int64           `db:"id"`
+		ObjectKey string          `db:"object_key"`
+		Lat       sql.NullFloat64 `db:"lat"`
+		Lon       sql.NullFloat64 `db:"lon"`
+		GeoSource string          `db:"geo_source"`
 	}
-	if err := db.SelectContext(ctx, &photos, `SELECT id, object_key FROM ha_photos
-		WHERE ha_id = $1 AND ocr_at IS NULL ORDER BY id LIMIT 10`, haID); err != nil {
+	if err := db.SelectContext(ctx, &photos, `SELECT id, object_key, lat, lon, geo_source
+		FROM ha_photos WHERE ha_id = $1 AND ocr_at IS NULL ORDER BY id LIMIT 10`, haID); err != nil {
 		return
 	}
 	for _, p := range photos {
@@ -79,18 +84,26 @@ func runPhotoOCR(ctx context.Context, haID int64) {
 		}
 		res := ocrPhoto(data)
 		var lat, lon any
-		if res.HasCoords {
-			lat, lon = res.Lat, res.Lon
-		}
 		addr := res.Address
+		overlay := false
 		if res.HasCoords {
-			addr = geocodeCoords(ctx, res.Lat, res.Lon)
+			if overlayWins(p.Lat, p.Lon, p.GeoSource, res.Lat, res.Lon) {
+				overlay = true
+				lat, lon = res.Lat, res.Lon
+				addr = geocodeCoords(ctx, res.Lat, res.Lon)
+			} else {
+				log.Printf("ocr photo %d: overlay %.6f,%.6f je %.0f km od EXIF-a, zadržavam EXIF",
+					p.ID, res.Lat, res.Lon, distanceKm(p.Lat.Float64, p.Lon.Float64, res.Lat, res.Lon))
+			}
 		}
+		// Ako overlay pobeđuje a geokodiranje padne, adresa se prazni da bi je
+		// sweeper izračunao za nove koordinate (stara adresa je sa druge lokacije).
 		if _, err := db.ExecContext(ctx, `UPDATE ha_photos SET
 				ocr_text = $1, ocr_time = $2, ocr_at = NOW(),
 				lat = COALESCE($3, lat), lon = COALESCE($4, lon),
-				geo_address = CASE WHEN $5 <> '' THEN $5 ELSE geo_address END
-			WHERE id = $6`, res.Raw, res.Time, lat, lon, addr, p.ID); err != nil {
+				geo_address = CASE WHEN $5 <> '' THEN $5 WHEN $6 THEN '' ELSE geo_address END,
+				geo_source = CASE WHEN $6 THEN 'overlay' ELSE geo_source END
+			WHERE id = $7`, res.Raw, res.Time, lat, lon, addr, overlay, p.ID); err != nil {
 			log.Printf("ocr photo %d save: %v", p.ID, err)
 		}
 	}
@@ -417,4 +430,36 @@ func sweepPhotos(ctx context.Context) {
 		applyPhotoGeoAddresses(gctx, id)
 		cancel()
 	}
+}
+
+// overlayExifMaxKm je najveće dozvoljeno rastojanje između koordinata ispisanih
+// u slici i EXIF GPS-a. Oba nastaju u trenutku snimanja, pa veći nesklad
+// znači da je OCR pogrešno pročitao broj.
+const overlayExifMaxKm = 5.0
+
+// overlayWins odlučuje da li koordinate iz overlay-a smeju da prepišu već
+// zapisane koordinate.
+//
+// Overlay (Timestamp Camera i sl.) je merodavan za vreme i mesto snimanja, a
+// lokacija uređaja u trenutku uploada često nije (telefon je tada već drugde).
+// Zato overlay uvek pobeđuje lokaciju uređaja, a EXIF samo ako su koordinate
+// blizu.
+func overlayWins(prevLat, prevLon sql.NullFloat64, geoSource string, lat, lon float64) bool {
+	if !prevLat.Valid || !prevLon.Valid {
+		return true
+	}
+	if geoSource != "exif" {
+		return true
+	}
+	return distanceKm(prevLat.Float64, prevLon.Float64, lat, lon) <= overlayExifMaxKm
+}
+
+// distanceKm računa rastojanje po velikom krugu (haversine).
+func distanceKm(lat1, lon1, lat2, lon2 float64) float64 {
+	const earthKm = 6371.0
+	dLat := (lat2 - lat1) * math.Pi / 180
+	dLon := (lon2 - lon1) * math.Pi / 180
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1*math.Pi/180)*math.Cos(lat2*math.Pi/180)*math.Sin(dLon/2)*math.Sin(dLon/2)
+	return 2 * earthKm * math.Asin(math.Sqrt(a))
 }
