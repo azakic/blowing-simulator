@@ -280,25 +280,42 @@
             var btn = document.getElementById('geo-btn');
             var statusEl = document.getElementById('geo-status');
             var form = document.getElementById('ha-form');
+            // Fiks važi 90 s; posle toga se traži nov, da zamena slike na
+            // drugoj lokaciji ne nasledi koordinate prethodne.
+            var FIX_TTL = 90000;
             var current = null;
+            var currentLabel = '';
+            var currentAt = 0;
 
             function setStatus(text) { if (statusEl) { statusEl.textContent = text || ''; } }
+            function slotHidden(kind) { return document.getElementById('geo_' + kind); }
+            function slotHint(kind) { return document.getElementById('hint_' + kind); }
+            function fillSlot(kind, value, label) {
+                var hidden = slotHidden(kind);
+                var hint = slotHint(kind);
+                if (hidden) { hidden.value = value; }
+                if (hint) { hint.textContent = label; }
+            }
             function fillAll(value, label) {
+                inputs.forEach(function (input) { fillSlot(input.dataset.kind, value, label); });
+            }
+            function fillEmpty(value, label) {
                 inputs.forEach(function (input) {
-                    var hidden = document.getElementById('geo_' + input.dataset.kind);
-                    var hint = document.getElementById('hint_' + input.dataset.kind);
-                    if (hidden) { hidden.value = value; }
-                    if (hint) { hint.textContent = label; }
+                    if (!input.files || !input.files.length) { return; }
+                    var hidden = slotHidden(input.dataset.kind);
+                    if (hidden && hidden.value) { return; }
+                    fillSlot(input.dataset.kind, value, label);
                 });
             }
             function neutralHints() {
                 inputs.forEach(function (input) {
-                    var hint = document.getElementById('hint_' + input.dataset.kind);
+                    var hint = slotHint(input.dataset.kind);
                     if (hint && !hint.textContent.trim()) {
-                        hint.textContent = 'GPS: aus EXIF (falls vorhanden).';
+                        hint.textContent = 'GPS: aus EXIF oder Foto-Overlay (OCR), sonst Standort des Geräts.';
                     }
                 });
             }
+            function fresh() { return !!current && (Date.now() - currentAt) < FIX_TTL; }
             function errorText(err) {
                 if (!err) { return 'Standort nicht verfügbar.'; }
                 if (err.code === 1) { return 'Standort verweigert — bitte in den Browser-Einstellungen für diese Seite erlauben.'; }
@@ -306,15 +323,18 @@
                 if (err.code === 3) { return 'Standort-Timeout — bitte erneut versuchen.'; }
                 return 'Standort nicht verfügbar.';
             }
-            function gotPosition(pos, done) {
+            function gotPosition(pos, fill, done) {
                 var v = pos.coords.latitude.toFixed(6) + ', ' + pos.coords.longitude.toFixed(6);
                 current = v;
-                var label = '📍 ' + v + (pos.coords.accuracy ? ' (±' + Math.round(pos.coords.accuracy) + ' m)' : '');
-                fillAll(v, label);
+                currentAt = Date.now();
+                currentLabel = '📍 ' + v + (pos.coords.accuracy ? ' (±' + Math.round(pos.coords.accuracy) + ' m)' : '');
+                if (fill) { fill(v, currentLabel); }
                 setStatus('Standort erfasst.');
                 if (done) { done(); }
             }
-            function request(done, timeout) {
+            // fill(v, label) određuje gde fiks ide: jedno polje, sva polja ili
+            // samo još prazna polja izabranih slika.
+            function request(fill, done, timeout) {
                 if (!navigator.geolocation || !window.isSecureContext) {
                     setStatus('Standort nicht verfügbar — Browser unterstützt keine Geolokation.');
                     neutralHints();
@@ -323,7 +343,7 @@
                 }
                 setStatus('Standort wird ermittelt …');
                 navigator.geolocation.getCurrentPosition(
-                    function (pos) { gotPosition(pos, done); },
+                    function (pos) { gotPosition(pos, fill, done); },
                     function (err) { setStatus(errorText(err)); neutralHints(); if (done) { done(); } },
                     { enableHighAccuracy: true, timeout: timeout || 15000, maximumAge: 0 });
             }
@@ -331,30 +351,41 @@
             inputs.forEach(function (input) {
                 input.addEventListener('change', function () {
                     if (!input.files || !input.files.length) { return; }
-                    if (current) {
-                        var hidden = document.getElementById('geo_' + input.dataset.kind);
-                        var hint = document.getElementById('hint_' + input.dataset.kind);
-                        if (hidden) { hidden.value = current; }
-                        if (hint) { hint.textContent = '📍 ' + current; }
+                    var kind = input.dataset.kind;
+                    if (fresh()) {
+                        fillSlot(kind, current, currentLabel);
                         return;
                     }
-                    request(null, 15000);
+                    // Nova ili zamenjena slika: traži svež fiks (telefon i laptop).
+                    request(function (v, label) { fillSlot(kind, v, label); }, null, 12000);
                 });
             });
             if (btn) {
-                btn.addEventListener('click', function () { current = null; request(null, 15000); });
+                btn.addEventListener('click', function () {
+                    current = null;
+                    currentAt = 0;
+                    request(fillAll, null, 15000);
+                });
             }
-            // Ako lokacija još nije zabeležena, pokušaj je pre slanja forme.
+            // Pre slanja forme popuni samo još prazna polja izabranih slika.
             var submitting = false;
             if (form) {
                 form.addEventListener('submit', function (e) {
-                    if (submitting || current) { return; }
+                    if (submitting) { return; }
+                    var need = false;
+                    inputs.forEach(function (input) {
+                        if (!input.files || !input.files.length) { return; }
+                        var hidden = slotHidden(input.dataset.kind);
+                        if (hidden && !hidden.value) { need = true; }
+                    });
+                    if (!need) { return; }
                     if (!navigator.geolocation || !window.isSecureContext) { return; }
                     e.preventDefault();
                     submitting = true;
                     var finished = false;
                     var finish = function () { if (!finished) { finished = true; form.submit(); } };
-                    request(finish, 5000);
+                    if (fresh()) { fillEmpty(current, currentLabel); finish(); return; }
+                    request(fillEmpty, finish, 5000);
                     setTimeout(finish, 5500);
                 });
             }

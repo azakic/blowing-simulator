@@ -62,9 +62,19 @@ func runPhotoOCR(ctx context.Context, haID int64) {
 		return
 	}
 	for _, p := range photos {
+		// Atomski claim: u klasteru rade dve replike, pa istu fotografiju
+		// obrađuje samo pod koji prvi postavi ocr_at.
+		var claimed int64
+		if err := db.GetContext(ctx, &claimed, `UPDATE ha_photos SET ocr_at = NOW()
+			WHERE id = $1 AND ocr_at IS NULL RETURNING id`, p.ID); err != nil {
+			continue
+		}
 		data, _, err := sourceStore.GetRaw(ctx, p.ObjectKey)
 		if err != nil {
 			log.Printf("ocr photo %d: %v", p.ID, err)
+			// Otključaj, da slika ne ostane trajno bez OCR-a.
+			_, _ = db.ExecContext(ctx, `UPDATE ha_photos SET ocr_at = NULL
+				WHERE id = $1 AND ocr_text = ''`, p.ID)
 			continue
 		}
 		res := ocrPhoto(data)
@@ -84,6 +94,9 @@ func runPhotoOCR(ctx context.Context, haID int64) {
 			log.Printf("ocr photo %d save: %v", p.ID, err)
 		}
 	}
+	// Adrese za koordinate iz overlay-a. Geokoder ide ~1 zahtev/s, ali
+	// keširane koordinate ne troše nijedan zahtev.
+	applyPhotoGeoAddresses(ctx, haID)
 }
 
 // geocodeCoords koristi keš, pa Nominatim; na grešku vraća prazno.
@@ -363,4 +376,45 @@ func parseOCRAddress(text string) string {
 		return base
 	}
 	return ""
+}
+
+// startPhotoSweeper periodično obrađuje fotografije koje su ostale bez OCR-a
+// ili bez adrese: posle restarta poda usred obrade, ili kada je slika zamenjena
+// (tada se ocr_at i geo_address resetuju pri čuvanju HaP-a).
+func startPhotoSweeper() {
+	go func() {
+		for {
+			sweepPhotos(context.Background())
+			time.Sleep(20 * time.Minute)
+		}
+	}()
+}
+
+// sweepPhotos obrađuje najviše nekoliko HaP-ova po ciklusu, da tesseract i
+// Nominatim (limit 1 zahtev/s) ostanu rasterećeni.
+func sweepPhotos(ctx context.Context) {
+	var ocrIDs []int64
+	if err := db.SelectContext(ctx, &ocrIDs, `SELECT DISTINCT ha_id FROM ha_photos
+		WHERE ocr_at IS NULL ORDER BY ha_id LIMIT 5`); err != nil {
+		log.Printf("photo sweeper ocr: %v", err)
+	} else {
+		for _, id := range ocrIDs {
+			octx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+			runPhotoOCR(octx, id)
+			cancel()
+		}
+	}
+
+	var geoIDs []int64
+	if err := db.SelectContext(ctx, &geoIDs, `SELECT DISTINCT ha_id FROM ha_photos
+		WHERE lat IS NOT NULL AND lon IS NOT NULL AND COALESCE(geo_address, '') = ''
+		ORDER BY ha_id LIMIT 5`); err != nil {
+		log.Printf("photo sweeper geo: %v", err)
+		return
+	}
+	for _, id := range geoIDs {
+		gctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		applyPhotoGeoAddresses(gctx, id)
+		cancel()
+	}
 }

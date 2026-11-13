@@ -78,3 +78,51 @@ func TestHAFormRendersRohrAndRoehrchenColors(t *testing.T) {
 		t.Error("Rohrfarbe blau nije označena")
 	}
 }
+
+// Geolokacija po fotografiji: svaki slot ima skriveno polje, a skripta mora
+// da traži svež fiks pri promeni slike (i pri zameni postojeće), jer koordinate
+// zabeležene pri prvom izboru ne važe za kasnije zamenjenu sliku.
+func TestHAFormGeolocationPerPhoto(t *testing.T) {
+	tmpl, err := template.New("ha-form.html").Funcs(template.FuncMap{
+		"csrfToken": func() string { return "" },
+	}).ParseFiles("../../web/templates/ha-form.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, map[string]any{
+		"HA":              haRow{ID: 1},
+		"IsEdit":          true,
+		"PhotoKinds":      haSlotPhotoKinds,
+		"ONTs":            []ontRow{},
+		"FiberColors":     haFiberColors,
+		"RohrColors":      haRohrColors,
+		"RoehrchenColors": haRoehrchenColors,
+		"Selected":        []string{},
+		"Projects":        []projectRow{},
+		"Orgs":            []Org{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, k := range haSlotPhotoKinds {
+		if !strings.Contains(out, `name="geo_`+k.Key+`"`) {
+			t.Errorf("nema skrivenog polja geo_%s", k.Key)
+		}
+		if !strings.Contains(out, `data-kind="`+k.Key+`"`) {
+			t.Errorf("nema data-kind za %s", k.Key)
+		}
+	}
+	for _, want := range []string{
+		`id="geo-btn"`,
+		"standort", // id geo-status se dobija preko getElementById
+		"FIX_TTL",
+		"fillEmpty",
+		"Foto-Overlay (OCR)",
+	} {
+		if !strings.Contains(strings.ToLower(out), strings.ToLower(want)) {
+			t.Errorf("forma ne sadrži %q", want)
+		}
+	}
+}

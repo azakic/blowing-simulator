@@ -799,6 +799,9 @@ func main() {
 	if err := ensureGeocodeSchema(db); err != nil {
 		log.Fatal("Failed to ensure geocode schema:", err)
 	}
+	// Fotografije koje su ostale bez OCR-a ili adrese (restart poda,
+	// zamenjena slika) obrađuju se u pozadini, odmah i periodično.
+	startPhotoSweeper()
 	// Više ONT uređaja po HaP-u (SN + fotografija nalepnice).
 	if err := ensureONTSchema(db); err != nil {
 		log.Fatal("Failed to ensure ONT schema:", err)

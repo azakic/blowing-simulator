@@ -564,7 +564,7 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 	applyPhotoGeoAddresses(geoctx, id)
 	geocancel()
 	go func(haID int64) {
-		octx, ocancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		octx, ocancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer ocancel()
 		runPhotoOCR(octx, haID)
 	}(id)
@@ -693,7 +693,10 @@ func saveHAPhotos(r *http.Request, haID int64) (saved, failed int, bild3 []byte)
 				object_key = EXCLUDED.object_key, content_type = EXCLUDED.content_type,
 				bytes = EXCLUDED.bytes, lat = EXCLUDED.lat, lon = EXCLUDED.lon,
 				altitude_m = EXCLUDED.altitude_m, bearing_deg = EXCLUDED.bearing_deg,
-				taken_at = EXCLUDED.taken_at`,
+				taken_at = EXCLUDED.taken_at,
+				-- Zamenjena slika nosi novu lokaciju i vreme: stari OCR i
+				-- adresa više ne važe, pa se resetuju da bi se ponovo izračunali.
+				ocr_text = '', ocr_time = '', ocr_at = NULL, geo_address = ''`,
 			haID, k.Key, key, contentTypeOf(ext), len(data), lat, lon, alt, brg, taken); err != nil {
 			log.Printf("ha photo db %s: %v", k.Key, err)
 			failed++
@@ -905,7 +908,7 @@ func updateHA(r *http.Request, h haRow) string {
 	applyPhotoGeoAddresses(geoctx, h.ID)
 	geocancel()
 	go func(haID int64) {
-		octx, ocancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		octx, ocancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer ocancel()
 		runPhotoOCR(octx, haID)
 	}(h.ID)
