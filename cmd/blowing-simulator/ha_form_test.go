@@ -48,6 +48,7 @@ func TestHAFormRendersRohrAndRoehrchenColors(t *testing.T) {
 		"HA":              h,
 		"IsEdit":          true,
 		"PhotoKinds":      haSlotPhotoKinds,
+		"PhotosByKind":    map[string]any{},
 		"ONTs":            []ontRow{},
 		"FiberColors":     haFiberColors,
 		"RohrColors":      haRohrColors,
@@ -94,6 +95,7 @@ func TestHAFormGeolocationPerPhoto(t *testing.T) {
 		"HA":              haRow{ID: 1},
 		"IsEdit":          true,
 		"PhotoKinds":      haSlotPhotoKinds,
+		"PhotosByKind":    map[string]any{},
 		"ONTs":            []ontRow{},
 		"FiberColors":     haFiberColors,
 		"RohrColors":      haRohrColors,
@@ -122,6 +124,43 @@ func TestHAFormGeolocationPerPhoto(t *testing.T) {
 		"Foto-Overlay (OCR)",
 	} {
 		if !strings.Contains(strings.ToLower(out), strings.ToLower(want)) {
+			t.Errorf("forma ne sadrži %q", want)
+		}
+	}
+}
+
+// Pri izmeni forma prikazuje već sačuvanu fotografiju po slotu, sa adresom i
+// vremenom — da se vidi šta se zamenjuje.
+func TestHAFormShowsExistingPhoto(t *testing.T) {
+	tmpl, err := template.New("ha-form.html").Funcs(template.FuncMap{
+		"csrfToken": func() string { return "" },
+	}).ParseFiles("../../web/templates/ha-form.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	type formPhoto struct {
+		ID      int64
+		Caption string
+	}
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, map[string]any{
+		"HA":           haRow{ID: 2},
+		"IsEdit":       true,
+		"PhotoKinds":   haSlotPhotoKinds,
+		"PhotosByKind": map[string]*formPhoto{"bild2": {ID: 7, Caption: "Sauerbruchstraße 5 · 06.11.2026 13:37"}},
+		"ONTs":         []ontRow{},
+		"FiberColors":  haFiberColors,
+		"RohrColors":   haRohrColors,
+		"Selected":     []string{},
+		"Projects":     []projectRow{},
+		"Orgs":         []Org{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{`src="/ha/photo?id=7"`, "Sauerbruchstraße 5", "noch kein Foto", `data-kind="bild1"`} {
+		if !strings.Contains(out, want) {
 			t.Errorf("forma ne sadrži %q", want)
 		}
 	}

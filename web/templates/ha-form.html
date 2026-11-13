@@ -7,13 +7,138 @@
     <title>{{if .IsEdit}}Edit HaP #{{.HA.ID}}{{else}}New HaP{{end}} - Wolken-ASM Reports</title>
     <link rel="stylesheet" href="/static/app.css">
 </head>
-<body>
+<body class="hf-body">
     <style>
-        .swatch-row { display:flex; flex-wrap:wrap; gap:.45rem; margin-top:.45rem; }
-        .swatch-row label { position:relative; display:inline-flex; cursor:pointer; }
-        .swatch-row input { position:absolute; opacity:0; width:0; height:0; }
-        .swatch-row .sw { display:inline-block; width:1.1rem; height:1.1rem; border:1px solid #888; border-radius:2px; text-align:center; line-height:1.05rem; font-size:.7rem; color:#555; }
-        .swatch-row input:checked + .sw { outline:2px solid #000; outline-offset:1px; }
+        /* HaP forma — kartice, hero i mobilni save bar (isti jezik kao /ha/view) */
+        .hf-hero {
+            background: linear-gradient(135deg, #0d47a1 0%, #1976d2 55%, #2f8fe0 100%);
+            color: #fff; border-radius: 20px; padding: 1.35rem 1.5rem;
+            display: flex; justify-content: space-between; align-items: flex-start;
+            gap: 1.2rem; flex-wrap: wrap;
+            box-shadow: 0 14px 34px rgba(21, 101, 192, .22); margin-bottom: 1rem;
+        }
+        .hf-kicker { font-size: .68rem; letter-spacing: .14em; text-transform: uppercase; opacity: .82; }
+        .hf-hero h1 { margin: .25rem 0 .3rem; font-size: 1.55rem; line-height: 1.15; }
+        .hf-sub { margin: 0; font-size: .9rem; opacity: .92; max-width: 62ch; }
+        .hf-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .7rem; }
+        .hf-chip {
+            display: inline-flex; align-items: center; gap: .3rem;
+            background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28);
+            color: #fff; text-decoration: none; padding: .22rem .6rem;
+            border-radius: 999px; font-size: .74rem;
+        }
+        a.hf-chip:hover { background: rgba(255,255,255,.28); }
+        .hf-hero-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+        .hf-hero-actions .btn { background: rgba(255,255,255,.14); color: #fff; border: 1px solid rgba(255,255,255,.35); }
+        .hf-hero-actions .btn:hover { background: rgba(255,255,255,.24); }
+        .hf-hero-actions .btn-primary { background: #fff; color: #0d47a1; border-color: #fff; }
+
+        .hf-card {
+            background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+            padding: 1.05rem 1.15rem 1.2rem; box-shadow: 0 2px 10px rgba(15,23,42,.04);
+            margin-bottom: 1rem;
+        }
+        .hf-card > h2 {
+            display: flex; align-items: center; gap: .55rem; margin: 0 0 .95rem;
+            font-size: .74rem; letter-spacing: .09em; text-transform: uppercase; color: var(--muted);
+        }
+        .hf-card > h2 .n {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 1.4rem; height: 1.4rem; border-radius: 50%; flex: 0 0 auto;
+            background: #e8f1fb; color: #145ea8; font-size: .72rem; font-weight: 800; letter-spacing: 0;
+        }
+        .hf-card > h2 .hint {
+            margin-left: auto; font-size: .72rem; letter-spacing: 0;
+            text-transform: none; font-weight: 500; color: var(--muted);
+        }
+
+        .hf-grid { display: grid; gap: .85rem 1rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+        .hf-card .field.wide { grid-column: 1 / -1; }
+        .hf-lbl { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
+
+        .hf-swatches { display: flex; flex-wrap: wrap; gap: .42rem; margin-top: .5rem; }
+        .hf-swatches label { position: relative; display: inline-flex; cursor: pointer; }
+        .hf-swatches input { position: absolute; opacity: 0; width: 0; height: 0; }
+        .hf-swatches .sw {
+            width: 1.95rem; height: 1.95rem; border: 1px solid #b9c4d0; border-radius: 8px;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: .75rem; color: #5b6b7a; background: #f3f5f8;
+        }
+        .hf-swatches input:checked + .sw { outline: 3px solid var(--blue); outline-offset: 2px; }
+        .hf-swatches input:focus-visible + .sw { outline: 3px solid #9cc4ec; outline-offset: 2px; }
+
+        .hf-fibers { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .5rem; }
+        .hf-fiber {
+            display: inline-flex; align-items: center; gap: .4rem; cursor: pointer;
+            border: 1px solid #cfd8e3; border-radius: 999px; padding: .35rem .7rem;
+            font-size: .82rem; background: #fafbfd;
+        }
+        .hf-fiber input { width: auto; margin: 0; accent-color: var(--blue); }
+        .hf-fiber:has(input:checked) { border-color: var(--blue); background: #e8f1fb; }
+        .hf-dot { width: .85rem; height: .85rem; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); display: inline-block; }
+
+        .hf-checks { display: grid; gap: .5rem; margin-top: 1rem; }
+        .hf-check {
+            display: flex; align-items: flex-start; gap: .6rem; cursor: pointer;
+            border: 1px solid var(--line); border-radius: 10px; padding: .55rem .7rem;
+            font-size: .85rem; background: #fbfcfe;
+        }
+        .hf-check input { width: auto; margin-top: .15rem; accent-color: var(--blue); }
+        .hf-check:has(input:checked) { border-color: #b6dbb8; background: #f1f9f2; }
+
+        .hf-photos { display: grid; gap: .8rem; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); margin-top: .8rem; }
+        .hf-photo { margin: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
+        .hf-photo-thumb { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: #eef2f7; }
+        .hf-photo-empty {
+            aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center;
+            background: repeating-linear-gradient(45deg, #f6f8fb, #f6f8fb 10px, #eef2f7 10px, #eef2f7 20px);
+            color: var(--muted); font-size: .78rem;
+        }
+        .hf-photo-body { padding: .6rem .7rem .75rem; display: flex; flex-direction: column; gap: .35rem; }
+        .hf-photo-title { font-size: .78rem; font-weight: 700; }
+        .hf-photo-meta { font-size: .7rem; color: var(--muted); }
+        .hf-photo input[type=file] { font-size: .76rem; max-width: 100%; }
+        .hf-geo-hint { font-size: .7rem; color: var(--muted); }
+        .hf-ontrow { border: 1px solid var(--line); border-radius: 12px; padding: .7rem; background: #fbfcfe; }
+        .hf-apl { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .6rem; }
+        .hf-note {
+            background: #e8f1fb; border: 1px solid #cfe2f7; color: #145ea8;
+            border-radius: 12px; padding: .7rem .9rem; font-size: .85rem; margin: 0 0 1rem;
+        }
+        .hf-savebar { display: none; }
+        .hf-desktop-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1.2rem 0 2rem; }
+
+        @media (max-width: 760px) {
+            body.hf-body { padding-bottom: 5.4rem; }
+            .hf-hero { padding: 1.1rem; border-radius: 16px; }
+            .hf-hero h1 { font-size: 1.3rem; }
+            .hf-hero-actions { display: none; }
+            .hf-card { padding: .85rem .85rem 1rem; border-radius: 14px; }
+            .hf-card > h2 { flex-wrap: wrap; }
+            .hf-card > h2 .hint { margin-left: 0; flex-basis: 100%; }
+            .hf-grid { grid-template-columns: 1fr; }
+            .hf-photos { grid-template-columns: 1fr 1fr; }
+            .hf-desktop-actions { display: none; }
+            .hf-savebar {
+                display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+                gap: .5rem; padding: .7rem .8rem calc(.7rem + env(safe-area-inset-bottom));
+                background: rgba(255,255,255,.97); border-top: 1px solid var(--line);
+                box-shadow: 0 -6px 20px rgba(15,23,42,.08); backdrop-filter: blur(6px);
+            }
+            .hf-savebar .btn { flex: 1; padding: .8rem 1rem; font-size: .95rem; }
+            /* iOS: 16px polja sprečavaju automatski zoom pri fokusu. */
+            .hf-card input, .hf-card select { font-size: 16px; }
+            .hf-card input[type=file] { font-size: .82rem; }
+        }
+        @media (max-width: 420px) { .hf-photos { grid-template-columns: 1fr; } }
+
+        @media print {
+            .hf-hero-actions, .hf-savebar, .hf-desktop-actions, .back, .topbar { display: none !important; }
+            body { background: #fff; }
+            .hf-hero { background: #fff !important; color: #000; box-shadow: none; border: 1px solid #000; }
+            .hf-chip { color: #000; border-color: #000; background: #fff; }
+            .hf-card { box-shadow: none; break-inside: avoid; }
+        }
     </style>
     <header class="topbar">
         <a class="brand" href="/">Wolken-ASM Reports</a>
@@ -35,15 +160,26 @@
     <main class="page">
         <a class="back" href="{{if .IsEdit}}/ha/view?id={{.HA.ID}}{{else}}/ha{{end}}">← Back</a>
 
-        <div class="head">
+        <div class="hf-hero">
             <div>
-                <h1>{{if .IsEdit}}Edit HaP #{{.HA.ID}}{{else}}New HA protocol{{end}}</h1>
-                <p class="sub">Hausanschlussprotokoll (Westnetz 1.5.1) — fill everything you have; photos are optional but expected in the field.</p>
-                {{if .HA.TaskID.Valid}}<p class="sub">Linked to <a class="link" href="/tasks/view?id={{.HA.TaskID.Int64}}">task #{{.HA.TaskID.Int64}}</a> — the task stays "in progress" until "Die Arbeiten wurden vollständig abgeschlossen" is checked.</p>{{end}}
+                <div class="hf-kicker">Hausanschlussprotokoll · Westnetz 1.5.1</div>
+                <h1>{{if .IsEdit}}HaP #{{.HA.ID}} bearbeiten{{else}}Neues HA-Protokoll{{end}}</h1>
+                <p class="hf-sub">{{if .HA.Address}}{{.HA.Address}}{{if .HA.City}}, {{.HA.City}}{{end}}{{else}}Alles ausfüllen, was vorliegt — Fotos sind optional, im Feld aber erwartet.{{end}}</p>
+                <div class="hf-chips">
+                    <span class="hf-chip">📅 {{.DefaultDateHuman}}</span>
+                    {{if .DefaultMonteur}}<span class="hf-chip">👷 {{.DefaultMonteur}}</span>{{end}}
+                    {{if .HA.ProjectNumber}}<span class="hf-chip">#{{.HA.ProjectNumber}}</span>{{end}}
+                    {{if .HA.TaskID.Valid}}<a class="hf-chip" href="/tasks/view?id={{.HA.TaskID.Int64}}">Aufgabe #{{.HA.TaskID.Int64}} →</a>{{end}}
+                </div>
+            </div>
+            <div class="hf-hero-actions">
+                <button class="btn btn-primary" type="submit" form="ha-form">{{if .IsEdit}}Speichern{{else}}HaP anlegen{{end}}</button>
+                <a class="btn" href="{{if .IsEdit}}/ha/view?id={{.HA.ID}}{{else}}/ha{{end}}">Abbrechen</a>
             </div>
         </div>
 
-        {{if .Message}}<p class="note">{{.Message}}</p>{{end}}
+        {{if .HA.TaskID.Valid}}<p class="hf-note">Der verknüpfte Auftrag bleibt „in progress“, bis „Die Arbeiten wurden vollständig abgeschlossen“ angehakt ist.</p>{{end}}
+        {{if .Message}}<p class="msg">{{.Message}}</p>{{end}}
 
         <form method="POST" enctype="multipart/form-data"
               action="{{if .IsEdit}}/ha/edit?id={{.HA.ID}}{{else}}/ha/new{{end}}"
@@ -52,224 +188,246 @@
             {{if .IsEdit}}<input type="hidden" name="id" value="{{.HA.ID}}">{{end}}
             {{if .HA.TaskID.Valid}}<input type="hidden" name="task_id" value="{{.HA.TaskID.Int64}}">{{end}}
 
-            <section class="panel">
-                <div class="panel-head"><h2>Auftragnehmer / Anschluss / Anschlussnehmer</h2></div>
-                <div class="panel-body">
-                    <div class="filters" style="margin:0;border:0;padding:0;background:transparent;">
-                        <label class="field"><span>Firma (Auftragnehmer)</span>
-                            <input type="text" name="auftragnehmer" value="{{if .HA.Auftragnehmer}}{{.HA.Auftragnehmer}}{{else}}{{.DefaultFirma}}{{end}}">
-                        </label>
-                        <label class="field"><span>Adresse *</span>
-                            <input type="text" name="address" required value="{{.HA.Address}}" placeholder="An der Borg 25">
-                        </label>
-                        <label class="field"><span>NVT</span>
-                            <input type="text" name="nvt" id="ha-nvt" value="{{.HA.NVT}}" placeholder="NVT 1V2200">
-                        </label>
-                        <p id="ha-match" class="note" style="display:none;flex:1 1 100%;margin:0;"></p>
-                        <label class="field"><span>Ort</span>
-                            <input type="text" name="city" value="{{.HA.City}}" placeholder="Volmarstein">
-                        </label>
-                        <label class="field"><span>Bauabschnitt</span>
-                            <input type="text" name="bauabschnitt" value="{{.HA.Bauabschnitt}}">
-                        </label>
-                        <label class="field"><span>Nachname (Anschlussnehmer)</span>
-                            <input type="text" name="client_last_name" value="{{.HA.ClientLastName}}">
-                        </label>
-                        <label class="field"><span>Name</span>
-                            <input type="text" name="client_first_name" value="{{.HA.ClientFirstName}}">
-                        </label>
-                        <label class="field"><span>Telefon</span>
-                            <input type="tel" name="client_phone" value="{{.HA.ClientPhone}}">
-                        </label>
-                        <label class="field"><span>Mobil</span>
-                            <input type="tel" name="client_mobile" value="{{.HA.ClientMobile}}">
-                        </label>
-                        <label class="field"><span>Wohneinheiten (WE)</span>
-                            <input type="number" name="units" min="0" max="999" value="{{if .HA.Units.Valid}}{{.HA.Units.Int64}}{{end}}">
-                        </label>
-                        <label class="field"><span>Datum</span>
-                            <input type="date" name="protocol_date" value="{{.DefaultDate}}">
-                        </label>
-                        <label class="field"><span>Monteur</span>
-                            <input type="text" name="monteur" value="{{if .HA.Monteur}}{{.HA.Monteur}}{{else}}{{.DefaultMonteur}}{{end}}">
-                        </label>
-                        <label class="field"><span>Prüfer</span>
-                            <input type="text" name="pruefer" value="{{.HA.Pruefer}}">
-                        </label>
-                        <label class="field"><span>Projektnummer</span>
-                            <input type="text" name="project_number" value="{{.HA.ProjectNumber}}">
-                        </label>
-                        <label class="field"><span>Project (link)</span>
-                            <select name="project_id">
-                                <option value="">—</option>
-                                {{range .Projects}}<option value="{{.ID}}" {{if and $.HA.ProjectID.Valid (eq $.HA.ProjectID.Int64 .ID)}}selected{{end}}>{{.Number}}</option>{{end}}
-                            </select>
-                        </label>
-                        {{if .IsStaff}}
-                        <label class="field"><span>Organisation</span>
-                            <select name="org_id">
-                                <option value="">—</option>
-                                {{range .Orgs}}<option value="{{.ID}}" {{if and $.HA.OrgID.Valid (eq $.HA.OrgID.Int64 .ID)}}selected{{end}}>{{.Name}}</option>{{end}}
-                            </select>
-                        </label>
-                        {{end}}
-                    </div>
+            <section class="hf-card">
+                <h2><span class="n">1</span> Objekt &amp; Anschluss</h2>
+                <div class="hf-grid">
+                    <label class="field wide"><span>Adresse *</span>
+                        <input type="text" name="address" required value="{{.HA.Address}}" placeholder="An der Borg 25" autocomplete="street-address">
+                    </label>
+                    <label class="field"><span>Ort</span>
+                        <input type="text" name="city" value="{{.HA.City}}" placeholder="Volmarstein" autocomplete="address-level2">
+                    </label>
+                    <label class="field"><span>Bauabschnitt</span>
+                        <input type="text" name="bauabschnitt" value="{{.HA.Bauabschnitt}}">
+                    </label>
+                    <label class="field"><span>Wohneinheiten (WE)</span>
+                        <input type="number" inputmode="numeric" name="units" min="0" max="999" value="{{if .HA.Units.Valid}}{{.HA.Units.Int64}}{{end}}">
+                    </label>
+                    <label class="field"><span>NVT</span>
+                        <input type="text" name="nvt" id="ha-nvt" value="{{.HA.NVT}}" placeholder="NVT 1V2200">
+                    </label>
+                </div>
+                <p id="ha-match" class="note" style="display:none;margin:.7rem 0 0;"></p>
+            </section>
+
+            <section class="hf-card">
+                <h2><span class="n">2</span> Anschlussnehmer</h2>
+                <div class="hf-grid">
+                    <label class="field"><span>Nachname</span>
+                        <input type="text" name="client_last_name" value="{{.HA.ClientLastName}}" autocomplete="family-name">
+                    </label>
+                    <label class="field"><span>Name</span>
+                        <input type="text" name="client_first_name" value="{{.HA.ClientFirstName}}" autocomplete="given-name">
+                    </label>
+                    <label class="field"><span>Telefon</span>
+                        <input type="tel" inputmode="tel" name="client_phone" value="{{.HA.ClientPhone}}" autocomplete="tel">
+                    </label>
+                    <label class="field"><span>Mobil</span>
+                        <input type="tel" inputmode="tel" name="client_mobile" value="{{.HA.ClientMobile}}">
+                    </label>
                 </div>
             </section>
 
-            <section class="panel">
-                <div class="panel-head"><h2>Technik</h2><span class="hint">GVS, Kasette, Splitter, Kabel</span></div>
-                <div class="panel-body">
-                    <div class="filters" style="margin:0;border:0;padding:0;background:transparent;">
-                        <label class="field"><span>Zugehöriger GVS</span>
-                            <input type="text" name="gvs" value="{{.HA.GVS}}" placeholder="N-1.31">
-                        </label>
-                        <label class="field"><span>Rohr (1–4)</span>
-                            <input type="number" name="rohr" min="1" max="4" value="{{if .HA.Rohr.Valid}}{{.HA.Rohr.Int64}}{{end}}">
-                        </label>
-                        <label class="field"><span>Kasette B-Seite</span>
-                            <input type="text" name="kassette_b" value="{{.HA.KassetteB}}" placeholder="R38">
-                        </label>
-                        <label class="field"><span>Splitter (MUX) Nummer</span>
-                            <input type="text" name="mux_number" value="{{.HA.MuxNumber}}">
-                        </label>
-                        <label class="field"><span>Splitter (MUX) Fasern</span>
-                            <input type="text" name="mux_fibers" value="{{.HA.MuxFibers}}">
-                        </label>
-                        <label class="field"><span>Spleiße (Stück)</span>
-                            <input type="number" name="splices" min="0" value="{{if .HA.Splices.Valid}}{{.HA.Splices.Int64}}{{end}}">
-                        </label>
-                        <label class="field"><span>GF Kabel Charge</span>
-                            <input type="text" name="cable_charge" value="{{.HA.CableCharge}}">
-                        </label>
-                        <label class="field"><span>GF Kabel Länge (m)</span>
-                            <input type="number" step="0.1" min="0" name="cable_length_m" value="{{if .HA.CableLength.Valid}}{{.HA.CableLength.Float64}}{{end}}">
-                        </label>
-                    </div>
+            <section class="hf-card">
+                <h2><span class="n">3</span> Auftrag &amp; Team</h2>
+                <div class="hf-grid">
+                    <label class="field"><span>Firma (Auftragnehmer)</span>
+                        <input type="text" name="auftragnehmer" value="{{if .HA.Auftragnehmer}}{{.HA.Auftragnehmer}}{{else}}{{.DefaultFirma}}{{end}}" autocomplete="organization">
+                    </label>
+                    <label class="field"><span>Monteur</span>
+                        <input type="text" name="monteur" value="{{if .HA.Monteur}}{{.HA.Monteur}}{{else}}{{.DefaultMonteur}}{{end}}">
+                    </label>
+                    <label class="field"><span>Prüfer</span>
+                        <input type="text" name="pruefer" value="{{.HA.Pruefer}}">
+                    </label>
+                    <label class="field"><span>Datum</span>
+                        <input type="date" name="protocol_date" value="{{.DefaultDate}}">
+                    </label>
+                    <label class="field"><span>Projektnummer</span>
+                        <input type="text" name="project_number" value="{{.HA.ProjectNumber}}">
+                    </label>
+                    <label class="field"><span>Projekt (Link)</span>
+                        <select name="project_id">
+                            <option value="">—</option>
+                            {{range .Projects}}<option value="{{.ID}}" {{if and $.HA.ProjectID.Valid (eq $.HA.ProjectID.Int64 .ID)}}selected{{end}}>{{.Number}}</option>{{end}}
+                        </select>
+                    </label>
+                    {{if .IsStaff}}
+                    <label class="field"><span>Organisation</span>
+                        <select name="org_id">
+                            <option value="">—</option>
+                            {{range .Orgs}}<option value="{{.ID}}" {{if and $.HA.OrgID.Valid (eq $.HA.OrgID.Int64 .ID)}}selected{{end}}>{{.Name}}</option>{{end}}
+                        </select>
+                    </label>
+                    {{end}}
+                </div>
+            </section>
 
-                    <div style="margin-top:.9rem;">
-                        <span style="font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">Rohrfarbe</span>
-                        <div class="swatch-row">
+            <section class="hf-card">
+                <h2><span class="n">4</span> Technik <span class="hint">GVS, Kasette, Splitter, Kabel</span></h2>
+                <div class="hf-grid">
+                    <label class="field"><span>Zugehöriger GVS</span>
+                        <input type="text" name="gvs" value="{{.HA.GVS}}" placeholder="N-1.31">
+                    </label>
+                    <label class="field"><span>Rohr (1–4)</span>
+                        <input type="number" name="rohr" min="1" max="4" value="{{if .HA.Rohr.Valid}}{{.HA.Rohr.Int64}}{{end}}">
+                    </label>
+                    <label class="field"><span>Kasette B-Seite</span>
+                        <input type="text" name="kassette_b" value="{{.HA.KassetteB}}" placeholder="R38">
+                    </label>
+                    <label class="field"><span>Splitter (MUX) Nummer</span>
+                        <input type="text" name="mux_number" value="{{.HA.MuxNumber}}">
+                    </label>
+                    <label class="field"><span>Splitter (MUX) Fasern</span>
+                        <input type="text" name="mux_fibers" value="{{.HA.MuxFibers}}">
+                    </label>
+                    <label class="field"><span>Spleiße (Stück)</span>
+                        <input type="number" inputmode="numeric" name="splices" min="0" value="{{if .HA.Splices.Valid}}{{.HA.Splices.Int64}}{{end}}">
+                    </label>
+                    <label class="field"><span>GF Kabel Charge</span>
+                        <input type="text" name="cable_charge" value="{{.HA.CableCharge}}">
+                    </label>
+                    <label class="field"><span>GF Kabel Länge (m)</span>
+                        <input type="number" inputmode="decimal" step="0.1" min="0" name="cable_length_m" value="{{if .HA.CableLength.Valid}}{{.HA.CableLength.Float64}}{{end}}">
+                    </label>
+                </div>
+
+                <div class="hf-grid" style="margin-top:1.1rem;">
+                    <div>
+                        <div class="hf-lbl">Rohrfarbe</div>
+                        <div class="hf-swatches">
                             <label title="keine"><input type="radio" name="rohr_color" value="" {{if eq $.HA.RohrColor ""}}checked{{end}}><span class="sw">–</span></label>
                             {{range .RohrColors}}
-                            <label title="{{.Label}}"><input type="radio" name="rohr_color" value="{{.Key}}" {{if eq $.HA.RohrColor .Key}}checked{{end}}><span class="sw" style="{{if .Striped}}background:linear-gradient(135deg, rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}}) 0 40%, #fff 40% 60%, rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}}) 60% 100%);{{else}}background:rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}});{{end}}"></span></label>
+                            <label title="{{.Label}}" aria-label="{{.Label}}"><input type="radio" name="rohr_color" value="{{.Key}}" {{if eq $.HA.RohrColor .Key}}checked{{end}}><span class="sw" style="{{if .Striped}}background:linear-gradient(135deg, rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}}) 0 40%, #fff 40% 60%, rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}}) 60% 100%);{{else}}background:rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}});{{end}}"></span></label>
                             {{end}}
                         </div>
                     </div>
-
-                    <div style="margin-top:.9rem;">
-                        <span style="font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">Röhrchenfarbe</span>
-                        <div class="swatch-row">
+                    <div>
+                        <div class="hf-lbl">Röhrchenfarbe</div>
+                        <div class="hf-swatches">
                             <label title="keine"><input type="radio" name="roehrchen_color" value="" {{if eq $.HA.RoehrchenColor ""}}checked{{end}}><span class="sw">–</span></label>
                             {{range .RoehrchenColors}}
-                            <label title="{{.Label}}"><input type="radio" name="roehrchen_color" value="{{.Key}}" {{if eq $.HA.RoehrchenColor .Key}}checked{{end}}><span class="sw" style="{{if .Striped}}background:linear-gradient(135deg, rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}}) 0 40%, #fff 40% 60%, rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}}) 60% 100%);{{else}}background:rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}});{{end}}"></span></label>
+                            <label title="{{.Label}}" aria-label="{{.Label}}"><input type="radio" name="roehrchen_color" value="{{.Key}}" {{if eq $.HA.RoehrchenColor .Key}}checked{{end}}><span class="sw" style="{{if .Striped}}background:linear-gradient(135deg, rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}}) 0 40%, #fff 40% 60%, rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}}) 60% 100%);{{else}}background:rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}});{{end}}"></span></label>
                             {{end}}
                         </div>
                     </div>
-
-                    <div style="margin-top:.9rem;">
-                        <span style="font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">Genutzte Faserfarben</span>
-                        <div style="display:flex;flex-wrap:wrap;gap:.55rem;margin-top:.45rem;">
-                            {{$sel := .Selected}}
-                            {{range .FiberColors}}
-                            {{$ck := .Key}}
-                            <label style="display:inline-flex;align-items:center;gap:.35rem;font-size:.82rem;cursor:pointer;">
-                                <input type="checkbox" name="fiber_colors" value="{{.Key}}"
-                                    {{range $sel}}{{if eq . $ck}}checked{{end}}{{end}}
-                                    style="width:auto;">
-                                <span style="display:inline-block;width:.8rem;height:.8rem;border:1px solid #888;border-radius:2px;background:rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}});"></span>
-                                {{.Label}}
-                            </label>
-                            {{end}}
-                        </div>
-                    </div>
-
-                    <div style="margin-top:1rem;display:flex;flex-direction:column;gap:.45rem;">
-                        <label style="display:flex;align-items:center;gap:.5rem;font-size:.85rem;cursor:pointer;">
-                            <input type="checkbox" name="check_fiber" style="width:auto;" {{if .HA.CheckFiber}}checked{{end}}>
-                            Die Durchgängigkeit der Faser wurde überprüft
-                        </label>
-                        <label style="display:flex;align-items:center;gap:.5rem;font-size:.85rem;cursor:pointer;">
-                            <input type="checkbox" name="check_complete" style="width:auto;" {{if .HA.CheckComplete}}checked{{end}}>
-                            Die Arbeiten wurden vollständig abgeschlossen
-                        </label>
-                        <label style="display:flex;align-items:center;gap:.5rem;font-size:.85rem;cursor:pointer;">
-                            <input type="checkbox" name="check_clean" style="width:auto;" {{if .HA.CheckClean}}checked{{end}}>
-                            Die Arbeitstelle wurde ordentlich und sauber hinterlassen
-                        </label>
-                    </div>
                 </div>
-            </section>
 
-            <section class="panel">
-                <div class="panel-head"><h2>ONT Geräte</h2><span class="hint">SN + Foto der Nalepnica; mehrere ONT möglich</span></div>
-                <div class="panel-body">
-                    <div id="ont-rows">
-                        {{range $i, $o := .ONTs}}
-                        <div class="ont-row" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:.6rem;">
-                            <input type="hidden" name="ont_id_{{$i}}" value="{{$o.ID}}">
-                            <input type="hidden" name="ont_codes_{{$i}}" value="{{$o.Codes}}">
-                            <label class="field" style="flex:1 1 180px;"><span>SN</span>
-                                <input type="text" name="ont_sn_{{$i}}" value="{{$o.SN}}" placeholder="z. B. 48575443…">
-                            </label>
-                            <label class="field" style="flex:1 1 220px;"><span>Foto (Aufkleber)</span>
-                                <input type="file" name="ont_photo_{{$i}}" accept="image/jpeg,image/png">
-                            </label>
-                            {{if $o.ObjectKey}}<a class="btn btn-ghost btn-small" href="/ha/ont?id={{$o.ID}}" target="_blank" rel="noopener">Photo</a>{{end}}
-                            <button type="button" class="btn btn-danger btn-small" onclick="this.closest('.ont-row').remove()">Remove</button>
-                            <div class="ont-codes" style="display:none;flex-wrap:wrap;gap:.35rem;flex:1 1 100%;"></div>
-                        </div>
-                        {{end}}
-                    </div>
-                    <button type="button" class="btn btn-ghost" id="add-ont">+ Add ONT</button>
-                    <p class="muted" style="margin:.6rem 0 0;font-size:.78rem;">Maximum 20 ONTs per HaP; empty rows are ignored. Removing a row deletes its photo on save.</p>
-                </div>
-            </section>
-
-            <section class="panel">
-                <div class="panel-head"><h2>APL-Codes</h2><span class="hint">werden aus „Bild 3 — APL geschlossen / Aufkleber“ gelesen</span></div>
-                <div class="panel-body">
-                    <input type="hidden" name="apl_codes" value="{{.HA.APLCodes}}">
-                    <input type="hidden" name="apl_codes_touched" id="apl-touched" value="0">
-                    <div id="apl-chips" style="display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.6rem;"></div>
-                    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;">
-                        <label class="field" style="flex:1 1 220px;"><span>Code hinzufügen</span>
-                            <input type="text" id="apl-code-input" placeholder="z. B. W006PF5Z">
-                        </label>
-                        <button type="button" class="btn btn-ghost" id="apl-add">Add</button>
-                    </div>
-                    <p class="muted" id="apl-status" style="margin:.6rem 0 0;font-size:.78rem;display:none;"></p>
-                    <p class="muted" style="margin:.6rem 0 0;font-size:.78rem;">Beim Auswählen von Bild 3 werden alle Barcodes automatisch gelesen; Codes können auch manuell ergänzt oder entfernt werden. Bitte das <strong>Originalfoto</strong> verwenden — weitergeleitete oder komprimierte Kopien haben oft zu kleine Barcodes.</p>
-                </div>
-            </section>
-
-            <section class="panel">
-                <div class="panel-head"><h2>Fotos</h2><span class="hint">GPS se čita iz EXIF-a; ako ga nema, koristi se lokacija telefona</span></div>
-                <div class="panel-body">
-                    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.6rem;">
-                        <button type="button" class="btn btn-ghost btn-small" id="geo-btn">📍 Standort ermitteln</button>
-                        <span class="muted" id="geo-status" style="font-size:.78rem;"></span>
-                    </div>
-                    <div class="filters" style="margin:0;border:0;padding:0;background:transparent;">
-                        {{range .PhotoKinds}}
-                        <label class="field">
-                            <span>{{.Label}}</span>
-                            <input type="file" name="photo_{{.Key}}" accept="image/jpeg,image/png"
-                                   class="ha-photo" data-kind="{{.Key}}">
-                            <input type="hidden" name="geo_{{.Key}}" value="" id="geo_{{.Key}}">
-                            <span class="geo-hint" id="hint_{{.Key}}" style="font-size:.72rem;color:var(--muted);"></span>
+                <div style="margin-top:1.1rem;">
+                    <div class="hf-lbl">Genutzte Faserfarben</div>
+                    <div class="hf-fibers">
+                        {{$sel := .Selected}}
+                        {{range .FiberColors}}
+                        {{$ck := .Key}}
+                        <label class="hf-fiber">
+                            <input type="checkbox" name="fiber_colors" value="{{.Key}}"
+                                {{range $sel}}{{if eq . $ck}}checked{{end}}{{end}}>
+                            <span class="hf-dot" style="background:rgb({{index .Hex 0}},{{index .Hex 1}},{{index .Hex 2}});"></span>
+                            {{.Label}}
                         </label>
                         {{end}}
                     </div>
                 </div>
+
+                <div class="hf-checks">
+                    <label class="hf-check">
+                        <input type="checkbox" name="check_fiber" {{if .HA.CheckFiber}}checked{{end}}>
+                        Die Durchgängigkeit der Faser wurde überprüft
+                    </label>
+                    <label class="hf-check">
+                        <input type="checkbox" name="check_complete" {{if .HA.CheckComplete}}checked{{end}}>
+                        Die Arbeiten wurden vollständig abgeschlossen
+                    </label>
+                    <label class="hf-check">
+                        <input type="checkbox" name="check_clean" {{if .HA.CheckClean}}checked{{end}}>
+                        Die Arbeitstelle wurde ordentlich und sauber hinterlassen
+                    </label>
+                </div>
             </section>
 
-            <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:2rem;">
-                <button class="btn btn-primary" type="submit">{{if .IsEdit}}Save HaP{{else}}Create HaP{{end}}</button>
-                <a class="btn btn-ghost" href="{{if .IsEdit}}/ha/view?id={{.HA.ID}}{{else}}/ha{{end}}">Cancel</a>
+            <section class="hf-card">
+                <h2><span class="n">5</span> Fotos <span class="hint">EXIF → Foto-Overlay (OCR) → Gerät</span></h2>
+                <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+                    <button type="button" class="btn btn-ghost btn-small" id="geo-btn">📍 Standort ermitteln</button>
+                    <span class="muted" id="geo-status" style="font-size:.78rem;"></span>
+                </div>
+                <div class="hf-photos">
+                    {{range .PhotoKinds}}
+                    {{$k := .Key}}
+                    {{$label := .Label}}
+                    <figure class="hf-photo">
+                        {{with index $.PhotosByKind $k}}
+                        <a href="/ha/photo?id={{.ID}}" target="_blank" rel="noopener">
+                            <img class="hf-photo-thumb" src="/ha/photo?id={{.ID}}" alt="{{$label}}" loading="lazy">
+                        </a>
+                        {{else}}
+                        <div class="hf-photo-empty">noch kein Foto</div>
+                        {{end}}
+                        <div class="hf-photo-body">
+                            <span class="hf-photo-title">{{$label}}</span>
+                            {{with index $.PhotosByKind $k}}{{if .Caption}}<span class="hf-photo-meta">{{.Caption}}</span>{{end}}{{end}}
+                            <input type="file" name="photo_{{$k}}" accept="image/jpeg,image/png"
+                                   class="ha-photo" data-kind="{{$k}}">
+                            <input type="hidden" name="geo_{{$k}}" value="" id="geo_{{$k}}">
+                            <span class="geo-hint hf-geo-hint" id="hint_{{$k}}"></span>
+                        </div>
+                    </figure>
+                    {{end}}
+                </div>
+            </section>
+
+            <section class="hf-card">
+                <h2><span class="n">6</span> ONT-Geräte <span class="hint">SN + Foto vom Aufkleber</span></h2>
+                <div id="ont-rows">
+                    {{range $i, $o := .ONTs}}
+                    <div class="ont-row hf-ontrow" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:.6rem;">
+                        <input type="hidden" name="ont_id_{{$i}}" value="{{$o.ID}}">
+                        <input type="hidden" name="ont_codes_{{$i}}" value="{{$o.Codes}}">
+                        <label class="field" style="flex:1 1 180px;"><span>SN</span>
+                            <input type="text" name="ont_sn_{{$i}}" value="{{$o.SN}}" placeholder="z. B. 48575443…">
+                        </label>
+                        <label class="field" style="flex:1 1 220px;"><span>Foto (Aufkleber)</span>
+                            <input type="file" name="ont_photo_{{$i}}" accept="image/jpeg,image/png">
+                        </label>
+                        {{if $o.ObjectKey}}<a class="btn btn-ghost btn-small" href="/ha/ont?id={{$o.ID}}" target="_blank" rel="noopener">Photo</a>{{end}}
+                        <button type="button" class="btn btn-danger btn-small" onclick="this.closest('.ont-row').remove()">Remove</button>
+                        <div class="ont-codes" style="display:none;flex-wrap:wrap;gap:.35rem;flex:1 1 100%;"></div>
+                    </div>
+                    {{end}}
+                </div>
+                <div class="actions" style="margin-top:.2rem;">
+                    <button type="button" class="btn btn-ghost" id="add-ont">+ ONT hinzufügen</button>
+                </div>
+                <p class="muted" style="margin:.6rem 0 0;font-size:.78rem;">Maximal 20 ONTs pro HaP; leere Zeilen werden ignoriert. Beim Entfernen einer Zeile wird das Foto beim Speichern gelöscht.</p>
+            </section>
+
+            <section class="hf-card">
+                <h2><span class="n">7</span> APL-Codes <span class="hint">werden aus „Bild 3 — APL geschlossen / Aufkleber“ gelesen</span></h2>
+                <input type="hidden" name="apl_codes" value="{{.HA.APLCodes}}">
+                <input type="hidden" name="apl_codes_touched" id="apl-touched" value="0">
+                <div id="apl-chips" class="hf-apl"></div>
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;">
+                    <label class="field" style="flex:1 1 220px;"><span>Code hinzufügen</span>
+                        <input type="text" id="apl-code-input" placeholder="z. B. W006PF5Z">
+                    </label>
+                    <button type="button" class="btn btn-ghost" id="apl-add">Add</button>
+                </div>
+                <p class="muted" id="apl-status" style="margin:.6rem 0 0;font-size:.78rem;display:none;"></p>
+                <p class="muted" style="margin:.6rem 0 0;font-size:.78rem;">Beim Auswählen von Bild 3 werden alle Barcodes automatisch gelesen; Codes können auch manuell ergänzt oder entfernt werden. Bitte das <strong>Originalfoto</strong> verwenden — weitergeleitete oder komprimierte Kopien haben oft zu kleine Barcodes.</p>
+            </section>
+
+            <div class="hf-desktop-actions">
+                <button class="btn btn-primary" type="submit">{{if .IsEdit}}Speichern{{else}}HaP anlegen{{end}}</button>
+                <a class="btn btn-ghost" href="{{if .IsEdit}}/ha/view?id={{.HA.ID}}{{else}}/ha{{end}}">Abbrechen</a>
             </div>
         </form>
+
+        <div class="hf-savebar">
+            <a class="btn btn-ghost" href="{{if .IsEdit}}/ha/view?id={{.HA.ID}}{{else}}/ha{{end}}">Abbrechen</a>
+            <button class="btn btn-primary" type="submit" form="ha-form">{{if .IsEdit}}Speichern{{else}}HaP anlegen{{end}}</button>
+        </div>
     </main>
+
 
     <script>
         // Standort: EXIF iz fotografije ima prednost; geolokacija pregledača je

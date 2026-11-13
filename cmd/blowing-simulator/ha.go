@@ -395,10 +395,31 @@ func renderHAForm(w http.ResponseWriter, r *http.Request, claims *AuthClaims, h 
 	if defDate == "" {
 		defDate = time.Now().Format("2006-01-02")
 	}
+	defDateHuman := defDate
+	if t, err := time.Parse("2006-01-02", defDate); err == nil {
+		defDateHuman = t.Format("02.01.2006")
+	}
 
 	var onts []ontRow
 	if h.ID > 0 {
 		onts, _ = listONTs(h.ID)
+	}
+
+	// Postojeće fotografije po slotu (samo pri izmeni): forma pokazuje šta je
+	// već sačuvano, pa se odmah vidi šta se zamenjuje.
+	type formPhoto struct {
+		ID      int64
+		Caption string
+	}
+	// Mapa pokazivača: slot bez fotografije mora biti „falsy“ u šablonu
+	// ({{with}}), a nula-struktura bi bila uvek istinita.
+	photosByKind := map[string]*formPhoto{}
+	if h.ID > 0 {
+		if list, err := listHAPhotos(h.ID); err == nil {
+			for _, p := range list {
+				photosByKind[p.Kind] = &formPhoto{ID: p.ID, Caption: photoCaptionLine(p)}
+			}
+		}
 	}
 
 	tmpl, err := template.New("ha-form.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/ha-form.html")
@@ -408,24 +429,26 @@ func renderHAForm(w http.ResponseWriter, r *http.Request, claims *AuthClaims, h 
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = tmpl.Execute(w, map[string]any{
-		"Message":         message,
-		"HA":              h,
-		"IsEdit":          isEdit,
-		"PhotoKinds":      haSlotPhotoKinds,
-		"ONTs":            onts,
-		"FiberColors":     haFiberColors,
-		"RohrColors":      haRohrColors,
-		"RoehrchenColors": haRoehrchenColors,
-		"Selected":        splitColors(h.FiberColors),
-		"Projects":        projects,
-		"Orgs":            orgs,
-		"DefaultDate":     defDate,
-		"DefaultFirma":    defFirma,
-		"DefaultMonteur":  defMonteur,
-		"IsAdmin":         isAdminRole(r),
-		"IsOrgAdmin":      isOrgAdminRequest(r),
-		"IsStaff":         claims != nil && seesAllProtocols(claims.Role),
-		"UserRole":        userRole(r),
+		"Message":          message,
+		"HA":               h,
+		"IsEdit":           isEdit,
+		"PhotoKinds":       haSlotPhotoKinds,
+		"PhotosByKind":     photosByKind,
+		"ONTs":             onts,
+		"FiberColors":      haFiberColors,
+		"RohrColors":       haRohrColors,
+		"RoehrchenColors":  haRoehrchenColors,
+		"Selected":         splitColors(h.FiberColors),
+		"Projects":         projects,
+		"Orgs":             orgs,
+		"DefaultDate":      defDate,
+		"DefaultDateHuman": defDateHuman,
+		"DefaultFirma":     defFirma,
+		"DefaultMonteur":   defMonteur,
+		"IsAdmin":          isAdminRole(r),
+		"IsOrgAdmin":       isOrgAdminRequest(r),
+		"IsStaff":          claims != nil && seesAllProtocols(claims.Role),
+		"UserRole":         userRole(r),
 	})
 }
 
