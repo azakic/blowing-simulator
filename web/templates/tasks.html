@@ -6,6 +6,35 @@
     <meta name="theme-color" content="#1976d2">
     <title>Tasks - Wolken-ASM Reports</title>
     <link rel="stylesheet" href="/static/app.css">
+    <style>
+        /* Tasks lista — kompaktne kartice umesto tabele (isto na svim širinama) */
+        .tk-list { display: grid; gap: .6rem; }
+        .tk-card {
+            display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem 1rem;
+            align-items: start; background: #fff; border: 1px solid var(--line);
+            border-left: 4px solid var(--line); border-radius: 12px; padding: .7rem .85rem;
+        }
+        .tk-card.tk-open { border-left-color: var(--blue); }
+        .tk-card.tk-in_progress { border-left-color: #e0a800; }
+        .tk-card.tk-done { border-left-color: var(--green); }
+        .tk-card.tk-cancelled { border-left-color: #90a4ae; opacity: .85; }
+        .tk-top { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+        .tk-title { display: block; margin: .3rem 0 .35rem; font-size: .97rem; font-weight: 700; color: var(--ink); text-decoration: none; }
+        .tk-title:hover { color: var(--blue); text-decoration: underline; }
+        .tk-meta { display: flex; flex-wrap: wrap; gap: .2rem .9rem; font-size: .78rem; color: var(--muted); }
+        .tk-meta a { color: var(--muted); text-decoration: none; }
+        .tk-meta a:hover { color: var(--blue); text-decoration: underline; }
+        .tk-overdue { font-size: .68rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--red); }
+        .tk-actions { display: flex; flex-wrap: wrap; gap: .35rem; justify-content: flex-end; align-items: flex-start; }
+        .tk-actions form { display: inline; margin: 0; }
+        @media (max-width: 700px) {
+            .tk-card { grid-template-columns: 1fr; }
+            .tk-actions { justify-content: stretch; }
+            .tk-actions .btn, .tk-actions form { flex: 1 1 auto; }
+            .tk-actions form .btn { width: 100%; }
+            .tk-actions .btn { padding: .6rem .8rem; }
+        }
+    </style>
 </head>
 <body>
     <header class="topbar">
@@ -28,58 +57,63 @@
     <main class="page">
         <a class="back" href="/">← Dashboard</a>
 
-        <div class="head">
+        <div class="ui-hero">
             <div>
+                <div class="ui-kicker">Tasks · HA work per project</div>
                 <h1>Tasks</h1>
-                <p class="sub">HA work per project — who does what, where, by when. Partners see their own organisation's tasks.</p>
+                <p class="ui-sub">Who does what, where, by when. Partners see their own organisation's tasks.</p>
+                <div class="ui-chips">
+                    <span class="ui-chip">Open {{index .Counts "open"}}</span>
+                    <span class="ui-chip">In progress {{index .Counts "in_progress"}}</span>
+                    <span class="ui-chip">Done {{index .Counts "done"}}</span>
+                    <span class="ui-chip">Cancelled {{index .Counts "cancelled"}}</span>
+                    <span class="ui-chip">{{.Total}} shown</span>
+                </div>
             </div>
+            {{if .CanCreate}}<div class="ui-hero-actions"><a class="btn btn-primary" href="#new-task">+ New task</a></div>{{end}}
         </div>
 
-        {{if .Message}}<p class="note">{{.Message}}</p>{{end}}
+        {{if .Message}}<p class="msg">{{.Message}}</p>{{end}}
 
-        <section class="kpis">
-            <div class="kpi"><div class="label">Open</div><div class="value">{{index .Counts "open"}}</div></div>
-            <div class="kpi"><div class="label">In progress</div><div class="value">{{index .Counts "in_progress"}}</div></div>
-            <div class="kpi"><div class="label">Done</div><div class="value">{{index .Counts "done"}}</div></div>
-            <div class="kpi"><div class="label">Cancelled</div><div class="value">{{index .Counts "cancelled"}}</div></div>
+        <section class="ui-card">
+            <h2><span class="n">1</span> Filter</h2>
+            <form method="GET" action="/tasks" class="ui-grid" style="align-items:end;">
+                <label class="field"><span>Status</span>
+                    <select name="status">
+                        <option value="active" {{if or (eq .Filter.Status "") (eq .Filter.Status "active")}}selected{{end}}>Active (open + in progress)</option>
+                        <option value="all" {{if eq .Filter.Status "all"}}selected{{end}}>All</option>
+                        <option value="open" {{if eq .Filter.Status "open"}}selected{{end}}>Open</option>
+                        <option value="in_progress" {{if eq .Filter.Status "in_progress"}}selected{{end}}>In progress</option>
+                        <option value="done" {{if eq .Filter.Status "done"}}selected{{end}}>Done</option>
+                        <option value="cancelled" {{if eq .Filter.Status "cancelled"}}selected{{end}}>Cancelled</option>
+                    </select>
+                </label>
+                <label class="field"><span>Project</span>
+                    <select name="project">
+                        <option value="">All</option>
+                        {{range .Projects}}<option value="{{.Number}}" {{if eq $.Filter.Project .Number}}selected{{end}}>{{.Number}}{{if .Name}} — {{.Name}}{{end}}</option>{{end}}
+                    </select>
+                </label>
+                <label class="ui-check" style="align-self:end;margin:0;">
+                    <input type="hidden" name="mine" value="0">
+                    <input type="checkbox" name="mine" value="1" {{if .Filter.Mine}}checked{{end}}>
+                    Only mine
+                </label>
+                <div class="actions" style="align-self:end;">
+                    <button class="btn btn-primary" type="submit">Apply</button>
+                    <a class="btn btn-ghost" href="/tasks">Clear</a>
+                </div>
+            </form>
         </section>
 
-        <form class="filters" method="GET" action="/tasks">
-            <label class="field"><span>Status</span>
-                <select name="status">
-                    <option value="active" {{if or (eq .Filter.Status "") (eq .Filter.Status "active")}}selected{{end}}>Active (open + in progress)</option>
-                    <option value="all" {{if eq .Filter.Status "all"}}selected{{end}}>All</option>
-                    <option value="open" {{if eq .Filter.Status "open"}}selected{{end}}>Open</option>
-                    <option value="in_progress" {{if eq .Filter.Status "in_progress"}}selected{{end}}>In progress</option>
-                    <option value="done" {{if eq .Filter.Status "done"}}selected{{end}}>Done</option>
-                    <option value="cancelled" {{if eq .Filter.Status "cancelled"}}selected{{end}}>Cancelled</option>
-                </select>
-            </label>
-            <label class="field"><span>Project</span>
-                <select name="project">
-                    <option value="">All</option>
-                    {{range .Projects}}<option value="{{.Number}}" {{if eq $.Filter.Project .Number}}selected{{end}}>{{.Number}}{{if .Name}} — {{.Name}}{{end}}</option>{{end}}
-                </select>
-            </label>
-            <label class="field" style="flex:0 0 auto;">
-                <span>Assigned</span>
-                <label style="display:flex;align-items:center;gap:.4rem;height:2.1rem;font-size:.88rem;cursor:pointer;">
-                    <input type="hidden" name="mine" value="0">
-                    <input type="checkbox" name="mine" value="1" {{if .Filter.Mine}}checked{{end}} style="width:auto;"> Only mine
-                </label>
-            </label>
-            <button class="btn btn-primary" type="submit">Filter</button>
-            <a class="btn btn-ghost" href="/tasks">Clear</a>
-        </form>
-
         {{if .CanCreate}}
-        <section class="panel">
-            <div class="panel-head"><h2>New task</h2><span class="hint">HA work item on a project</span></div>
-            <div class="panel-body">
-                <form method="POST" action="/tasks" class="filters" style="margin:0;border:0;padding:0;background:transparent;">
-                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
-                    <input type="hidden" name="action" value="create">
-                    <label class="field" style="flex:2 1 260px;"><span>Title</span>
+        <section class="ui-card" id="new-task">
+            <h2><span class="n">2</span> New task <span class="hint">HA work item on a project</span></h2>
+            <form method="POST" action="/tasks">
+                <input type="hidden" name="csrf_token" value="{{csrfToken}}">
+                <input type="hidden" name="action" value="create">
+                <div class="ui-grid">
+                    <label class="field wide"><span>Title</span>
                         <input type="text" name="title" maxlength="200" placeholder="optional — defaults to the address">
                     </label>
                     <label class="field"><span>Project *</span>
@@ -108,7 +142,9 @@
                             <option value="low">Low</option>
                         </select>
                     </label>
-                    <label class="field"><span>Due date *</span><input type="date" name="due_date" required></label>
+                    <label class="field"><span>Due date *</span>
+                        <input type="date" name="due_date" required>
+                    </label>
                     <label class="field"><span>Time (24 h) *</span>
                         <div style="display:flex;gap:.35rem;align-items:center;">
                             <select name="due_hour" aria-label="Hour" required style="flex:1 1 0;">
@@ -122,91 +158,75 @@
                             </select>
                         </div>
                     </label>
-                    <label class="field" style="flex:2 1 220px;"><span>Address *</span><input type="text" name="address" id="task-address" required placeholder="Street, no., city"></label>
-                    <label class="field"><span>NVT *</span><input type="text" name="nvt" id="task-nvt" required placeholder="NVT 1V3400"></label>
-                    <p id="task-lookup-hint" class="note" style="display:none;flex:1 1 100%;margin:0;"></p>
-                    <label class="field" style="flex:1 1 100%;"><span>Description</span>
+                    <label class="field"><span>Address *</span>
+                        <input type="text" name="address" id="task-address" required placeholder="Street, no., city" autocomplete="street-address">
+                    </label>
+                    <label class="field"><span>NVT *</span>
+                        <input type="text" name="nvt" id="task-nvt" required placeholder="NVT 1V3400">
+                    </label>
+                    <p id="task-lookup-hint" class="note" style="display:none;grid-column:1/-1;margin:0;"></p>
+                    <label class="field wide"><span>Description</span>
                         <textarea name="description" rows="3" placeholder="Scope, notes, access details…"></textarea>
                     </label>
+                </div>
+                <div class="actions" style="margin-top:.9rem;">
                     <button class="btn btn-primary" type="submit">Create task</button>
-                </form>
-            </div>
+                </div>
+            </form>
         </section>
         {{end}}
 
-        <div class="table-wrap">
+        <section class="ui-card">
+            <h2><span class="n">{{if .CanCreate}}3{{else}}2{{end}}</span> Tasks <span class="hint">{{.Total}} shown</span></h2>
             {{if .Tasks}}
-            <div class="table-scroll">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Task</th>
-                            <th>Project</th>
-                            <th>Address / NVT</th>
-                            <th>Assigned</th>
-                            <th>Due / time</th>
-                            <th>Priority</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {{range .Tasks}}
-                        <tr>
-                            <td data-label="#"><a class="id-link" href="/tasks/view?id={{.ID}}">#{{.ID}}</a></td>
-                            <td data-label="Task">
-                                <a class="link" href="/tasks/view?id={{.ID}}">{{.Title}}</a>
-                                {{if gt .Protocols 0}}<span class="muted" style="font-size:.78rem;">{{.Protocols}} protocol(s)</span>{{end}}
-                            </td>
-                            <td data-label="Project"><a class="project-link" href="/reports/project?project={{.Project}}">{{.Project}}</a></td>
-                            <td data-label="Address / NVT">
-                                {{if .Address}}{{.Address}}{{else}}<span class="muted">—</span>{{end}}
-                                {{if .NVT}}<div class="muted" style="font-size:.8rem;">{{.NVT}}</div>{{end}}
-                            </td>
-                            <td data-label="Assigned">
-                                {{if .UserEmail.Valid}}{{.UserEmail.String}}{{else}}<span class="muted">—</span>{{end}}
-                                {{if .OrgName.Valid}}<div class="muted" style="font-size:.8rem;">{{.OrgName.String}}</div>{{end}}
-                            </td>
-                            <td data-label="Due">
-                                {{if .DueDate.Valid}}
-                                {{.DueDate.String}}{{if .IsOverdue}} <span style="color:#c62828;font-weight:700;" title="Overdue">!</span>{{end}}
-                                {{if .DueTime.Valid}}<div class="muted" style="font-size:.8rem;">{{dotTime .DueTime.String}}</div>{{end}}
-                                {{else}}<span class="muted">—</span>{{end}}
-                            </td>
-                            <td data-label="Priority"><span class="pill {{.Priority}}">{{.Priority}}</span></td>
-                            <td data-label="Status"><span class="pill {{.Status}}">{{.Status}}</span></td>
-                            <td data-label="Actions" style="white-space:nowrap;">
-                                <a class="btn btn-ghost btn-small" href="/tasks/view?id={{.ID}}">Open</a>
-                                {{if .DueDate.Valid}}<a class="btn btn-ghost btn-small" href="/tasks/ics?id={{.ID}}" title="Add to calendar">📅</a>{{end}}
-                                {{if eq .Status "open"}}
-                                <form method="POST" action="/tasks" style="display:inline;">
-                                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
-                                    <input type="hidden" name="action" value="set-status">
-                                    <input type="hidden" name="id" value="{{.ID}}">
-                                    <input type="hidden" name="status" value="in_progress">
-                                    <button class="btn btn-ghost btn-small" type="submit">Start</button>
-                                </form>
-                                {{end}}
-                                {{if ne .Status "done"}}
-                                <form method="POST" action="/tasks" style="display:inline;">
-                                    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
-                                    <input type="hidden" name="action" value="set-status">
-                                    <input type="hidden" name="id" value="{{.ID}}">
-                                    <input type="hidden" name="status" value="done">
-                                    <button class="btn btn-ghost btn-small" type="submit">Done</button>
-                                </form>
-                                {{end}}
-                            </td>
-                        </tr>
+            <div class="tk-list">
+                {{range .Tasks}}
+                <article class="tk-card tk-{{.Status}}">
+                    <div>
+                        <div class="tk-top">
+                            <a class="id-link" href="/tasks/view?id={{.ID}}">#{{.ID}}</a>
+                            <span class="pill {{.Status}}">{{.Status}}</span>
+                            <span class="pill {{.Priority}}">{{.Priority}}</span>
+                            {{if .IsOverdue}}<span class="tk-overdue">overdue</span>{{end}}
+                        </div>
+                        <a class="tk-title" href="/tasks/view?id={{.ID}}">{{.Title}}</a>
+                        <div class="tk-meta">
+                            <span>Project <a class="project-link" href="/reports/project?project={{.Project}}">{{.Project}}</a></span>
+                            {{if .Address}}<span>📍 {{.Address}}{{if .NVT}} · {{.NVT}}{{end}}</span>{{end}}
+                            <span>👤 {{if .UserEmail.Valid}}{{.UserEmail.String}}{{else}}—{{end}}{{if .OrgName.Valid}} ({{.OrgName.String}}){{end}}</span>
+                            <span>📅 {{if .DueDate.Valid}}{{dueLabel .DueDate.String}}{{if .DueTime.Valid}} {{dotTime .DueTime.String}}{{end}}{{else}}—{{end}}</span>
+                            {{if gt .Protocols 0}}<span>📄 {{.Protocols}} protocol(s)</span>{{end}}
+                        </div>
+                    </div>
+                    <div class="tk-actions">
+                        <a class="btn btn-ghost btn-small" href="/tasks/view?id={{.ID}}">Open</a>
+                        {{if .DueDate.Valid}}<a class="btn btn-ghost btn-small" href="/tasks/ics?id={{.ID}}" title="Add to calendar">📅</a>{{end}}
+                        {{if eq .Status "open"}}
+                        <form method="POST" action="/tasks">
+                            <input type="hidden" name="csrf_token" value="{{csrfToken}}">
+                            <input type="hidden" name="action" value="set-status">
+                            <input type="hidden" name="id" value="{{.ID}}">
+                            <input type="hidden" name="status" value="in_progress">
+                            <button class="btn btn-ghost btn-small" type="submit">Start</button>
+                        </form>
                         {{end}}
-                    </tbody>
-                </table>
+                        {{if ne .Status "done"}}
+                        <form method="POST" action="/tasks">
+                            <input type="hidden" name="csrf_token" value="{{csrfToken}}">
+                            <input type="hidden" name="action" value="set-status">
+                            <input type="hidden" name="id" value="{{.ID}}">
+                            <input type="hidden" name="status" value="done">
+                            <button class="btn btn-ghost btn-small" type="submit">Done</button>
+                        </form>
+                        {{end}}
+                    </div>
+                </article>
+                {{end}}
             </div>
             {{else}}
             <p class="empty">No tasks match these filters.{{if .CanCreate}} Create one above.{{end}}</p>
             {{end}}
-        </div>
+        </section>
     </main>
     <script src="/static/task-lookup.js"></script>
 </body>

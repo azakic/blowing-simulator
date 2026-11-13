@@ -452,11 +452,12 @@ func TasksHandler(w http.ResponseWriter, r *http.Request) {
 
 	tmpl, err := template.New("tasks.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).
 		Funcs(template.FuncMap{
-			"dotTime": dotTime,
-			"hours":   hourValues,
-			"minutes": minuteValues,
-			"hourOf":  hourOf,
-			"minOf":   minOf,
+			"dotTime":  dotTime,
+			"dueLabel": dueLabel,
+			"hours":    hourValues,
+			"minutes":  minuteValues,
+			"hourOf":   hourOf,
+			"minOf":    minOf,
 		}).
 		ParseFiles("web/templates/tasks.html")
 	if err != nil {
@@ -748,11 +749,12 @@ func TaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 
 	tmpl, err := template.New("task-detail.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).
 		Funcs(template.FuncMap{
-			"dotTime": dotTime,
-			"hours":   hourValues,
-			"minutes": func() []string { return minuteOptions(t.DueTime.String) },
-			"hourOf":  hourOf,
-			"minOf":   minOf,
+			"dotTime":  dotTime,
+			"dueLabel": dueLabel,
+			"hours":    hourValues,
+			"minutes":  func() []string { return minuteOptions(t.DueTime.String) },
+			"hourOf":   hourOf,
+			"minOf":    minOf,
 		}).
 		ParseFiles("web/templates/task-detail.html")
 	if err != nil {
@@ -916,6 +918,14 @@ func protocolVisibleToUser(claims *AuthClaims, protocolID int) bool {
 
 // dotTime prikazuje vreme nemačkom notacijom (09:30 → 09.30).
 func dotTime(s string) string { return strings.ReplaceAll(s, ":", ".") }
+
+// dueLabel ispisuje datum dospeća kao dd.mm.yyyy (baza daje YYYY-MM-DD).
+func dueLabel(v string) string {
+	if len(v) >= 10 && v[4] == '-' && v[7] == '-' {
+		return v[8:10] + "." + v[5:7] + "." + v[0:4]
+	}
+	return v
+}
 
 // hourValues/minuteValues pune padajuće liste u formama (00–23 / 00–59).
 // Dva native <select>-a su mobilno prijateljska (točkić) i garantuju 24 h.

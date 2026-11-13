@@ -344,3 +344,135 @@ tbody tr:hover td { background: #f9fbfd; }
     .pager { padding: .75rem .25rem; }
 
 }
+
+/* ---------- hero + kartice (HaP forma, Tasks) ---------- */
+        /* HaP forma — kartice, hero i mobilni save bar (isti jezik kao /ha/view) */
+        .ui-hero {
+            background: linear-gradient(135deg, #0d47a1 0%, #1976d2 55%, #2f8fe0 100%);
+            color: #fff; border-radius: 20px; padding: 1.35rem 1.5rem;
+            display: flex; justify-content: space-between; align-items: flex-start;
+            gap: 1.2rem; flex-wrap: wrap;
+            box-shadow: 0 14px 34px rgba(21, 101, 192, .22); margin-bottom: 1rem;
+        }
+        .ui-kicker { font-size: .68rem; letter-spacing: .14em; text-transform: uppercase; opacity: .82; }
+        .ui-hero h1 { margin: .25rem 0 .3rem; font-size: 1.55rem; line-height: 1.15; }
+        .ui-sub { margin: 0; font-size: .9rem; opacity: .92; max-width: 62ch; }
+        .ui-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .7rem; }
+        .ui-chip {
+            display: inline-flex; align-items: center; gap: .3rem;
+            background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28);
+            color: #fff; text-decoration: none; padding: .22rem .6rem;
+            border-radius: 999px; font-size: .74rem;
+        }
+        a.ui-chip:hover { background: rgba(255,255,255,.28); }
+        .ui-hero-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+        .ui-hero-actions .btn { background: rgba(255,255,255,.14); color: #fff; border: 1px solid rgba(255,255,255,.35); }
+        .ui-hero-actions .btn:hover { background: rgba(255,255,255,.24); }
+        .ui-hero-actions .btn-primary { background: #fff; color: #0d47a1; border-color: #fff; }
+
+        .ui-card {
+            background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+            padding: 1.05rem 1.15rem 1.2rem; box-shadow: 0 2px 10px rgba(15,23,42,.04);
+            margin-bottom: 1rem;
+        }
+        .ui-card > h2 {
+            display: flex; align-items: center; gap: .55rem; margin: 0 0 .95rem;
+            font-size: .74rem; letter-spacing: .09em; text-transform: uppercase; color: var(--muted);
+        }
+        .ui-card > h2 .n {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 1.4rem; height: 1.4rem; border-radius: 50%; flex: 0 0 auto;
+            background: #e8f1fb; color: #145ea8; font-size: .72rem; font-weight: 800; letter-spacing: 0;
+        }
+        .ui-card > h2 .hint {
+            margin-left: auto; font-size: .72rem; letter-spacing: 0;
+            text-transform: none; font-weight: 500; color: var(--muted);
+        }
+
+        .ui-grid { display: grid; gap: .85rem 1rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+        .ui-card .field.wide { grid-column: 1 / -1; }
+        .ui-lbl { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
+
+        .ui-swatches { display: flex; flex-wrap: wrap; gap: .42rem; margin-top: .5rem; }
+        .ui-swatches label { position: relative; display: inline-flex; cursor: pointer; }
+        .ui-swatches input { position: absolute; opacity: 0; width: 0; height: 0; }
+        .ui-swatches .sw {
+            width: 1.95rem; height: 1.95rem; border: 1px solid #b9c4d0; border-radius: 8px;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: .75rem; color: #5b6b7a; background: #f3f5f8;
+        }
+        .ui-swatches input:checked + .sw { outline: 3px solid var(--blue); outline-offset: 2px; }
+        .ui-swatches input:focus-visible + .sw { outline: 3px solid #9cc4ec; outline-offset: 2px; }
+
+        .ui-fibers { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .5rem; }
+        .ui-fiber {
+            display: inline-flex; align-items: center; gap: .4rem; cursor: pointer;
+            border: 1px solid #cfd8e3; border-radius: 999px; padding: .35rem .7rem;
+            font-size: .82rem; background: #fafbfd;
+        }
+        .ui-fiber input { width: auto; margin: 0; accent-color: var(--blue); }
+        .ui-fiber:has(input:checked) { border-color: var(--blue); background: #e8f1fb; }
+        .ui-dot { width: .85rem; height: .85rem; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); display: inline-block; }
+
+        .ui-checks { display: grid; gap: .5rem; margin-top: 1rem; }
+        .ui-check {
+            display: flex; align-items: flex-start; gap: .6rem; cursor: pointer;
+            border: 1px solid var(--line); border-radius: 10px; padding: .55rem .7rem;
+            font-size: .85rem; background: #fbfcfe;
+        }
+        .ui-check input { width: auto; margin-top: .15rem; accent-color: var(--blue); }
+        .ui-check:has(input:checked) { border-color: #b6dbb8; background: #f1f9f2; }
+
+        .ui-photos { display: grid; gap: .8rem; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); margin-top: .8rem; }
+        .ui-photo { margin: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
+        .ui-photo-thumb { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: #eef2f7; }
+        .ui-photo-empty {
+            aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center;
+            background: repeating-linear-gradient(45deg, #f6f8fb, #f6f8fb 10px, #eef2f7 10px, #eef2f7 20px);
+            color: var(--muted); font-size: .78rem;
+        }
+        .ui-photo-body { padding: .6rem .7rem .75rem; display: flex; flex-direction: column; gap: .35rem; }
+        .ui-photo-title { font-size: .78rem; font-weight: 700; }
+        .ui-photo-meta { font-size: .7rem; color: var(--muted); }
+        .ui-photo input[type=file] { font-size: .76rem; max-width: 100%; }
+        .ui-geo-hint { font-size: .7rem; color: var(--muted); }
+        .ui-ontrow { border: 1px solid var(--line); border-radius: 12px; padding: .7rem; background: #fbfcfe; }
+        .ui-apl { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .6rem; }
+        .ui-note {
+            background: #e8f1fb; border: 1px solid #cfe2f7; color: #145ea8;
+            border-radius: 12px; padding: .7rem .9rem; font-size: .85rem; margin: 0 0 1rem;
+        }
+        .ui-savebar { display: none; }
+        .ui-desktop-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1.2rem 0 2rem; }
+
+        @media (max-width: 760px) {
+            body.ui-body { padding-bottom: 5.4rem; }
+            .ui-hero { padding: 1.1rem; border-radius: 16px; }
+            .ui-hero h1 { font-size: 1.3rem; }
+            .ui-hero-actions { display: none; }
+            .ui-card { padding: .85rem .85rem 1rem; border-radius: 14px; }
+            .ui-card > h2 { flex-wrap: wrap; }
+            .ui-card > h2 .hint { margin-left: 0; flex-basis: 100%; }
+            .ui-grid { grid-template-columns: 1fr; }
+            .ui-photos { grid-template-columns: 1fr 1fr; }
+            .ui-desktop-actions { display: none; }
+            .ui-savebar {
+                display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+                gap: .5rem; padding: .7rem .8rem calc(.7rem + env(safe-area-inset-bottom));
+                background: rgba(255,255,255,.97); border-top: 1px solid var(--line);
+                box-shadow: 0 -6px 20px rgba(15,23,42,.08); backdrop-filter: blur(6px);
+            }
+            .ui-savebar .btn { flex: 1; padding: .8rem 1rem; font-size: .95rem; }
+            /* iOS: 16px polja sprečavaju automatski zoom pri fokusu. */
+            .ui-card input, .ui-card select { font-size: 16px; }
+            .ui-card input[type=file] { font-size: .82rem; }
+        }
+        @media (max-width: 420px) { .ui-photos { grid-template-columns: 1fr; } }
+
+        @media print {
+            .ui-hero-actions, .ui-savebar, .ui-desktop-actions, .back, .topbar { display: none !important; }
+            body { background: #fff; }
+            .ui-hero { background: #fff !important; color: #000; box-shadow: none; border: 1px solid #000; }
+            .ui-chip { color: #000; border-color: #000; background: #fff; }
+            .ui-card { box-shadow: none; break-inside: avoid; }
+        }
