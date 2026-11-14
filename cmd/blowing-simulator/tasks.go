@@ -79,6 +79,15 @@ func ensureTaskSchema(db *sqlx.DB) error {
 		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS client_first_name TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS client_last_name TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS client_phone TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS client_mobile TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS client_email TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS client_company TEXT NOT NULL DEFAULT ''`,
+		// Normalizovana adresa (isto kao ha_customers); „address“ ostaje
+		// izvedeni string za prikaz, Maps i pretragu.
+		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS street TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS house_number TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS postcode TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_tasks_org ON tasks(org_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(user_id)`,
@@ -108,11 +117,13 @@ func backfillTaskClients(db *sqlx.DB) error {
 		Address string `db:"address"`
 		NVT     string `db:"nvt"`
 		Phone   string `db:"client_phone"`
+		Mobile  string `db:"client_mobile"`
 	}
 	if err := db.Select(&rows, `SELECT id, coalesce(address,'') AS address,
-			coalesce(nvt,'') AS nvt, coalesce(client_phone,'') AS client_phone
+			coalesce(nvt,'') AS nvt, coalesce(client_phone,'') AS client_phone,
+			coalesce(client_mobile,'') AS client_mobile
 		FROM tasks
-		WHERE client_first_name = '' AND client_last_name = ''`); err != nil {
+		WHERE client_first_name = '' AND client_last_name = '' AND client_company = ''`); err != nil {
 		return err
 	}
 	filled := 0
@@ -121,8 +132,8 @@ func backfillTaskClients(db *sqlx.DB) error {
 		if !ok {
 			continue
 		}
-		first, last := splitKunde(c.Kunde)
-		if first == "" && last == "" {
+		first, last, company := customerNameParts(c.Kunde)
+		if first == "" && last == "" && company == "" {
 			continue
 		}
 		phone := t.Phone
@@ -132,8 +143,13 @@ func backfillTaskClients(db *sqlx.DB) error {
 				phone = c.Mobile
 			}
 		}
+		mobile := t.Mobile
+		if mobile == "" {
+			mobile = c.Mobile
+		}
 		if _, err := db.Exec(`UPDATE tasks SET client_first_name=$1, client_last_name=$2,
-				client_phone=$3 WHERE id=$4`, first, last, phone, t.ID); err != nil {
+				client_company=$3, client_phone=$4, client_mobile=$5 WHERE id=$6`,
+			first, last, company, phone, mobile, t.ID); err != nil {
 			return err
 		}
 		filled++
@@ -144,34 +160,86 @@ func backfillTaskClients(db *sqlx.DB) error {
 	return nil
 }
 
+// backfillAddressParts deli postojeće slobodne adrese u direktorijumu i u
+// zadacima na ulicu/broj/PLZ/grad (i računa street_key). Idempotentno.
+func backfillAddressParts(db *sqlx.DB) error {
+	type row struct {
+		ID      int64  `db:"id"`
+		Address string `db:"address"`
+	}
+	var cust []row
+	if err := db.Select(&cust, `SELECT id, address FROM ha_customers
+		WHERE address <> '' AND street = ''`); err != nil {
+		return err
+	}
+	for _, r := range cust {
+		st, no, plz, city := parseAddress(r.Address)
+		if strings.TrimSpace(st) == "" {
+			st = strings.TrimSpace(r.Address) // nikad ne gubi tekst
+		}
+		if _, err := db.Exec(`UPDATE ha_customers SET street=$1, house_number=$2,
+				postcode=$3, city=$4, street_key=$5 WHERE id=$6`,
+			st, no, plz, city, streetKey(st, no), r.ID); err != nil {
+			return err
+		}
+	}
+	var tasks []row
+	if err := db.Select(&tasks, `SELECT id, address FROM tasks
+		WHERE address <> '' AND street = ''`); err != nil {
+		return err
+	}
+	for _, r := range tasks {
+		st, no, plz, city := parseAddress(r.Address)
+		if strings.TrimSpace(st) == "" {
+			st = strings.TrimSpace(r.Address)
+		}
+		if _, err := db.Exec(`UPDATE tasks SET street=$1, house_number=$2,
+				postcode=$3, city=$4 WHERE id=$5`, st, no, plz, city, r.ID); err != nil {
+			return err
+		}
+	}
+	if len(cust)+len(tasks) > 0 {
+		log.Printf("backfill addresses: customers=%d tasks=%d", len(cust), len(tasks))
+	}
+	return nil
+}
+
 // --- redovi za prikaz ---
 
 type taskRow struct {
-	ID           int64          `db:"id"`
-	ProjectID    int64          `db:"project_id"`
-	Project      string         `db:"project"`
-	ProjectName  string         `db:"project_name"`
-	OrgID        sql.NullInt64  `db:"org_id"`
-	OrgName      sql.NullString `db:"org_name"`
-	UserID       sql.NullInt64  `db:"user_id"`
-	UserEmail    sql.NullString `db:"user_email"`
-	Title        string         `db:"title"`
-	ClientFirst  string         `db:"client_first_name"`
-	ClientLast   string         `db:"client_last_name"`
-	ClientPhone  string         `db:"client_phone"`
-	Description  string         `db:"description"`
-	Status       string         `db:"status"`
-	Priority     string         `db:"priority"`
-	Address      string         `db:"address"`
-	NVT          string         `db:"nvt"`
-	DueDate      sql.NullString `db:"due_date"`
-	DueTime      sql.NullString `db:"due_time"`
-	CreatedAt    string         `db:"created_at"`
-	UpdatedAt    sql.NullString `db:"updated_at"`
-	CompletedAt  sql.NullString `db:"completed_at"`
-	CreatorEmail sql.NullString `db:"creator_email"`
-	Protocols    int            `db:"protocols"`
-	IsOverdue    bool           `db:"is_overdue"`
+	ID            int64          `db:"id"`
+	ProjectID     int64          `db:"project_id"`
+	Project       string         `db:"project"`
+	ProjectName   string         `db:"project_name"`
+	OrgID         sql.NullInt64  `db:"org_id"`
+	OrgName       sql.NullString `db:"org_name"`
+	UserID        sql.NullInt64  `db:"user_id"`
+	UserEmail     sql.NullString `db:"user_email"`
+	Title         string         `db:"title"`
+	ClientFirst   string         `db:"client_first_name"`
+	ClientLast    string         `db:"client_last_name"`
+	ClientPhone   string         `db:"client_phone"`
+	ClientMobile  string         `db:"client_mobile"`
+	ClientEmail   string         `db:"client_email"`
+	ClientCompany string         `db:"client_company"`
+	Street        string         `db:"street"`
+	HouseNumber   string         `db:"house_number"`
+	StreetNumber  string         `db:"street_number"`
+	Postcode      string         `db:"postcode"`
+	City          string         `db:"city"`
+	Description   string         `db:"description"`
+	Status        string         `db:"status"`
+	Priority      string         `db:"priority"`
+	Address       string         `db:"address"`
+	NVT           string         `db:"nvt"`
+	DueDate       sql.NullString `db:"due_date"`
+	DueTime       sql.NullString `db:"due_time"`
+	CreatedAt     string         `db:"created_at"`
+	UpdatedAt     sql.NullString `db:"updated_at"`
+	CompletedAt   sql.NullString `db:"completed_at"`
+	CreatorEmail  sql.NullString `db:"creator_email"`
+	Protocols     int            `db:"protocols"`
+	IsOverdue     bool           `db:"is_overdue"`
 }
 
 const taskSelect = `
@@ -181,6 +249,9 @@ const taskSelect = `
 	       t.user_id, u.email AS user_email,
 	       t.title, t.description, t.status, t.priority,
 	       t.client_first_name, t.client_last_name, t.client_phone,
+	       t.client_mobile, t.client_email, t.client_company,
+	       t.street, t.house_number, t.postcode, t.city,
+	       trim(t.street || ' ' || t.house_number) AS street_number,
 	       t.address, t.nvt,
 	       to_char(t.due_date, 'YYYY-MM-DD') AS due_date,
 	       to_char(t.due_time, 'HH24:MI') AS due_time,
@@ -614,13 +685,25 @@ func createTask(r *http.Request, claims *AuthClaims) (int64, string) {
 	}
 	first := strings.TrimSpace(r.FormValue("client_first_name"))
 	last := strings.TrimSpace(r.FormValue("client_last_name"))
+	company := strings.TrimSpace(r.FormValue("client_company"))
 	phone := strings.TrimSpace(r.FormValue("client_phone"))
+	mobile := strings.TrimSpace(r.FormValue("client_mobile"))
+	email := strings.TrimSpace(r.FormValue("client_email"))
 	if len(phone) > 40 {
 		phone = phone[:40]
+	}
+	if len(mobile) > 40 {
+		mobile = mobile[:40]
+	}
+	if len(email) > 120 {
+		email = email[:120]
 	}
 	title := strings.TrimSpace(r.FormValue("title"))
 	if title == "" {
 		title = taskClientName(first, last)
+	}
+	if title == "" {
+		title = company
 	}
 	if len(title) > 200 {
 		title = title[:200]
@@ -650,7 +733,22 @@ func createTask(r *http.Request, claims *AuthClaims) (int64, string) {
 		}
 	}
 
-	address := strings.TrimSpace(r.FormValue("address"))
+	// Adresa: forma šalje „Straße und Hausnummer“ + PLZ + Ort; razdvajamo na
+	// ulicu/broj, a „address“ gradimo za prikaz i pretragu.
+	streetRaw := strings.TrimSpace(r.FormValue("street_number"))
+	if streetRaw == "" {
+		streetRaw = strings.TrimSpace(r.FormValue("address")) // stariji klijenti
+	}
+	postcode := strings.TrimSpace(r.FormValue("postcode"))
+	city := strings.TrimSpace(r.FormValue("city"))
+	street, houseNo, plzFromInput, cityFromInput := parseAddress(streetRaw)
+	if postcode == "" {
+		postcode = plzFromInput
+	}
+	if city == "" {
+		city = cityFromInput
+	}
+	address := formatAddress(street, houseNo, postcode, city)
 	nvt := strings.TrimSpace(r.FormValue("nvt"))
 	due, dueTime, msg := parseDue(r)
 	if msg != "" {
@@ -667,13 +765,17 @@ func createTask(r *http.Request, claims *AuthClaims) (int64, string) {
 	var newID int64
 	err := db.Get(&newID, `INSERT INTO tasks
 			(project_id, org_id, user_id, title, description, priority,
-			 client_first_name, client_last_name, client_phone,
+			 client_first_name, client_last_name, client_company,
+			 client_phone, client_mobile, client_email,
+			 street, house_number, postcode, city,
 			 address, nvt, due_date, due_time, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULLIF($12,'')::date,
-		        NULLIF($13,'')::time, $14)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+		        $17, $18, NULLIF($19,'')::date, NULLIF($20,'')::time, $21)
 		RETURNING id`,
 		projectID, sqlNullInt64(orgID), sqlNullInt64(userID), title, description, priority,
-		first, last, phone, address, nvt, due, dueTime, claims.UserID)
+		first, last, company, phone, mobile, email,
+		street, houseNo, postcode, city,
+		address, nvt, due, dueTime, claims.UserID)
 	if err != nil {
 		return 0, "Error: " + err.Error()
 	}
@@ -870,9 +972,18 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 		}
 		first := strings.TrimSpace(r.FormValue("client_first_name"))
 		last := strings.TrimSpace(r.FormValue("client_last_name"))
+		company := strings.TrimSpace(r.FormValue("client_company"))
 		phone := strings.TrimSpace(r.FormValue("client_phone"))
+		mobile := strings.TrimSpace(r.FormValue("client_mobile"))
+		email := strings.TrimSpace(r.FormValue("client_email"))
 		if len(phone) > 40 {
 			phone = phone[:40]
+		}
+		if len(mobile) > 40 {
+			mobile = mobile[:40]
+		}
+		if len(email) > 120 {
+			email = email[:120]
 		}
 		explicitTitle := strings.TrimSpace(r.FormValue("title"))
 		description := strings.TrimSpace(r.FormValue("description"))
@@ -910,7 +1021,20 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 			}
 		}
 
-		address := strings.TrimSpace(r.FormValue("address"))
+		streetRaw := strings.TrimSpace(r.FormValue("street_number"))
+		if streetRaw == "" {
+			streetRaw = strings.TrimSpace(r.FormValue("address"))
+		}
+		postcode := strings.TrimSpace(r.FormValue("postcode"))
+		city := strings.TrimSpace(r.FormValue("city"))
+		street, houseNo, plzFromInput, cityFromInput := parseAddress(streetRaw)
+		if postcode == "" {
+			postcode = plzFromInput
+		}
+		if city == "" {
+			city = cityFromInput
+		}
+		address := formatAddress(street, houseNo, postcode, city)
 		nvt := strings.TrimSpace(r.FormValue("nvt"))
 		if msg := validateTaskRequired(orgID, address, nvt, due, dueTime); msg != "" {
 			return msg
@@ -920,6 +1044,9 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 		title := explicitTitle
 		if title == "" {
 			title = taskClientName(first, last)
+		}
+		if title == "" {
+			title = company
 		}
 		if title == "" {
 			title = strings.TrimSpace(t.Title)
@@ -935,12 +1062,15 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 				priority=$4, address=$5, nvt=$6,
 				due_date=NULLIF($7,'')::date, due_time=NULLIF($8,'')::time,
 				org_id=$9, user_id=$10,
-				client_first_name=$12, client_last_name=$13, client_phone=$14,
+				client_first_name=$12, client_last_name=$13, client_company=$14,
+				client_phone=$15, client_mobile=$16, client_email=$17,
+				street=$18, house_number=$19, postcode=$20, city=$21,
 				updated_at=NOW()
 			WHERE id=$11`,
 			projectID, title, description, priority, address, nvt,
 			due, dueTime, sqlNullInt64(orgID), sqlNullInt64(userID), t.ID,
-			first, last, phone)
+			first, last, company, phone, mobile, email,
+			street, houseNo, postcode, city)
 		if err != nil {
 			return "Error: " + err.Error()
 		}

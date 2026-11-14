@@ -816,6 +816,9 @@ func main() {
 	}
 	// Stari zadaci nemaju ime/prezime/telefon — popuni iz direktorijuma
 	// (samo prazna polja, da se ništa ručno uneto ne pregazi).
+	if err := backfillAddressParts(db); err != nil {
+		log.Fatal("Failed to backfill address parts:", err)
+	}
 	if err := backfillTaskClients(db); err != nil {
 		log.Fatal("Failed to backfill task clients:", err)
 	}

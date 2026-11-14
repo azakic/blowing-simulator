@@ -51,6 +51,14 @@ func ensureCustomerSchema(db *sqlx.DB) error {
 			created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			updated_at  TIMESTAMPTZ
 		)`,
+		// Normalizovana adresa (ulica/broj/PLZ/grad). „address“ ostaje za
+		// prikaz; spajanje ide na ulicu+broj (bez grada) i NVT.
+		`ALTER TABLE ha_customers ADD COLUMN IF NOT EXISTS street TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_customers ADD COLUMN IF NOT EXISTS house_number TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_customers ADD COLUMN IF NOT EXISTS postcode TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_customers ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_customers ADD COLUMN IF NOT EXISTS street_key TEXT NOT NULL DEFAULT ''`,
+		`CREATE INDEX IF NOT EXISTS idx_ha_customers_street_key ON ha_customers (street_key)`,
 		// NVT nije jedinstven (npr. „1.25“ deli više adresa) — ključ za
 		// spajanje je adresa, a NVT je dodatni podatak i sekundarni filter.
 		`DROP INDEX IF EXISTS idx_ha_customers_nvt`,
@@ -82,13 +90,17 @@ func ensureCustomerSchema(db *sqlx.DB) error {
 // --- parsiranje ---
 
 type customerRow struct {
-	ID      int64  `db:"id" json:"id,omitempty"`
-	Address string `db:"address" json:"address"`
-	NVT     string `db:"nvt" json:"nvt"`
-	Kunde   string `db:"kunde" json:"kunde"`
-	Phone   string `db:"phone" json:"phone"`
-	Mobile  string `db:"mobile" json:"mobile"`
-	Source  string `db:"source" json:"-"`
+	ID          int64  `db:"id" json:"id,omitempty"`
+	Address     string `db:"address" json:"address"`
+	NVT         string `db:"nvt" json:"nvt"`
+	Kunde       string `db:"kunde" json:"kunde"`
+	Phone       string `db:"phone" json:"phone"`
+	Mobile      string `db:"mobile" json:"mobile"`
+	Street      string `db:"street" json:"street"`
+	HouseNumber string `db:"house_number" json:"house_number"`
+	Postcode    string `db:"postcode" json:"postcode"`
+	City        string `db:"city" json:"city"`
+	Source      string `db:"source" json:"-"`
 }
 
 type parsedCustomerFile struct {
@@ -558,10 +570,17 @@ func splitKunde(s string) (first, last string) {
 			return "", s
 		}
 	}
-	low := strings.ToLower(s)
-	for _, h := range []string{"herr ", "frau ", "dr. ", "prof. ", "dr ", "prof "} {
-		if strings.HasPrefix(low, h) {
-			s = strings.TrimSpace(s[len(h):])
+	for {
+		low := strings.ToLower(s)
+		trimmed := false
+		for _, h := range []string{"herr ", "frau ", "dr. ", "prof. ", "dr ", "prof "} {
+			if strings.HasPrefix(low, h) {
+				s = strings.TrimSpace(s[len(h):])
+				trimmed = true
+				break
+			}
+		}
+		if !trimmed {
 			break
 		}
 	}
@@ -683,6 +702,8 @@ func importCustomers(r *http.Request) *customerImportResult {
 	for i, row := range parsed.Rows {
 		nvtKey := customerKey(row.NVT)
 		addrKey := customerKey(row.Address)
+		st, houseNo, plz, city := parseAddress(row.Address)
+		sKey := streetKey(st, houseNo)
 		if nvtKey == "" && addrKey == "" {
 			res.Skipped++
 			continue
@@ -691,11 +712,16 @@ func importCustomers(r *http.Request) *customerImportResult {
 		if addrKey != "" {
 			// Adresa je ključ za spajanje; NVT se samo osvežava.
 			err = tx.Get(&inserted, `INSERT INTO ha_customers
-					(address, nvt, kunde, phone, mobile, nvt_key, address_key, source, imported_by)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+					(address, nvt, kunde, phone, mobile,
+					 street, house_number, postcode, city, street_key,
+					 nvt_key, address_key, source, imported_by)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 				ON CONFLICT (address_key) WHERE address_key <> ''
 				DO UPDATE SET address=EXCLUDED.address, nvt=EXCLUDED.nvt,
 					kunde=EXCLUDED.kunde, phone=EXCLUDED.phone, mobile=EXCLUDED.mobile,
+					street=EXCLUDED.street, house_number=EXCLUDED.house_number,
+					postcode=EXCLUDED.postcode, city=EXCLUDED.city,
+					street_key=EXCLUDED.street_key,
 					nvt_key=EXCLUDED.nvt_key, source=EXCLUDED.source,
 					imported_by=EXCLUDED.imported_by, updated_at=NOW()
 				WHERE ha_customers.address IS DISTINCT FROM EXCLUDED.address
@@ -704,21 +730,30 @@ func importCustomers(r *http.Request) *customerImportResult {
 					OR ha_customers.phone IS DISTINCT FROM EXCLUDED.phone
 					OR ha_customers.mobile IS DISTINCT FROM EXCLUDED.mobile
 					OR ha_customers.nvt_key IS DISTINCT FROM EXCLUDED.nvt_key
+					OR ha_customers.street_key IS DISTINCT FROM EXCLUDED.street_key
 				RETURNING (xmax = 0) AS inserted`,
 				row.Address, row.NVT, row.Kunde, row.Phone, row.Mobile,
+				st, houseNo, plz, city, sKey,
 				nvtKey, addrKey, res.Filename, userID)
 		} else {
 			err = tx.Get(&inserted, `INSERT INTO ha_customers
-					(address, nvt, kunde, phone, mobile, nvt_key, address_key, source, imported_by)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+					(address, nvt, kunde, phone, mobile,
+					 street, house_number, postcode, city, street_key,
+					 nvt_key, address_key, source, imported_by)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 				ON CONFLICT (nvt_key, kunde) WHERE address_key = ''
 				DO UPDATE SET phone=EXCLUDED.phone, mobile=EXCLUDED.mobile,
+					street=EXCLUDED.street, house_number=EXCLUDED.house_number,
+					postcode=EXCLUDED.postcode, city=EXCLUDED.city,
+					street_key=EXCLUDED.street_key,
 					source=EXCLUDED.source, imported_by=EXCLUDED.imported_by,
 					updated_at=NOW()
 				WHERE ha_customers.phone IS DISTINCT FROM EXCLUDED.phone
 					OR ha_customers.mobile IS DISTINCT FROM EXCLUDED.mobile
+					OR ha_customers.street_key IS DISTINCT FROM EXCLUDED.street_key
 				RETURNING (xmax = 0) AS inserted`,
 				row.Address, row.NVT, row.Kunde, row.Phone, row.Mobile,
+				st, houseNo, plz, city, sKey,
 				nvtKey, addrKey, res.Filename, userID)
 		}
 		if err != nil {
@@ -756,14 +791,19 @@ func importCustomers(r *http.Request) *customerImportResult {
 // --- lookup za HaP formu ---
 
 type lookupMatch struct {
-	ID        int64  `json:"id"`
-	Address   string `json:"address"`
-	NVT       string `json:"nvt"`
-	Kunde     string `json:"kunde"`
-	Phone     string `json:"phone"`
-	Mobile    string `json:"mobile"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
+	ID          int64  `json:"id"`
+	Address     string `json:"address"`
+	Street      string `json:"street"`
+	HouseNumber string `json:"house_number"`
+	Postcode    string `json:"postcode"`
+	City        string `json:"city"`
+	NVT         string `json:"nvt"`
+	Kunde       string `json:"kunde"`
+	Company     string `json:"company"`
+	Phone       string `json:"phone"`
+	Mobile      string `json:"mobile"`
+	FirstName   string `json:"first_name"`
+	LastName    string `json:"last_name"`
 }
 
 type lookupResponse struct {
@@ -772,21 +812,46 @@ type lookupResponse struct {
 	Matches []lookupMatch `json:"matches,omitempty"`
 }
 
-// findCustomers traži pogotke: tačna adresa, pa NVT (grupa adresa), pa
-// prefiks adrese.
+const customerSelect = `SELECT id, address, nvt, kunde, phone, mobile,
+		street, house_number, postcode, city FROM ha_customers`
+
+// findCustomers traži pogotke: ulica+broj (+NVT), tačna adresa, NVT (grupa
+// adresa), pa prefiks i sadržaj adrese.
 func findCustomers(nvt, addr string) []customerRow {
 	keys := addressLookupKeys(addr)
-	for _, k := range keys {
+	st, houseNo, _, _ := parseAddress(addr)
+	sk := streetKey(st, houseNo)
+
+	// 1) ulica+broj i NVT — najprecizniji pogodak (adresa bez grada se
+	// ponavlja, NVT je razlikuje).
+	if sk != "" && nvt != "" {
 		var rows []customerRow
-		if err := db.Select(&rows, `SELECT id, address, nvt, kunde, phone, mobile
-			FROM ha_customers WHERE address_key = $1 LIMIT 1`, k); err == nil && len(rows) > 0 {
+		if err := db.Select(&rows, customerSelect+`
+			WHERE street_key = $1 AND nvt_key = $2 LIMIT 5`, sk, nvt); err == nil && len(rows) > 0 {
 			return rows
 		}
 	}
+	// 2) samo ulica+broj
+	if sk != "" {
+		var rows []customerRow
+		if err := db.Select(&rows, customerSelect+`
+			WHERE street_key = $1 LIMIT 5`, sk); err == nil && len(rows) > 0 {
+			return rows
+		}
+	}
+	// 3) tačna adresa (ceo string / pre / posle zareza)
+	for _, k := range keys {
+		var rows []customerRow
+		if err := db.Select(&rows, customerSelect+`
+			WHERE address_key = $1 LIMIT 1`, k); err == nil && len(rows) > 0 {
+			return rows
+		}
+	}
+	// 4) NVT — grupa adresa
 	if nvt != "" {
 		var rows []customerRow
-		if err := db.Select(&rows, `SELECT id, address, nvt, kunde, phone, mobile
-			FROM ha_customers WHERE nvt_key = $1 ORDER BY address_key LIMIT 5`, nvt); err == nil && len(rows) > 0 {
+		if err := db.Select(&rows, customerSelect+`
+			WHERE nvt_key = $1 ORDER BY address_key LIMIT 5`, nvt); err == nil && len(rows) > 0 {
 			return rows
 		}
 	}
@@ -795,8 +860,8 @@ func findCustomers(nvt, addr string) []customerRow {
 			continue
 		}
 		var rows []customerRow
-		if err := db.Select(&rows, `SELECT id, address, nvt, kunde, phone, mobile
-			FROM ha_customers WHERE address_key LIKE $1 || '%'
+		if err := db.Select(&rows, customerSelect+`
+			WHERE address_key LIKE $1 || '%'
 			ORDER BY length(address_key), address_key LIMIT 5`, k); err == nil && len(rows) > 0 {
 			return rows
 		}
@@ -808,8 +873,8 @@ func findCustomers(nvt, addr string) []customerRow {
 			continue
 		}
 		var rows []customerRow
-		if err := db.Select(&rows, `SELECT id, address, nvt, kunde, phone, mobile
-			FROM ha_customers WHERE address_key LIKE '%' || $1 || '%'
+		if err := db.Select(&rows, customerSelect+`
+			WHERE address_key LIKE '%' || $1 || '%'
 			ORDER BY length(address_key), address_key LIMIT 5`, k); err == nil && len(rows) > 0 {
 			return rows
 		}
@@ -821,16 +886,29 @@ func findCustomers(nvt, addr string) []customerRow {
 // tačna adresa, ili NVT samo kada je jedinstven (NVT je obično grupa adresa).
 func customerForPrefill(nvt, address string) (customerRow, bool) {
 	var row customerRow
+	st, houseNo, _, _ := parseAddress(address)
+	if sk := streetKey(st, houseNo); sk != "" {
+		if n := customerKey(nvt); n != "" {
+			if err := db.Get(&row, customerSelect+`
+				WHERE street_key = $1 AND nvt_key = $2 LIMIT 1`, sk, n); err == nil {
+				return row, true
+			}
+		}
+		if err := db.Get(&row, customerSelect+`
+			WHERE street_key = $1 LIMIT 1`, sk); err == nil {
+			return row, true
+		}
+	}
 	for _, a := range addressLookupKeys(address) {
-		if err := db.Get(&row, `SELECT id, address, nvt, kunde, phone, mobile
-			FROM ha_customers WHERE address_key = $1 LIMIT 1`, a); err == nil {
+		if err := db.Get(&row, customerSelect+`
+			WHERE address_key = $1 LIMIT 1`, a); err == nil {
 			return row, true
 		}
 	}
 	if n := customerKey(nvt); n != "" {
 		var rows []customerRow
-		if err := db.Select(&rows, `SELECT id, address, nvt, kunde, phone, mobile
-			FROM ha_customers WHERE nvt_key = $1 LIMIT 2`, n); err == nil && len(rows) == 1 {
+		if err := db.Select(&rows, customerSelect+`
+			WHERE nvt_key = $1 LIMIT 2`, n); err == nil && len(rows) == 1 {
 			return rows[0], true
 		}
 	}
@@ -861,10 +939,16 @@ func HALookupHandler(w http.ResponseWriter, r *http.Request) {
 
 	matches := make([]lookupMatch, 0, len(rows))
 	for _, row := range rows {
+		// last_name ostaje kompatibilan sa HaP formom (firma ide u prezime),
+		// a company je odvojeno polje za zadatke.
 		first, last := splitKunde(row.Kunde)
+		_, _, company := customerNameParts(row.Kunde)
 		matches = append(matches, lookupMatch{
 			ID: row.ID, Address: row.Address, NVT: row.NVT, Kunde: row.Kunde,
-			Phone: row.Phone, Mobile: row.Mobile, FirstName: first, LastName: last,
+			Street: row.Street, HouseNumber: row.HouseNumber,
+			Postcode: row.Postcode, City: row.City,
+			Company: company,
+			Phone:   row.Phone, Mobile: row.Mobile, FirstName: first, LastName: last,
 		})
 	}
 	resp.Found = true
