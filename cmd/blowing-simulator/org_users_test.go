@@ -75,7 +75,7 @@ func TestTemplatesParse(t *testing.T) {
 	// Neke strane registruju pomoćne funkcije u FuncMap-u; za proveru sintakse
 	// je dovoljno da ime postoji.
 	funcs := template.FuncMap{}
-	for _, name := range []string{"add", "sub", "dateOnly", "timeOnly", "dateFormat", "extractNVT", "formatTime", "csrfToken", "dotTime", "dueLabel", "mapsURL", "hours", "minutes", "hourOf", "minOf", "dateShort", "photoCaptionLine", "formatHaDate", "swatchStyle", "dash"} {
+	for _, name := range []string{"add", "sub", "dateOnly", "timeOnly", "dateFormat", "extractNVT", "formatTime", "csrfToken", "dotTime", "dueLabel", "mapsURL", "ProviderLabel", "hours", "minutes", "hourOf", "minOf", "dateShort", "photoCaptionLine", "formatHaDate", "swatchStyle", "dash"} {
 		funcs[name] = func(args ...any) string { return "" }
 	}
 	for _, f := range files {

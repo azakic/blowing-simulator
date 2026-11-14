@@ -43,6 +43,7 @@
             <tr>
               <th>Number</th>
               <th>Name</th>
+              <th>Protocol type</th>
               <th>Status</th>
               <th class="num">Protocols</th>
               <th>Companies</th>
@@ -56,6 +57,7 @@
             <tr>
               <td data-label="Number"><strong>{{.Number}}</strong></td>
               <td data-label="Name">{{if .Name}}{{.Name}}{{else}}<span class="muted">—</span>{{end}}</td>
+              <td data-label="Protocol type"><span class="chip">{{ProviderLabel .Provider}}</span></td>
               <td data-label="Status">
                 <span class="pill {{if eq .Status "active"}}active{{else}}pending{{end}}">{{.Status}}</span>
                 <form method="POST" action="/admin/projects" style="margin-top:.35rem;">
@@ -138,7 +140,13 @@
           <input type="hidden" name="action" value="create" />
           <label class="field"><span>Project number</span><input name="number" placeholder="SM209214964" required /></label>
           <label class="field" style="flex:2 1 260px;"><span>Name (optional)</span><input name="name" placeholder="Oldenburger Koppel" /></label>
+          <label class="field"><span>Protocol type *</span>
+            <select name="provider" required>
+              {{range .Providers}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+            </select>
+          </label>
           <button class="btn btn-primary" type="submit">Create project</button>
+          <p class="note" style="flex:1 1 100%;margin:0;">The protocol type belongs to the project and cannot be changed later — create a new project for a different type.</p>
         </form>
       </div>
     </section>

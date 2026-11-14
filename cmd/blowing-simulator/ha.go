@@ -103,6 +103,8 @@ func ensureHASchema(db *sqlx.DB) error {
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS rohr INTEGER`,
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS rohr_color TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS roehrchen_color TEXT NOT NULL DEFAULT ''`,
+		// Vrsta protokola (iz projekta); snapshot, da istorijski PDF ostane tačan.
+		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_photos ADD COLUMN IF NOT EXISTS geo_address TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_photos ADD COLUMN IF NOT EXISTS ocr_text TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_photos ADD COLUMN IF NOT EXISTS ocr_time TEXT NOT NULL DEFAULT ''`,
@@ -566,6 +568,16 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 		orgID = taskOrgID
 	}
 
+	// Vrsta protokola dolazi iz projekta (jedan provajder po projektu); ako
+	// HaP nije vezan za projekat, ostaje Westnetz jer je to jedini obrazac.
+	provider := "westnetz"
+	if projectID > 0 {
+		var pv string
+		if err := db.Get(&pv, `SELECT coalesce(provider,'') FROM projects WHERE id = $1`, projectID); err == nil && pv != "" {
+			provider = pv
+		}
+	}
+
 	var id int64
 	err := db.Get(&id, `INSERT INTO ha_protocols
 			(task_id, project_id, org_id, auftragnehmer, address, city, bauabschnitt,
@@ -574,11 +586,11 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 			 fiber_colors, cable_charge, cable_length_m,
 			 nvt, client_phone, client_mobile,
 			 check_fiber, check_complete, check_clean, created_by,
-			 rohr, rohr_color, roehrchen_color)
+			 rohr, rohr_color, roehrchen_color, provider)
 		VALUES ($1, $2, $3, $4,$5,$6,$7,$8,$9,
 		        NULLIF($10,'')::int, $11::date, $12,$13,$14,$15,$16,$17,$18,
 		        NULLIF($19,'')::int, $20,$21,NULLIF($22,'')::numeric,
-		        $23,$24,$25, $26,$27,$28,$29, $30,$31,$32)
+		        $23,$24,$25, $26,$27,$28,$29, $30,$31,$32, $33)
 		RETURNING id`,
 		nullableID(taskID), nullableID(projectID), nullableID(orgID),
 		strings.TrimSpace(r.FormValue("auftragnehmer")),
@@ -609,7 +621,8 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 		claims.UserID,
 		parseRohr(r.FormValue("rohr")),
 		strings.TrimSpace(r.FormValue("rohr_color")),
-		strings.TrimSpace(r.FormValue("roehrchen_color")))
+		strings.TrimSpace(r.FormValue("roehrchen_color")),
+		provider)
 	if err != nil {
 		return 0, "Could not save: " + err.Error()
 	}

@@ -39,6 +39,9 @@ func ensureProjectSchema(db *sqlx.DB) error {
 			status     TEXT NOT NULL DEFAULT 'active',
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)`,
+		// Provajder kome pripada projekat (westnetz/telekom/verzatel). Ne menja
+		// se posle kreiranja — za drugu vrstu se pravi novi projekat.
+		`ALTER TABLE projects ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'westnetz'`,
 		`CREATE TABLE IF NOT EXISTS project_orgs (
 			project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
 			org_id     INTEGER NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
@@ -86,11 +89,37 @@ func backfillProjects(db *sqlx.DB) error {
 
 // --- upiti za admin stranu ---
 
+// projectProviders su vrste protokola koje projekat može da nosi.
+var projectProviders = []struct{ Value, Label string }{
+	{"westnetz", "Westnetz (HaP 1.5.1)"},
+	{"telekom", "Telekom"},
+	{"verzatel", "Verzatel"},
+}
+
+func validProjectProvider(v string) bool {
+	for _, p := range projectProviders {
+		if p.Value == v {
+			return true
+		}
+	}
+	return false
+}
+
+func projectProviderLabel(v string) string {
+	for _, p := range projectProviders {
+		if p.Value == v {
+			return p.Label
+		}
+	}
+	return v
+}
+
 type projectRow2 struct {
 	ID        int64  `db:"id"`
 	Number    string `db:"number"`
 	Name      string `db:"name"`
 	Status    string `db:"status"`
+	Provider  string `db:"provider"`
 	Protocols int    `db:"protocols"`
 	Orgs      int    `db:"orgs"`
 	Users     int    `db:"users"`
@@ -111,6 +140,7 @@ type projectUserRow struct {
 func listProjects() ([]projectRow2, error) {
 	var out []projectRow2
 	err := db.Select(&out, `SELECT p.id, p.number, p.name, p.status,
+			coalesce(p.provider,'') AS provider,
 			(SELECT count(*) FROM protocols pr WHERE pr.project_id = p.id) AS protocols,
 			(SELECT count(*) FROM project_orgs po WHERE po.project_id = p.id) AS orgs,
 			(SELECT count(*) FROM project_users pu WHERE pu.project_id = p.id) AS users
@@ -182,8 +212,24 @@ func AdminProjectsHandler(w http.ResponseWriter, r *http.Request) {
 		"Users":          users,
 		"OrgsByProject":  orgsByProject,
 		"UsersByProject": usersByProject,
+		"Providers":      projectProviders,
+		"ProviderLabel":  projectProviderLabel,
 		"Message":        r.URL.Query().Get("msg"),
 	})
+}
+
+// backfillProtocolProviders upisuje vrstu protokola iz projekta u postojeće
+// HaP-ove (i Westnetz gde projekat nije vezan).
+func backfillProtocolProviders(db *sqlx.DB) error {
+	if _, err := db.Exec(`UPDATE ha_protocols h
+		SET provider = coalesce(nullif(p.provider,''), 'westnetz')
+		FROM projects p
+		WHERE h.project_id = p.id AND coalesce(h.provider,'') = ''`); err != nil {
+		return err
+	}
+	_, err := db.Exec(`UPDATE ha_protocols SET provider = 'westnetz'
+		WHERE coalesce(provider,'') = ''`)
+	return err
 }
 
 func handleProjectAction(r *http.Request) string {
@@ -196,9 +242,19 @@ func handleProjectAction(r *http.Request) string {
 		if number == "" {
 			return "Project number is required."
 		}
+		provider := strings.TrimSpace(r.FormValue("provider"))
+		if provider == "" {
+			provider = "westnetz" // stariji klijenti / jedini obrazac koji imamo
+		}
+		if !validProjectProvider(provider) {
+			return "Unknown protocol type."
+		}
 		var id int64
-		if err := db.Get(&id, `INSERT INTO projects (number, name) VALUES ($1, $2)
-			ON CONFLICT (number) DO UPDATE SET name = EXCLUDED.name RETURNING id`, number, name); err != nil {
+		// Provajder se upisuje samo pri kreiranju; postojeći projekat ga
+		// zadržava (menja se brisanjem i novim projektom).
+		if err := db.Get(&id, `INSERT INTO projects (number, name, provider) VALUES ($1, $2, $3)
+			ON CONFLICT (number) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+			number, name, provider); err != nil {
 			return "Error: " + err.Error()
 		}
 		if _, err := db.Exec(`UPDATE protocols SET project_id = $1

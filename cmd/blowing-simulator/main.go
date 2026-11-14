@@ -814,6 +814,9 @@ func main() {
 	if err := backfillProjects(db); err != nil {
 		log.Fatal("Failed to backfill projects:", err)
 	}
+	if err := backfillProtocolProviders(db); err != nil {
+		log.Fatal("Failed to backfill protocol providers:", err)
+	}
 	// Stari zadaci nemaju ime/prezime/telefon — popuni iz direktorijuma
 	// (samo prazna polja, da se ništa ručno uneto ne pregazi).
 	if err := backfillAddressParts(db); err != nil {
