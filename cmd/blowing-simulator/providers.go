@@ -202,3 +202,22 @@ func ensureProviderColumns(db *sqlx.DB) error {
 	}
 	return nil
 }
+
+// backfillProviderVersions upisuje verziju obrasca u HaP-ove koji je nemaju
+// (izdate pre uvođenja kolone). Idempotentno.
+func backfillProviderVersions(db *sqlx.DB) error {
+	for _, p := range providerProfiles {
+		if p.Version == "" {
+			continue
+		}
+		if _, err := db.Exec(`UPDATE ha_protocols SET template_version=$1
+			WHERE coalesce(template_version,'') = '' AND provider=$2`, p.Version, p.Key); err != nil {
+			return err
+		}
+	}
+	// Stariji redovi bez provajdera su Westnetz (jedini obrazac do sada).
+	westnetz := providerProfileFor("westnetz")
+	_, err := db.Exec(`UPDATE ha_protocols SET template_version=$1, provider='westnetz'
+		WHERE coalesce(template_version,'') = '' AND coalesce(provider,'') = ''`, westnetz.Version)
+	return err
+}

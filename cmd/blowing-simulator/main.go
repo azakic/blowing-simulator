@@ -821,6 +821,9 @@ func main() {
 	if err := ensureProviderColumns(db); err != nil {
 		log.Fatal("Failed to ensure provider columns:", err)
 	}
+	if err := backfillProviderVersions(db); err != nil {
+		log.Fatal("Failed to backfill provider versions:", err)
+	}
 	if err := backfillProjects(db); err != nil {
 		log.Fatal("Failed to backfill projects:", err)
 	}
