@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -15,7 +16,7 @@ import (
 
 // SaveFremcoProtocol saves a complete Fremco protocol to the database
 func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID int64) (int, error) {
-	tx, err := db.Begin()
+	tx, err := db.Beginx()
 	if err != nil {
 		return 0, fmt.Errorf("failed to begin transaction: %v", err)
 	}
@@ -27,6 +28,15 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID
 	attrib := attributionFor(ownerID, protocol.ProtocolInfo.Company, protocol.ProtocolInfo.ServiceProvider)
 	projectArg := sqlNullProjectID(protocol.ProtocolInfo.ProjectNumber)
 
+	// Zajednički objekat (ulica+broj, NVT) — isti red kao zadatak i HaP.
+	protoAddress := extractAddressFromSectionNVT(protocol.ProtocolInfo.SectionNVT)
+	protoNVT := nvtFromSection(protocol.ProtocolInfo.SectionNVT)
+	pStreet, pHouse, pPlz, pCity, pNVT := connectionParts("", "", "", "", protoAddress, protoNVT)
+	connID, err := upsertConnection(context.Background(), tx, pStreet, pHouse, pPlz, pCity, pNVT)
+	if err != nil {
+		return 0, fmt.Errorf("failed to upsert connection: %v", err)
+	}
+
 	// Insert main protocol record
 	var protocolID int
 	err = tx.QueryRow(`
@@ -34,9 +44,10 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID
 			protocol_type, system_name, document_type, protocol_date, start_time,
 			project_number, section_nvt, company, service_provider, operator,
 			remarks, source_filename, parser_version, address, user_id,
-			owner_org_id, company_org_id, service_provider_org_id, org_review, project_id
+			owner_org_id, company_org_id, service_provider_org_id, org_review, project_id,
+			connection_id
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-			$16, $17, $18, $19, $20)
+			$16, $17, $18, $19, $20, $21)
 		RETURNING id`,
 		"fremco",
 		protocol.ProtocolInfo.System,
@@ -58,6 +69,7 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID
 		attrib.Provider,
 		attrib.Review,
 		projectArg,
+		sqlNullInt64(connID),
 	).Scan(&protocolID)
 
 	if err != nil {
@@ -172,7 +184,7 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID
 
 // SaveJettingProtocol saves a complete Jetting protocol to the database
 func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol, ownerID int64) (int, error) {
-	tx, err := db.Begin()
+	tx, err := db.Beginx()
 	if err != nil {
 		return 0, fmt.Errorf("failed to begin transaction: %v", err)
 	}
@@ -184,6 +196,15 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol, owner
 	attrib := attributionFor(ownerID, protocol.ProtocolInfo.Company, protocol.ProtocolInfo.ServiceProvider)
 	projectArg := sqlNullProjectIDPtr(protocol.ProtocolInfo.ProjectNumber)
 
+	// Zajednički objekat (ulica+broj, NVT) — isti red kao zadatak i HaP.
+	protoAddress := extractAddressFromSectionNVT(protocol.ProtocolInfo.SectionNVT)
+	protoNVT := nvtFromSection(protocol.ProtocolInfo.SectionNVT)
+	pStreet, pHouse, pPlz, pCity, pNVT := connectionParts("", "", "", "", protoAddress, protoNVT)
+	connID, err := upsertConnection(context.Background(), tx, pStreet, pHouse, pPlz, pCity, pNVT)
+	if err != nil {
+		return 0, fmt.Errorf("failed to upsert connection: %v", err)
+	}
+
 	// Insert main protocol record
 	var protocolID int
 	err = tx.QueryRow(`
@@ -191,9 +212,10 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol, owner
 			protocol_type, system_name, document_type, protocol_date, start_time,
 			project_number, section_nvt, company, service_provider, operator,
 			remarks, source_filename, parser_version, address, user_id,
-			owner_org_id, company_org_id, service_provider_org_id, org_review, project_id
+			owner_org_id, company_org_id, service_provider_org_id, org_review, project_id,
+			connection_id
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-			$16, $17, $18, $19, $20)
+			$16, $17, $18, $19, $20, $21)
 		RETURNING id`,
 		"jetting",
 		protocol.ProtocolInfo.System,
@@ -215,6 +237,7 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol, owner
 		attrib.Provider,
 		attrib.Review,
 		projectArg,
+		sqlNullInt64(connID),
 	).Scan(&protocolID)
 
 	if err != nil {

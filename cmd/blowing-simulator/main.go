@@ -811,6 +811,10 @@ func main() {
 	if err := ensureCustomerSchema(db); err != nil {
 		log.Fatal("Failed to ensure customer schema:", err)
 	}
+	// Zajednički objekat (faza 2): (ulica+broj, NVT) → connections.
+	if err := ensureConnectionsSchema(db); err != nil {
+		log.Fatal("Failed to ensure connections schema:", err)
+	}
 	if err := backfillProjects(db); err != nil {
 		log.Fatal("Failed to backfill projects:", err)
 	}
@@ -827,6 +831,9 @@ func main() {
 	}
 	if err := backfillOrgAttribution(db); err != nil {
 		log.Fatal("Failed to backfill org attribution:", err)
+	}
+	if err := backfillConnections(db); err != nil {
+		log.Fatal("Failed to backfill connections:", err)
 	}
 
 	// Javna strana, ali meni i tile-ovi zavise od role → claims ako ih ima.

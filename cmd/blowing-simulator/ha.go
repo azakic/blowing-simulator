@@ -591,8 +591,16 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 		}
 	}
 
+	// Objekat: (ulica+broj, NVT) — isti red kao zadatak i protokoli.
+	haStreet, haHouse, haPlz, haCity, haNVT := connectionParts("", "", "",
+		strings.TrimSpace(r.FormValue("city")), address, strings.TrimSpace(r.FormValue("nvt")))
+	connID, err := upsertConnection(r.Context(), db, haStreet, haHouse, haPlz, haCity, haNVT)
+	if err != nil {
+		return 0, "Could not save: " + err.Error()
+	}
+
 	var id int64
-	err := db.Get(&id, `INSERT INTO ha_protocols
+	err = db.Get(&id, `INSERT INTO ha_protocols
 			(task_id, project_id, org_id, auftragnehmer, address, city, bauabschnitt,
 			 client_last_name, client_first_name, units, protocol_date, monteur, pruefer,
 			 project_number, gvs, kassette_b, mux_number, mux_fibers, splices,
@@ -600,12 +608,12 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 			 nvt, client_phone, client_mobile,
 			 check_fiber, check_complete, check_clean, created_by,
 			 rohr, rohr_color, roehrchen_color, provider,
-			 client_company, client_email, remarks, start_time)
+			 client_company, client_email, remarks, start_time, connection_id)
 		VALUES ($1, $2, $3, $4,$5,$6,$7,$8,$9,
 		        NULLIF($10,'')::int, $11::date, $12,$13,$14,$15,$16,$17,$18,
 		        NULLIF($19,'')::int, $20,$21,NULLIF($22,'')::numeric,
 		        $23,$24,$25, $26,$27,$28,$29, $30,$31,$32, $33,
-		        $34,$35,$36, NULLIF($37,'')::time)
+		        $34,$35,$36, NULLIF($37,'')::time, $38)
 		RETURNING id`,
 		nullableID(taskID), nullableID(projectID), nullableID(orgID),
 		strings.TrimSpace(r.FormValue("auftragnehmer")),
@@ -641,7 +649,8 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 		strings.TrimSpace(r.FormValue("client_company")),
 		strings.TrimSpace(r.FormValue("client_email")),
 		strings.TrimSpace(r.FormValue("remarks")),
-		parseHATime(r.FormValue("start_time")))
+		parseHATime(r.FormValue("start_time")),
+		sqlNullInt64(connID))
 	if err != nil {
 		return 0, "Could not save: " + err.Error()
 	}
@@ -979,7 +988,13 @@ func updateHA(r *http.Request, h haRow) string {
 			orgID = v
 		}
 	}
-	_, err := db.Exec(`UPDATE ha_protocols SET
+	haStreet, haHouse, haPlz, haCity, haNVT := connectionParts("", "", "",
+		strings.TrimSpace(r.FormValue("city")), r.FormValue("address"), strings.TrimSpace(r.FormValue("nvt")))
+	connID, err := upsertConnection(r.Context(), db, haStreet, haHouse, haPlz, haCity, haNVT)
+	if err != nil {
+		return "Could not save: " + err.Error()
+	}
+	_, err = db.Exec(`UPDATE ha_protocols SET
 			auftragnehmer=$1, address=$2, city=$3, bauabschnitt=$4,
 			client_last_name=$5, client_first_name=$6, units=NULLIF($7,'')::int,
 			protocol_date=$8::date, monteur=$9, pruefer=$10, project_number=$11,
@@ -991,7 +1006,7 @@ func updateHA(r *http.Request, h haRow) string {
 			rohr=$27, rohr_color=$28, roehrchen_color=$29,
 			project_id=$30, org_id=$31,
 			client_company=$32, client_email=$33, remarks=$34,
-			start_time=NULLIF($35,'')::time,
+			start_time=NULLIF($35,'')::time, connection_id=$36,
 			updated_at=NOW()
 		WHERE id=$26`,
 		strings.TrimSpace(r.FormValue("auftragnehmer")),
@@ -1027,7 +1042,8 @@ func updateHA(r *http.Request, h haRow) string {
 		strings.TrimSpace(r.FormValue("client_company")),
 		strings.TrimSpace(r.FormValue("client_email")),
 		strings.TrimSpace(r.FormValue("remarks")),
-		parseHATime(r.FormValue("start_time")))
+		parseHATime(r.FormValue("start_time")),
+		sqlNullInt64(connID))
 	if err != nil {
 		return "Could not save: " + err.Error()
 	}

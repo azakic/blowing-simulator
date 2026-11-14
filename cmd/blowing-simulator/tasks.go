@@ -809,6 +809,11 @@ func createTask(r *http.Request, claims *AuthClaims) (int64, string) {
 	}
 	address := formatAddress(street, houseNo, postcode, city)
 	nvt := strings.TrimSpace(r.FormValue("nvt"))
+	// Objekat: isti (ulica+broj, NVT) deli zadatak, HaP i protokoli.
+	connID, err := upsertConnection(r.Context(), db, street, houseNo, postcode, city, nvt)
+	if err != nil {
+		return 0, "Error: " + err.Error()
+	}
 	due, dueTime, msg := parseDue(r)
 	if msg != "" {
 		return 0, msg
@@ -822,19 +827,19 @@ func createTask(r *http.Request, claims *AuthClaims) (int64, string) {
 	}
 
 	var newID int64
-	err := db.Get(&newID, `INSERT INTO tasks
+	err = db.Get(&newID, `INSERT INTO tasks
 			(project_id, org_id, user_id, title, description, priority,
 			 client_first_name, client_last_name, client_company,
 			 client_phone, client_mobile, client_email,
 			 street, house_number, postcode, city,
-			 address, nvt, due_date, due_time, created_by)
+			 address, nvt, due_date, due_time, created_by, connection_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-		        $17, $18, NULLIF($19,'')::date, NULLIF($20,'')::time, $21)
+		        $17, $18, NULLIF($19,'')::date, NULLIF($20,'')::time, $21, $22)
 		RETURNING id`,
 		projectID, sqlNullInt64(orgID), sqlNullInt64(userID), title, description, priority,
 		first, last, company, phone, mobile, email,
 		street, houseNo, postcode, city,
-		address, nvt, due, dueTime, claims.UserID)
+		address, nvt, due, dueTime, claims.UserID, sqlNullInt64(connID))
 	if err != nil {
 		return 0, "Error: " + err.Error()
 	}
@@ -1099,6 +1104,10 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 		}
 		address := formatAddress(street, houseNo, postcode, city)
 		nvt := strings.TrimSpace(r.FormValue("nvt"))
+		connID, err := upsertConnection(r.Context(), db, street, houseNo, postcode, city, nvt)
+		if err != nil {
+			return "Error: " + err.Error()
+		}
 		if msg := validateTaskRequired(orgID, address, nvt, due, dueTime); msg != "" {
 			return msg
 		}
@@ -1121,19 +1130,19 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 			title = title[:200]
 		}
 
-		_, err := db.Exec(`UPDATE tasks SET project_id=$1, title=$2, description=$3,
+		_, err = db.Exec(`UPDATE tasks SET project_id=$1, title=$2, description=$3,
 				priority=$4, address=$5, nvt=$6,
 				due_date=NULLIF($7,'')::date, due_time=NULLIF($8,'')::time,
 				org_id=$9, user_id=$10,
 				client_first_name=$12, client_last_name=$13, client_company=$14,
 				client_phone=$15, client_mobile=$16, client_email=$17,
 				street=$18, house_number=$19, postcode=$20, city=$21,
-				updated_at=NOW()
+				connection_id=$22, updated_at=NOW()
 			WHERE id=$11`,
 			projectID, title, description, priority, address, nvt,
 			due, dueTime, sqlNullInt64(orgID), sqlNullInt64(userID), t.ID,
 			first, last, company, phone, mobile, email,
-			street, houseNo, postcode, city)
+			street, houseNo, postcode, city, sqlNullInt64(connID))
 		if err != nil {
 			return "Error: " + err.Error()
 		}
