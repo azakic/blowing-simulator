@@ -42,9 +42,11 @@ func ensureConnectionsSchema(db *sqlx.DB) error {
 		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS connection_id INTEGER REFERENCES connections(id) ON DELETE SET NULL`,
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS connection_id INTEGER REFERENCES connections(id) ON DELETE SET NULL`,
 		`ALTER TABLE protocols ADD COLUMN IF NOT EXISTS connection_id INTEGER REFERENCES connections(id) ON DELETE SET NULL`,
+		`ALTER TABLE ha_customers ADD COLUMN IF NOT EXISTS connection_id INTEGER REFERENCES connections(id) ON DELETE SET NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_tasks_connection ON tasks (connection_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_ha_connection ON ha_protocols (connection_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_protocols_connection ON protocols (connection_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_ha_customers_connection ON ha_customers (connection_id)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
@@ -288,4 +290,47 @@ func mergeConnections(db *sqlx.DB, from, keep int64) bool {
 		return false
 	}
 	return tx.Commit() == nil
+}
+
+// backfillCustomerConnections povezuje direktorijum klijenata sa objektima
+// (faza 2.1). Jedan red direktorijuma = jedan priključak, pa svaki dobija
+// `connection_id` isti kao zadatak/HaP/protokol za tu adresu i NVT.
+func backfillCustomerConnections(db *sqlx.DB) error {
+	ctx := context.Background()
+	var rows []struct {
+		ID          int64  `db:"id"`
+		Street      string `db:"street"`
+		HouseNumber string `db:"house_number"`
+		Postcode    string `db:"postcode"`
+		City        string `db:"city"`
+		Address     string `db:"address"`
+		NVT         string `db:"nvt"`
+	}
+	if err := db.SelectContext(ctx, &rows, `SELECT id,
+			coalesce(street,'') AS street, coalesce(house_number,'') AS house_number,
+			coalesce(postcode,'') AS postcode, coalesce(city,'') AS city,
+			coalesce(address,'') AS address, coalesce(nvt,'') AS nvt
+		FROM ha_customers WHERE connection_id IS NULL`); err != nil {
+		return err
+	}
+	linked := 0
+	for _, r := range rows {
+		st, no, plz, ct, nv := connectionParts(r.Street, r.HouseNumber, r.Postcode, r.City, r.Address, r.NVT)
+		id, err := upsertConnection(ctx, db, st, no, plz, ct, nv)
+		if err != nil {
+			log.Printf("connections: customer %d: %v", r.ID, err)
+			continue
+		}
+		if id == 0 {
+			continue
+		}
+		if _, err := db.ExecContext(ctx, `UPDATE ha_customers SET connection_id=$1 WHERE id=$2`,
+			id, r.ID); err == nil {
+			linked++
+		}
+	}
+	if linked > 0 {
+		log.Printf("connections: %d customer row(s) linked", linked)
+	}
+	return nil
 }

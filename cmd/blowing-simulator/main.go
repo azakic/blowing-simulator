@@ -839,6 +839,10 @@ func main() {
 	if err := backfillConnectionNVTKeys(db); err != nil {
 		log.Fatal("Failed to normalize connection NVT keys:", err)
 	}
+	// Direktorijum (925 redova) dobija iste objekte kao zadaci i protokoli.
+	if err := backfillCustomerConnections(db); err != nil {
+		log.Fatal("Failed to link customer connections:", err)
+	}
 
 	// Javna strana, ali meni i tile-ovi zavise od role → claims ako ih ima.
 	http.HandleFunc("/", withOptionalAuth(IndexHandler))

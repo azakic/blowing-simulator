@@ -831,6 +831,10 @@ func importCustomers(r *http.Request) *customerImportResult {
 		res.addError(0, fmt.Errorf("commit: %w", err))
 		return res
 	}
+	// Novi redovi se odmah vezuju za objekte (idempotentno, ne ruši import).
+	if err := backfillCustomerConnections(db); err != nil {
+		log.Printf("customers import: link connections: %v", err)
+	}
 	_, _ = db.Exec(`INSERT INTO ha_customer_imports
 			(filename, total, imported, updated, unchanged, skipped, failed, imported_by)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
