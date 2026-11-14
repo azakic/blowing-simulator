@@ -608,12 +608,13 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 			 nvt, client_phone, client_mobile,
 			 check_fiber, check_complete, check_clean, created_by,
 			 rohr, rohr_color, roehrchen_color, provider,
-			 client_company, client_email, remarks, start_time, connection_id)
+			 client_company, client_email, remarks, start_time, connection_id,
+			 address_snapshot, customer_snapshot)
 		VALUES ($1, $2, $3, $4,$5,$6,$7,$8,$9,
 		        NULLIF($10,'')::int, $11::date, $12,$13,$14,$15,$16,$17,$18,
 		        NULLIF($19,'')::int, $20,$21,NULLIF($22,'')::numeric,
 		        $23,$24,$25, $26,$27,$28,$29, $30,$31,$32, $33,
-		        $34,$35,$36, NULLIF($37,'')::time, $38)
+		        $34,$35,$36, NULLIF($37,'')::time, $38, $39::jsonb, $40::jsonb)
 		RETURNING id`,
 		nullableID(taskID), nullableID(projectID), nullableID(orgID),
 		strings.TrimSpace(r.FormValue("auftragnehmer")),
@@ -650,7 +651,16 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 		strings.TrimSpace(r.FormValue("client_email")),
 		strings.TrimSpace(r.FormValue("remarks")),
 		parseHATime(r.FormValue("start_time")),
-		sqlNullInt64(connID))
+		sqlNullInt64(connID),
+		buildAddressSnapshot(haStreet, haHouse, haPlz, haCity, address,
+			strings.TrimSpace(r.FormValue("nvt")), "", connID),
+		buildCustomerSnapshot(
+			strings.TrimSpace(r.FormValue("client_company")),
+			strings.TrimSpace(r.FormValue("client_first_name")),
+			strings.TrimSpace(r.FormValue("client_last_name")),
+			strings.TrimSpace(r.FormValue("client_phone")),
+			strings.TrimSpace(r.FormValue("client_mobile")),
+			strings.TrimSpace(r.FormValue("client_email"))))
 	if err != nil {
 		return 0, "Could not save: " + err.Error()
 	}
@@ -1007,6 +1017,7 @@ func updateHA(r *http.Request, h haRow) string {
 			project_id=$30, org_id=$31,
 			client_company=$32, client_email=$33, remarks=$34,
 			start_time=NULLIF($35,'')::time, connection_id=$36,
+			address_snapshot=$37::jsonb, customer_snapshot=$38::jsonb,
 			updated_at=NOW()
 		WHERE id=$26`,
 		strings.TrimSpace(r.FormValue("auftragnehmer")),
@@ -1043,7 +1054,16 @@ func updateHA(r *http.Request, h haRow) string {
 		strings.TrimSpace(r.FormValue("client_email")),
 		strings.TrimSpace(r.FormValue("remarks")),
 		parseHATime(r.FormValue("start_time")),
-		sqlNullInt64(connID))
+		sqlNullInt64(connID),
+		buildAddressSnapshot(haStreet, haHouse, haPlz, haCity, r.FormValue("address"),
+			strings.TrimSpace(r.FormValue("nvt")), "", connID),
+		buildCustomerSnapshot(
+			strings.TrimSpace(r.FormValue("client_company")),
+			strings.TrimSpace(r.FormValue("client_first_name")),
+			strings.TrimSpace(r.FormValue("client_last_name")),
+			strings.TrimSpace(r.FormValue("client_phone")),
+			strings.TrimSpace(r.FormValue("client_mobile")),
+			strings.TrimSpace(r.FormValue("client_email"))))
 	if err != nil {
 		return "Could not save: " + err.Error()
 	}

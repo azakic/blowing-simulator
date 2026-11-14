@@ -815,6 +815,9 @@ func main() {
 	if err := ensureConnectionsSchema(db); err != nil {
 		log.Fatal("Failed to ensure connections schema:", err)
 	}
+	if err := ensureSnapshotColumns(db); err != nil {
+		log.Fatal("Failed to ensure snapshot columns:", err)
+	}
 	if err := backfillProjects(db); err != nil {
 		log.Fatal("Failed to backfill projects:", err)
 	}
@@ -842,6 +845,10 @@ func main() {
 	// Direktorijum (925 redova) dobija iste objekte kao zadaci i protokoli.
 	if err := backfillCustomerConnections(db); err != nil {
 		log.Fatal("Failed to link customer connections:", err)
+	}
+	// Protokoli izdati pre snapshot kolona dobijaju zamrznutu kopiju.
+	if err := backfillSnapshots(db); err != nil {
+		log.Fatal("Failed to backfill snapshots:", err)
 	}
 
 	// Javna strana, ali meni i tile-ovi zavise od role → claims ako ih ima.

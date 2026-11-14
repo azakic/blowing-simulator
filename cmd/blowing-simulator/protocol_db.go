@@ -45,9 +45,9 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID
 			project_number, section_nvt, company, service_provider, operator,
 			remarks, source_filename, parser_version, address, user_id,
 			owner_org_id, company_org_id, service_provider_org_id, org_review, project_id,
-			connection_id
+			connection_id, address_snapshot
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-			$16, $17, $18, $19, $20, $21)
+			$16, $17, $18, $19, $20, $21, $22::jsonb)
 		RETURNING id`,
 		"fremco",
 		protocol.ProtocolInfo.System,
@@ -70,6 +70,7 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID
 		attrib.Review,
 		projectArg,
 		sqlNullInt64(connID),
+		buildAddressSnapshot(pStreet, pHouse, pPlz, pCity, protoAddress, protoNVT, "", connID),
 	).Scan(&protocolID)
 
 	if err != nil {
@@ -213,9 +214,9 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol, owner
 			project_number, section_nvt, company, service_provider, operator,
 			remarks, source_filename, parser_version, address, user_id,
 			owner_org_id, company_org_id, service_provider_org_id, org_review, project_id,
-			connection_id
+			connection_id, address_snapshot
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-			$16, $17, $18, $19, $20, $21)
+			$16, $17, $18, $19, $20, $21, $22::jsonb)
 		RETURNING id`,
 		"jetting",
 		protocol.ProtocolInfo.System,
@@ -238,6 +239,7 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol, owner
 		attrib.Review,
 		projectArg,
 		sqlNullInt64(connID),
+		buildAddressSnapshot(pStreet, pHouse, pPlz, pCity, protoAddress, protoNVT, "", connID),
 	).Scan(&protocolID)
 
 	if err != nil {
