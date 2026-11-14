@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -265,6 +266,59 @@ func postcodeByStreet(ctx context.Context, street, city string) geoAddressResult
 	return res
 }
 
+// placeByCoords vraća PLZ i grad za koordinate (GPS iz protokola).
+// Kešira se u geo_address_cache pod „lat:…|lon:…“.
+func placeByCoords(ctx context.Context, lat, lon float64) geoAddressResult {
+	key := fmt.Sprintf("lat:%.4f|lon:%.4f", lat, lon)
+	if res, ok := cachedGeoAddressResult(ctx, key); ok {
+		return res
+	}
+	if !geocoderEnabled() {
+		return geoAddressResult{Ambiguous: true}
+	}
+	geoWait()
+	q := url.Values{}
+	q.Set("format", "jsonv2")
+	q.Set("lat", fmt.Sprintf("%.6f", lat))
+	q.Set("lon", fmt.Sprintf("%.6f", lon))
+	q.Set("zoom", "18")
+	q.Set("addressdetails", "1")
+	q.Set("accept-language", "de")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, geocoderURL()+"/reverse?"+q.Encode(), nil)
+	if err != nil {
+		return geoAddressResult{Ambiguous: true}
+	}
+	req.Header.Set("User-Agent", geocoderUserAgent())
+	req.Header.Set("Accept", "application/json")
+	resp, err := geoHTTP.Do(req)
+	if err != nil {
+		log.Printf("geo place %.5f,%.5f: %v", lat, lon, err)
+		return geoAddressResult{Ambiguous: true}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return geoAddressResult{Ambiguous: true}
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(geoGeocodeMax)))
+	if err != nil {
+		return geoAddressResult{Ambiguous: true}
+	}
+	var out nominatimReverse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return geoAddressResult{Ambiguous: true}
+	}
+	res := geoAddressResult{Postcode: strings.TrimSpace(out.Address.Postcode)}
+	for _, v := range []string{out.Address.City, out.Address.Town, out.Address.Village, out.Address.Municipality} {
+		if c := strings.TrimSpace(v); c != "" {
+			res.City = c
+			break
+		}
+	}
+	res.Ambiguous = res.Postcode == "" && res.City == ""
+	storeGeoAddressResult(ctx, key, res)
+	return res
+}
+
 // GeoAddressHandler dopunjuje adresu: PLZ→grad ili ulica+grad→PLZ.
 //
 //	GET /geo/address?plz=58300
@@ -277,9 +331,20 @@ func GeoAddressHandler(w http.ResponseWriter, r *http.Request) {
 	plz := strings.TrimSpace(r.URL.Query().Get("plz"))
 	city := strings.TrimSpace(r.URL.Query().Get("city"))
 	street := strings.TrimSpace(r.URL.Query().Get("street"))
+	latStr := strings.TrimSpace(r.URL.Query().Get("lat"))
+	lonStr := strings.TrimSpace(r.URL.Query().Get("lon"))
 
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
+
+	if latStr != "" && lonStr != "" {
+		lat, err1 := strconv.ParseFloat(latStr, 64)
+		lon, err2 := strconv.ParseFloat(lonStr, 64)
+		if err1 == nil && err2 == nil {
+			writeJSON(w, placeByCoords(ctx, lat, lon))
+			return
+		}
+	}
 
 	switch {
 	case plz != "" && city == "":

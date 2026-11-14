@@ -25,6 +25,42 @@
     return line;
   }
 
+  // GPS aus dem importierten Protokoll (Fremco/Jetting) → PLZ/Ort.
+  // Leere Felder werden gefüllt, bereits eingetragene Werte NIE überschrieben:
+  // bei Abweichung erscheint nur ein Hinweis zur manuellen Prüfung.
+  function samePlace(a, b) {
+    var x = (a || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    var y = (b || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!x || !y) { return false; }
+    return x === y || x.indexOf(y) >= 0 || y.indexOf(x) >= 0;
+  }
+
+  function verifyWithGps(pr) {
+    if (!pr || !pr.lat || !pr.lon) { return; }
+    fetch('/geo/address?lat=' + encodeURIComponent(pr.lat) + '&lon=' + encodeURIComponent(pr.lon),
+      { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (g) {
+        if (!g || (!g.postcode && !g.city)) { return; }
+        var gps = (g.postcode + ' ' + g.city).trim();
+        var typed = (val(postcode) + ' ' + val(city)).trim();
+        var msg;
+        if (!typed) {
+          setIfEmpty(postcode, g.postcode);
+          setIfEmpty(city, g.city);
+          msg = 'PLZ/Ort aus GPS übernommen: ' + gps + '.';
+        } else if ((g.postcode && g.postcode !== val(postcode)) ||
+                   (g.city && !samePlace(g.city, val(city)))) {
+          msg = '⚠ GPS sagt ' + gps + ', im Formular steht ' + typed + ' — bitte prüfen.';
+        } else {
+          msg = 'GPS bestätigt ' + gps + '.';
+        }
+        hint.textContent = val(hint.textContent) ? val(hint.textContent) + ' ' + msg : msg;
+        hint.style.display = 'block';
+      })
+      .catch(function () {});
+  }
+
   function lookup() {
     var addr = composedAddress();
     var n = val(nvt);
@@ -58,6 +94,7 @@
           if (pr.project_number) { meta.push('Projekt ' + pr.project_number); }
           hint.textContent = 'Aus importiertem Protokoll (' + meta.join(', ') + ') übernommen.';
           hint.style.display = 'block';
+          verifyWithGps(pr);
           return;
         }
         if (!d.best) {

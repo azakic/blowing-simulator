@@ -809,11 +809,13 @@ type lookupMatch struct {
 // protocolHistory su podaci iz ranije importovanog protokola (Fremco/Jetting)
 // za istu adresu ili NVT — koristi se kad direktorijum nema pogodak.
 type protocolHistory struct {
-	Address       string `json:"address"`
-	NVT           string `json:"nvt"`
-	ProjectNumber string `json:"project_number"`
-	ProtocolType  string `json:"protocol_type"`
-	ProtocolDate  string `json:"protocol_date"`
+	Address       string  `json:"address"`
+	NVT           string  `json:"nvt"`
+	ProjectNumber string  `json:"project_number"`
+	ProtocolType  string  `json:"protocol_type"`
+	ProtocolDate  string  `json:"protocol_date"`
+	Lat           float64 `json:"lat,omitempty"`
+	Lon           float64 `json:"lon,omitempty"`
 }
 
 type lookupResponse struct {
@@ -931,21 +933,26 @@ func customerForPrefill(nvt, address string) (customerRow, bool) {
 // istu adresu ili NVT. Vraća projektni broj i NVT, da forma može da ih preuzme.
 func findProtocolHistory(nvt, address string) (protocolHistory, bool) {
 	var row struct {
-		Address       string `db:"address"`
-		ProjectNumber string `db:"project_number"`
-		ProtocolType  string `db:"protocol_type"`
-		ProtocolDate  string `db:"protocol_date"`
-		SectionNVT    string `db:"section_nvt"`
+		Address       string  `db:"address"`
+		ProjectNumber string  `db:"project_number"`
+		ProtocolType  string  `db:"protocol_type"`
+		ProtocolDate  string  `db:"protocol_date"`
+		SectionNVT    string  `db:"section_nvt"`
+		Lat           float64 `db:"lat"`
+		Lon           float64 `db:"lon"`
 	}
-	err := db.Get(&row, `SELECT coalesce(address,'') AS address,
-			coalesce(project_number,'') AS project_number,
-			coalesce(protocol_type,'') AS protocol_type,
-			coalesce(to_char(protocol_date,'YYYY-MM-DD'),'') AS protocol_date,
-			coalesce(section_nvt,'') AS section_nvt
-		FROM protocols
-		WHERE ($1 <> '' AND regexp_replace(lower(coalesce(address,'')), '[^a-z0-9äöüß]', '', 'g') = $1)
-		   OR ($2 <> '' AND lower(coalesce(section_nvt,'')) LIKE '%' || $2 || '%')
-		ORDER BY protocol_date DESC NULLS LAST, id DESC
+	err := db.Get(&row, `SELECT coalesce(p.address,'') AS address,
+			coalesce(p.project_number,'') AS project_number,
+			coalesce(p.protocol_type,'') AS protocol_type,
+			coalesce(to_char(p.protocol_date,'YYYY-MM-DD'),'') AS protocol_date,
+			coalesce(p.section_nvt,'') AS section_nvt,
+			coalesce(s.gps_latitude, 0) AS lat,
+			coalesce(s.gps_longitude, 0) AS lon
+		FROM protocols p
+		LEFT JOIN protocol_summary s ON s.protocol_id = p.id
+		WHERE ($1 <> '' AND regexp_replace(lower(coalesce(p.address,'')), '[^a-z0-9äöüß]', '', 'g') = $1)
+		   OR ($2 <> '' AND lower(coalesce(p.section_nvt,'')) LIKE '%' || $2 || '%')
+		ORDER BY p.protocol_date DESC NULLS LAST, p.id DESC
 		LIMIT 1`, addressMatchKey(address), strings.ToLower(strings.ReplaceAll(strings.TrimSpace(nvt), " ", "")))
 	if err != nil {
 		return protocolHistory{}, false
@@ -956,6 +963,9 @@ func findProtocolHistory(nvt, address string) (protocolHistory, bool) {
 		ProjectNumber: row.ProjectNumber,
 		ProtocolType:  row.ProtocolType,
 		ProtocolDate:  row.ProtocolDate,
+	}
+	if row.Lat != 0 || row.Lon != 0 {
+		p.Lat, p.Lon = row.Lat, row.Lon
 	}
 	if p.NVT == "" {
 		p.NVT = strings.TrimSpace(nvt)
