@@ -109,15 +109,15 @@
         {{if .CanCreate}}
         <section class="ui-card" id="new-task">
             <h2><span class="n">2</span> New task <span class="hint">HA work item on a project</span></h2>
-            <form method="POST" action="/tasks">
+            <form method="POST" action="/tasks" autocomplete="off">
                 <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                 <input type="hidden" name="action" value="create">
                 <div class="ui-grid">
                     <label class="field"><span>Nachname</span>
-                        <input type="text" name="client_last_name" maxlength="100" autocomplete="family-name">
+                        <input type="text" name="client_last_name" maxlength="100" autocomplete="off">
                     </label>
                     <label class="field"><span>Name</span>
-                        <input type="text" name="client_first_name" maxlength="100" autocomplete="given-name">
+                        <input type="text" name="client_first_name" maxlength="100" autocomplete="off">
                     </label>
                     <label class="field"><span>Project *</span>
                         <select name="project_id" required>
@@ -162,14 +162,14 @@
                         </div>
                     </label>
                     <label class="field"><span>Address *</span>
-                        <input type="text" name="address" id="task-address" required placeholder="Street, no., city" autocomplete="street-address">
+                        <input type="text" name="address" id="task-address" required placeholder="Street, no., city" autocomplete="off">
                     </label>
                     <label class="field"><span>NVT *</span>
                         <input type="text" name="nvt" id="task-nvt" required placeholder="NVT 1V3400">
                     </label>
                     <p id="task-lookup-hint" class="note" style="display:none;grid-column:1/-1;margin:0;"></p>
                     <label class="field"><span>Telefon (optional)</span>
-                        <input type="tel" inputmode="tel" name="client_phone" maxlength="40" autocomplete="tel" placeholder="z. B. 0170 1234567">
+                        <input type="tel" inputmode="tel" name="client_phone" maxlength="40" autocomplete="off" placeholder="z. B. 0170 1234567">
                     </label>
                     <label class="field wide"><span>Description</span>
                         <textarea name="description" rows="3" placeholder="Scope, notes, access details…"></textarea>

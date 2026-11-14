@@ -52,7 +52,7 @@
 
         <form method="POST" enctype="multipart/form-data"
               action="{{if .IsEdit}}/ha/edit?id={{.HA.ID}}{{else}}/ha/new{{end}}"
-              id="ha-form">
+              id="ha-form" autocomplete="off">
             <input type="hidden" name="csrf_token" value="{{csrfToken}}">
             {{if .IsEdit}}<input type="hidden" name="id" value="{{.HA.ID}}">{{end}}
             {{if .HA.TaskID.Valid}}<input type="hidden" name="task_id" value="{{.HA.TaskID.Int64}}">{{end}}
@@ -61,10 +61,10 @@
                 <h2><span class="n">1</span> Objekt &amp; Anschluss</h2>
                 <div class="ui-grid">
                     <label class="field wide"><span>Adresse *</span>
-                        <input type="text" name="address" required value="{{.HA.Address}}" placeholder="An der Borg 25" autocomplete="street-address">
+                        <input type="text" name="address" required value="{{.HA.Address}}" placeholder="An der Borg 25" autocomplete="off">
                     </label>
                     <label class="field"><span>Ort</span>
-                        <input type="text" name="city" value="{{.HA.City}}" placeholder="Volmarstein" autocomplete="address-level2">
+                        <input type="text" name="city" value="{{.HA.City}}" placeholder="Volmarstein" autocomplete="off">
                     </label>
                     <label class="field"><span>Bauabschnitt</span>
                         <input type="text" name="bauabschnitt" value="{{.HA.Bauabschnitt}}">
@@ -83,13 +83,13 @@
                 <h2><span class="n">2</span> Anschlussnehmer</h2>
                 <div class="ui-grid">
                     <label class="field"><span>Nachname</span>
-                        <input type="text" name="client_last_name" value="{{.HA.ClientLastName}}" autocomplete="family-name">
+                        <input type="text" name="client_last_name" value="{{.HA.ClientLastName}}" autocomplete="off">
                     </label>
                     <label class="field"><span>Name</span>
-                        <input type="text" name="client_first_name" value="{{.HA.ClientFirstName}}" autocomplete="given-name">
+                        <input type="text" name="client_first_name" value="{{.HA.ClientFirstName}}" autocomplete="off">
                     </label>
                     <label class="field"><span>Telefon</span>
-                        <input type="tel" inputmode="tel" name="client_phone" value="{{.HA.ClientPhone}}" autocomplete="tel">
+                        <input type="tel" inputmode="tel" name="client_phone" value="{{.HA.ClientPhone}}" autocomplete="off">
                     </label>
                     <label class="field"><span>Mobil</span>
                         <input type="tel" inputmode="tel" name="client_mobile" value="{{.HA.ClientMobile}}">
@@ -448,7 +448,11 @@
                 fetch('/ha/lookup' + q, { credentials: 'same-origin' })
                     .then(function (r) { return r.ok ? r.json() : null; })
                     .then(function (d) {
-                        if (!d || !d.found || !d.best) { hint.style.display = 'none'; return; }
+                        if (!d || !d.found || !d.best) {
+                            hint.textContent = 'Kein Eintrag im Verzeichnis — Name, Telefon und NVT bitte manuell eintragen.';
+                            hint.style.display = 'block';
+                            return;
+                        }
                         var b = d.best;
                         if (d.matches && d.matches.length > 1) {
                             // NVT je zajednički za više adresa — ne popunjavaj

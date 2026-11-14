@@ -221,7 +221,8 @@ func TestParseVolmarsteinSample(t *testing.T) {
 // proba i deo pre zareza.
 func TestAddressLookupKeys(t *testing.T) {
 	got := addressLookupKeys("Grünewalder Straße 11, Volmarstein")
-	if len(got) != 2 || got[0] != "grünewalder straße 11, volmarstein" || got[1] != "grünewalder straße 11" {
+	if len(got) != 3 || got[0] != "grünewalder straße 11, volmarstein" ||
+		got[1] != "grünewalder straße 11" || got[2] != "volmarstein" {
 		t.Fatalf("addressLookupKeys = %#v", got)
 	}
 	if got := addressLookupKeys("Am Kornacker 14"); len(got) != 1 || got[0] != "am kornacker 14" {

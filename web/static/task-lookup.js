@@ -20,7 +20,11 @@
     fetch('/ha/lookup' + q, { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
-        if (!d || !d.found || !d.best) { hint.style.display = 'none'; return; }
+        if (!d || !d.found || !d.best) {
+          hint.textContent = 'Kein Eintrag im Verzeichnis — Name und NVT bitte manuell eintragen.';
+          hint.style.display = 'block';
+          return;
+        }
         var b = d.best;
         if (d.matches && d.matches.length > 1) {
           var names = d.matches.map(function (m) { return m.address; });

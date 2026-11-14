@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	"path/filepath"
@@ -514,6 +515,9 @@ func addressLookupKeys(addr string) []string {
 		if head := strings.TrimSpace(key[:i]); head != "" {
 			out = append(out, head)
 		}
+		if tail := strings.TrimSpace(key[i+1:]); tail != "" {
+			out = append(out, tail)
+		}
 	}
 	return out
 }
@@ -786,15 +790,28 @@ func findCustomers(nvt, addr string) []customerRow {
 			return rows
 		}
 	}
-	if len(keys) > 0 {
-		k := keys[len(keys)-1] // najkraći oblik (bez grada)
-		if len(k) >= 3 {
-			var rows []customerRow
-			if err := db.Select(&rows, `SELECT id, address, nvt, kunde, phone, mobile
-				FROM ha_customers WHERE address_key LIKE $1 || '%'
-				ORDER BY length(address_key), address_key LIMIT 5`, k); err == nil && len(rows) > 0 {
-				return rows
-			}
+	for _, k := range keys {
+		if len(k) < 3 {
+			continue
+		}
+		var rows []customerRow
+		if err := db.Select(&rows, `SELECT id, address, nvt, kunde, phone, mobile
+			FROM ha_customers WHERE address_key LIKE $1 || '%'
+			ORDER BY length(address_key), address_key LIMIT 5`, k); err == nil && len(rows) > 0 {
+			return rows
+		}
+	}
+	// Poslednji pokušaj: adresa u direktorijumu sadrži traženi deo (dodatne
+	// reči, „bei …“ i sl.).
+	for _, k := range keys {
+		if len(k) < 6 {
+			continue
+		}
+		var rows []customerRow
+		if err := db.Select(&rows, `SELECT id, address, nvt, kunde, phone, mobile
+			FROM ha_customers WHERE address_key LIKE '%' || $1 || '%'
+			ORDER BY length(address_key), address_key LIMIT 5`, k); err == nil && len(rows) > 0 {
+			return rows
 		}
 	}
 	return nil
@@ -837,6 +854,7 @@ func HALookupHandler(w http.ResponseWriter, r *http.Request) {
 
 	rows := findCustomers(nvt, addr)
 	if len(rows) == 0 {
+		log.Printf("ha lookup: no match nvt=%q address=%q", nvt, addr)
 		writeJSON(w, resp)
 		return
 	}
