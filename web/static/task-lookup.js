@@ -82,6 +82,41 @@
     nvt.addEventListener('blur', schedule);
     nvt.addEventListener('change', schedule);
   }
+  // Dopuna adrese preko Nominatim-a (keširano na serveru):
+  // PLZ → grad i ulica+grad → PLZ. Popunjava samo prazna polja.
+  var geoTimer = null;
+  function fillCityFromPlz() {
+    var p = val(postcode);
+    if (!/^\d{5}$/.test(p) || val(city)) { return; }
+    fetch('/geo/address?plz=' + encodeURIComponent(p), { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && !d.ambiguous && d.city) { setIfEmpty(city, d.city); } })
+      .catch(function () {});
+  }
+  function fillPlzFromStreet() {
+    var s = val(street);
+    var c = val(city);
+    if (!s || !c || val(postcode)) { return; }
+    fetch('/geo/address?street=' + encodeURIComponent(s) + '&city=' + encodeURIComponent(c),
+      { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && !d.ambiguous && d.postcode) { setIfEmpty(postcode, d.postcode); } })
+      .catch(function () {});
+  }
+  function scheduleGeo() {
+    clearTimeout(geoTimer);
+    geoTimer = setTimeout(function () { fillCityFromPlz(); fillPlzFromStreet(); }, 450);
+  }
+  street.addEventListener('blur', scheduleGeo);
+  if (postcode) {
+    postcode.addEventListener('blur', scheduleGeo);
+    postcode.addEventListener('change', scheduleGeo);
+  }
+  if (city) {
+    city.addEventListener('blur', scheduleGeo);
+    city.addEventListener('change', scheduleGeo);
+  }
+
   // Izmena zadatka već ima adresu — pokušaj odmah da dopuniš ostalo.
   if (val(street).length >= 3 || val(postcode) || val(city) || val(nvt)) {
     lookup();

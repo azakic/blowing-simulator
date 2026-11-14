@@ -53,14 +53,29 @@ func geocoderUserAgent() string {
 }
 
 func ensureGeocodeSchema(db *sqlx.DB) error {
-	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS geocode_cache (
-		lat_key    TEXT NOT NULL,
-		lon_key    TEXT NOT NULL,
-		address    TEXT NOT NULL DEFAULT '',
-		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-		PRIMARY KEY (lat_key, lon_key)
-	)`)
-	return err
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS geocode_cache (
+			lat_key    TEXT NOT NULL,
+			lon_key    TEXT NOT NULL,
+			address    TEXT NOT NULL DEFAULT '',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			PRIMARY KEY (lat_key, lon_key)
+		)`,
+		// Keš za dopunu adrese (PLZ→grad, ulica+grad→PLZ).
+		`CREATE TABLE IF NOT EXISTS geo_address_cache (
+			query_key  TEXT PRIMARY KEY,
+			postcode   TEXT NOT NULL DEFAULT '',
+			city       TEXT NOT NULL DEFAULT '',
+			ambiguous  BOOLEAN NOT NULL DEFAULT FALSE,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+	}
+	for _, s := range stmts {
+		if _, err := db.Exec(s); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // geoKey zaokružuje koordinate na ~11 m, da sve fotografije sa istog

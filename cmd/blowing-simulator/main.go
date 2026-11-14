@@ -883,6 +883,8 @@ func main() {
 	http.HandleFunc("/ha/pdf", requireAuth(HAPDFHandler, "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/ha/delete", requireAuth(withCSRF(HADeleteHandler), "editor", "partner", "admin"))
 	http.HandleFunc("/ha/lookup", requireAuth(HALookupHandler, "viewer", "editor", "partner", "admin"))
+	// Dopuna adrese (PLZ→grad, ulica+grad→PLZ) preko Nominatim-a.
+	http.HandleFunc("/geo/address", requireAuth(GeoAddressHandler, "viewer", "editor", "partner", "admin"))
 	// Admin utility: backfill ownership for existing protocols (NULL user_id)
 	http.HandleFunc("/admin/backfill-ownership", requireAuth(AdminBackfillOwnershipHandler, "admin"))
 	http.HandleFunc("/admin/reparse", requireAuth(AdminReparseHandler, "admin"))
