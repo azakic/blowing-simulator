@@ -98,9 +98,15 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte, onts []o
 		units = fmt.Sprintf("%d WE", h.Units.Int64)
 	}
 
+	// Kod firme/Hausverwaltung bleibt „Nachname“ leer — dann steht dort die
+	// Firma, damit der Westnetz-Kopf nicht halb leer bleibt.
+	clientName := h.ClientLastName
+	if strings.TrimSpace(clientName) == "" {
+		clientName = h.ClientCompany
+	}
 	headerRow(
 		[]string{"Firma", "Adresse", "Nachname", "Datum"},
-		[]string{h.Auftragnehmer, h.Address, h.ClientLastName, formatHaDate(h.ProtocolDate)})
+		[]string{h.Auftragnehmer, h.Address, clientName, formatHaDate(h.ProtocolDate)})
 	headerRow(
 		[]string{"Projektnummer", "Ort", "Name", "Monteur"},
 		[]string{h.ProjectNumber, h.City, h.ClientFirstName, h.Monteur})

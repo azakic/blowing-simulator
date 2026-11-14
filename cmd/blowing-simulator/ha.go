@@ -41,6 +41,7 @@ var haPhotoKinds = []haPhotoKind{
 	{"light_test", "Licht test"},
 	{"sig_monteur", "Unterschrift Monteur"},
 	{"sig_pruefer", "Unterschrift Prüfer"},
+	{"sig_kunde", "Unterschrift Kunde"},
 }
 
 // haSlotPhotoKinds su fiksni slotovi koje forma prikazuje i čuva. ONT se sada
@@ -51,6 +52,9 @@ var haSlotPhotoKinds = []haPhotoKind{
 	{"bild3", "Bild 3 — APL geschlossen / Aufkleber"},
 	{"bild4", "Bild 4 — Foto ONT"},
 	{"light_test", "Licht test"},
+	{"sig_monteur", "Unterschrift Monteur"},
+	{"sig_pruefer", "Unterschrift Prüfer"},
+	{"sig_kunde", "Unterschrift Kunde"},
 }
 
 func validHAKind(kind string) bool {
@@ -103,6 +107,10 @@ func ensureHASchema(db *sqlx.DB) error {
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS rohr INTEGER`,
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS rohr_color TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS roehrchen_color TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS client_company TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS client_email TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS remarks TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS start_time TIME`,
 		// Vrsta protokola (iz projekta); snapshot, da istorijski PDF ostane tačan.
 		`ALTER TABLE ha_protocols ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_photos ADD COLUMN IF NOT EXISTS geo_address TEXT NOT NULL DEFAULT ''`,
@@ -151,11 +159,15 @@ type haRow struct {
 	ClientFirstName string          `db:"client_first_name"`
 	ClientPhone     string          `db:"client_phone"`
 	ClientMobile    string          `db:"client_mobile"`
+	ClientCompany   string          `db:"client_company"`
+	ClientEmail     string          `db:"client_email"`
 	APLCodes        string          `db:"apl_codes"`
 	Units           sql.NullInt64   `db:"units"`
 	ProtocolDate    string          `db:"protocol_date"`
 	Monteur         string          `db:"monteur"`
 	Pruefer         string          `db:"pruefer"`
+	Remarks         string          `db:"remarks"`
+	StartTime       string          `db:"start_time"`
 	ProjectNumber   string          `db:"project_number"`
 	GVS             string          `db:"gvs"`
 	Rohr            sql.NullInt64   `db:"rohr"`
@@ -181,9 +193,11 @@ const haSelect = `
 	SELECT h.id, h.task_id, h.project_id, h.org_id,
 	       h.auftragnehmer, h.address, h.city, h.bauabschnitt,
 	       h.client_last_name, h.client_first_name, h.client_phone, h.client_mobile,
+	       h.client_company, h.client_email,
 	       h.apl_codes, h.nvt, h.units,
 	       to_char(h.protocol_date, 'YYYY-MM-DD') AS protocol_date,
 	       h.monteur, h.pruefer, h.project_number, h.gvs,
+	       coalesce(to_char(h.start_time,'HH24:MI'),'') AS start_time, h.remarks,
 	       h.rohr, h.rohr_color, h.roehrchen_color, h.kassette_b,
 	       h.mux_number, h.mux_fibers, h.splices, h.fiber_colors,
 	       h.cable_charge, h.cable_length_m,
@@ -586,11 +600,13 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 			 fiber_colors, cable_charge, cable_length_m,
 			 nvt, client_phone, client_mobile,
 			 check_fiber, check_complete, check_clean, created_by,
-			 rohr, rohr_color, roehrchen_color, provider)
+			 rohr, rohr_color, roehrchen_color, provider,
+			 client_company, client_email, remarks, start_time)
 		VALUES ($1, $2, $3, $4,$5,$6,$7,$8,$9,
 		        NULLIF($10,'')::int, $11::date, $12,$13,$14,$15,$16,$17,$18,
 		        NULLIF($19,'')::int, $20,$21,NULLIF($22,'')::numeric,
-		        $23,$24,$25, $26,$27,$28,$29, $30,$31,$32, $33)
+		        $23,$24,$25, $26,$27,$28,$29, $30,$31,$32, $33,
+		        $34,$35,$36, NULLIF($37,'')::time)
 		RETURNING id`,
 		nullableID(taskID), nullableID(projectID), nullableID(orgID),
 		strings.TrimSpace(r.FormValue("auftragnehmer")),
@@ -622,7 +638,11 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 		parseRohr(r.FormValue("rohr")),
 		strings.TrimSpace(r.FormValue("rohr_color")),
 		strings.TrimSpace(r.FormValue("roehrchen_color")),
-		provider)
+		provider,
+		strings.TrimSpace(r.FormValue("client_company")),
+		strings.TrimSpace(r.FormValue("client_email")),
+		strings.TrimSpace(r.FormValue("remarks")),
+		parseHATime(r.FormValue("start_time")))
 	if err != nil {
 		return 0, "Could not save: " + err.Error()
 	}
@@ -671,6 +691,20 @@ func dash(s string) string {
 }
 
 // parseRohr prihvata samo 1–4; sve ostalo je NULL.
+// parseHATime prihvata „13:52“ ili „13:52:00“; prazno ili neispravno → NULL.
+func parseHATime(v string) any {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return nil
+	}
+	for _, layout := range []string{"15:04", "15:04:05"} {
+		if t, err := time.Parse(layout, v); err == nil {
+			return t.Format(layout)
+		}
+	}
+	return nil
+}
+
 func parseRohr(v string) any {
 	n, err := strconv.Atoi(strings.TrimSpace(v))
 	if err != nil || n < 1 || n > 4 {
@@ -957,6 +991,8 @@ func updateHA(r *http.Request, h haRow) string {
 			check_fiber=$23, check_complete=$24, check_clean=$25,
 			rohr=$27, rohr_color=$28, roehrchen_color=$29,
 			project_id=$30, org_id=$31,
+			client_company=$32, client_email=$33, remarks=$34,
+			start_time=NULLIF($35,'')::time,
 			updated_at=NOW()
 		WHERE id=$26`,
 		strings.TrimSpace(r.FormValue("auftragnehmer")),
@@ -988,7 +1024,11 @@ func updateHA(r *http.Request, h haRow) string {
 		parseRohr(r.FormValue("rohr")),
 		strings.TrimSpace(r.FormValue("rohr_color")),
 		strings.TrimSpace(r.FormValue("roehrchen_color")),
-		nullableID(projectID), nullableID(orgID))
+		nullableID(projectID), nullableID(orgID),
+		strings.TrimSpace(r.FormValue("client_company")),
+		strings.TrimSpace(r.FormValue("client_email")),
+		strings.TrimSpace(r.FormValue("remarks")),
+		parseHATime(r.FormValue("start_time")))
 	if err != nil {
 		return "Could not save: " + err.Error()
 	}

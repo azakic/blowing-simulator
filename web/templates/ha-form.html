@@ -82,6 +82,9 @@
             <section class="ui-card">
                 <h2><span class="n">2</span> Anschlussnehmer</h2>
                 <div class="ui-grid">
+                    <label class="field wide"><span>Firma / Hausverwaltung</span>
+                        <input type="text" name="client_company" value="{{.HA.ClientCompany}}" autocomplete="off" placeholder="z. B. Hausverwaltung Meier GmbH">
+                    </label>
                     <label class="field"><span>Nachname</span>
                         <input type="text" name="client_last_name" value="{{.HA.ClientLastName}}" autocomplete="off">
                     </label>
@@ -93,6 +96,9 @@
                     </label>
                     <label class="field"><span>Mobil</span>
                         <input type="tel" inputmode="tel" name="client_mobile" value="{{.HA.ClientMobile}}">
+                    </label>
+                    <label class="field"><span>E-Mail (optional)</span>
+                        <input type="email" inputmode="email" name="client_email" value="{{.HA.ClientEmail}}" autocomplete="off">
                     </label>
                 </div>
             </section>
@@ -112,6 +118,9 @@
                     <label class="field"><span>Datum</span>
                         <input type="date" name="protocol_date" value="{{.DefaultDate}}">
                     </label>
+                    <label class="field"><span>Beginn</span>
+                        <input type="time" name="start_time" value="{{.HA.StartTime}}">
+                    </label>
                     <label class="field"><span>Projektnummer</span>
                         <input type="text" name="project_number" value="{{.HA.ProjectNumber}}">
                     </label>
@@ -129,6 +138,9 @@
                         </select>
                     </label>
                     {{end}}
+                    <label class="field wide"><span>Bemerkungen</span>
+                        <textarea name="remarks" rows="3" placeholder="z. B. Zugang über Hinterhof, Schlüssel bei Hausverwaltung">{{.HA.Remarks}}</textarea>
+                    </label>
                 </div>
             </section>
 
@@ -495,10 +507,15 @@
                         if (b.address) { parts.push(b.address); }
                         hint.textContent = 'Directory: ' + parts.join(' · ') + ' — empty fields were filled.';
                         hint.style.display = 'block';
-                        fill('client_last_name', b.last_name);
-                        fill('client_first_name', b.first_name);
-                        fill('client_phone', b.phone);
+                        if (b.company) {
+                            fill('client_company', b.company);
+                        } else {
+                            fill('client_last_name', b.last_name);
+                            fill('client_first_name', b.first_name);
+                        }
+                        fill('client_phone', b.phone || b.mobile);
                         fill('client_mobile', b.mobile);
+                        fill('client_email', b.email);
                         fill('nvt', b.nvt);
                     })
                     .catch(function () {});

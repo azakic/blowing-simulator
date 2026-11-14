@@ -165,3 +165,78 @@ func TestHAFormShowsExistingPhoto(t *testing.T) {
 		}
 	}
 }
+
+func TestHAFormClientFieldsAndRemarks(t *testing.T) {
+	tmpl, err := template.New("ha-form.html").Funcs(template.FuncMap{
+		"csrfToken": func() string { return "" },
+	}).ParseFiles("../../web/templates/ha-form.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, map[string]any{
+		"HA":              haRow{ID: 1, ClientCompany: "Hausverwaltung Meier GmbH", Remarks: "Zugang hinten", StartTime: "13:52"},
+		"IsEdit":          true,
+		"PhotoKinds":      haSlotPhotoKinds,
+		"PhotosByKind":    map[string]any{},
+		"ONTs":            []ontRow{},
+		"FiberColors":     haFiberColors,
+		"RohrColors":      haRohrColors,
+		"RoehrchenColors": haRoehrchenColors,
+		"Selected":        []string{},
+		"Projects":        []projectRow{},
+		"Orgs":            []Org{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		`name="client_company"`, `value="Hausverwaltung Meier GmbH"`,
+		`name="client_email"`, `name="remarks"`, `Zugang hinten`,
+		`name="start_time"`, `value="13:52"`,
+		`name="photo_sig_kunde"`, "Unterschrift Kunde",
+		`name="photo_sig_monteur"`, `name="photo_sig_pruefer"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("forma ne sadrži %q", want)
+		}
+	}
+}
+
+func TestHAPhotoKindsUniqueAndSignatures(t *testing.T) {
+	seen := map[string]bool{}
+	for _, k := range haPhotoKinds {
+		if seen[k.Key] {
+			t.Errorf("duplikat foto slota %q", k.Key)
+		}
+		seen[k.Key] = true
+	}
+	for _, k := range []string{"sig_monteur", "sig_pruefer", "sig_kunde"} {
+		found := false
+		for _, slot := range haSlotPhotoKinds {
+			if slot.Key == k {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("potpis %q nije u slotovima forme", k)
+		}
+	}
+}
+
+func TestParseHATime(t *testing.T) {
+	cases := map[string]any{
+		"13:52":    "13:52",
+		" 09:05 ":  "09:05",
+		"13:52:30": "13:52:30",
+		"":         nil,
+		"abc":      nil,
+		"25:00":    nil,
+	}
+	for in, want := range cases {
+		if got := parseHATime(in); got != want {
+			t.Errorf("parseHATime(%q) = %#v, očekivano %#v", in, got, want)
+		}
+	}
+}
