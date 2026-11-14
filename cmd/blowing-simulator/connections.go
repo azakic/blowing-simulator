@@ -334,3 +334,70 @@ func backfillCustomerConnections(db *sqlx.DB) error {
 	}
 	return nil
 }
+
+// findConnectionIDs pronalazi objekte za unetu adresu/NVT — isti ključ koji
+// se koristi pri upisu (slug ulice+broja, normalizovan NVT).
+func findConnectionIDs(ctx context.Context, street, houseNo, nvt string, limit int) []int64 {
+	sk := addressSlug(strings.TrimSpace(street + " " + houseNo))
+	nk := nvtKeyOf(nvt)
+
+	var q string
+	var args []any
+	switch {
+	case sk != "" && nk != "":
+		q = `SELECT id FROM connections WHERE street_key=$1 AND nvt_key=$2 LIMIT 1`
+		args = []any{sk, nk}
+	case sk != "":
+		q = `SELECT id FROM connections WHERE street_key=$1 ORDER BY id LIMIT $2`
+		args = []any{sk, limit}
+	case nk != "":
+		q = `SELECT id FROM connections WHERE nvt_key=$1 ORDER BY street_key, id LIMIT $2`
+		args = []any{nk, limit}
+	default:
+		return nil
+	}
+
+	var ids []int64
+	if err := db.SelectContext(ctx, &ids, q, args...); err != nil {
+		log.Printf("connections: resolve %q/%q: %v", sk, nk, err)
+		return nil
+	}
+	return ids
+}
+
+// customersByConnection vraća redove direktorijuma vezane za objekte.
+func customersByConnection(ids []int64) []customerRow {
+	if len(ids) == 0 {
+		return nil
+	}
+	q, args, err := sqlx.In(customerSelect+` WHERE connection_id IN (?) ORDER BY address LIMIT 50`, ids)
+	if err != nil {
+		return nil
+	}
+	var rows []customerRow
+	if err := db.Select(&rows, db.Rebind(q), args...); err != nil {
+		log.Printf("connections: customers by connection: %v", err)
+		return nil
+	}
+	return rows
+}
+
+// protocolsByConnection vraća importovane protokole vezane za objekte.
+func protocolsByConnection(ids []int64, limit int) []protocolHistoryRow {
+	if len(ids) == 0 {
+		return nil
+	}
+	query := protocolHistorySelect + ` WHERE p.connection_id IN (?)
+		ORDER BY p.protocol_date DESC NULLS LAST, p.id DESC
+		LIMIT ?`
+	q, args, err := sqlx.In(query, ids, limit)
+	if err != nil {
+		return nil
+	}
+	var rows []protocolHistoryRow
+	if err := db.Select(&rows, db.Rebind(q), args...); err != nil {
+		log.Printf("connections: protocols by connection: %v", err)
+		return nil
+	}
+	return rows
+}

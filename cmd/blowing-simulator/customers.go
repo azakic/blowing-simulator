@@ -1000,6 +1000,16 @@ func findCustomers(nvt, addr string) []customerRow {
 	st, houseNo, postcode, city := parseAddress(addr)
 	sk := streetKey(st, houseNo)
 
+	// 0) Objekat (connections) — isti ključ kao pri upisu, pa „Dammstr.9“ i
+	// „Dammstr. 9“ (i „N-1.31“ / „1.31“) pogađaju isti red.
+	if ids := findConnectionIDs(context.Background(), st, houseNo, nvt, 25); len(ids) > 0 {
+		if rows := customersByConnection(ids); len(rows) > 0 {
+			if narrowed, _ := narrowCustomerRows(rows, nvt, postcode, city); len(narrowed) > 0 {
+				return narrowed
+			}
+		}
+	}
+
 	// 1) ulica+broj, pa NVT, pa mesto — najprecizniji pogodak. Kandidati se
 	// sužavaju u Go-u da bi grad mogao tolerantno da se poredi.
 	if sk != "" {
@@ -1059,6 +1069,16 @@ func findCustomers(nvt, addr string) []customerRow {
 // tačna adresa, ili NVT samo kada je jedinstven (NVT je obično grupa adresa).
 func customerForPrefill(nvt, address string) (customerRow, bool) {
 	st, houseNo, postcode, city := parseAddress(address)
+	// Objekat je najpouzdaniji izvor (isti ključ kao upis).
+	if ids := findConnectionIDs(context.Background(), st, houseNo, nvt, 25); len(ids) > 0 {
+		if rows := customersByConnection(ids); len(rows) > 0 {
+			if hit, ok := narrowCustomerRows(rows, nvt, postcode, city); ok {
+				return hit[0], true
+			} else if len(hit) > 0 {
+				return customerRow{}, false
+			}
+		}
+	}
 	if sk := streetKey(st, houseNo); sk != "" {
 		var rows []customerRow
 		if err := db.Select(&rows, customerSelect+`
@@ -1180,6 +1200,14 @@ func protocolHistories(rows []protocolHistoryRow, typedNVT string) []protocolHis
 func findProtocolHistory(nvt, address string) []protocolHistory {
 	nvtK := nvtKeyOf(nvt)
 	slug := addressMatchKey(address)
+
+	// 0) Objekat (connections) — protokoli vezani za isti (ulica+broj, NVT).
+	st, houseNo, _, _ := parseAddress(address)
+	if ids := findConnectionIDs(context.Background(), st, houseNo, nvt, 25); len(ids) > 0 {
+		if rows := protocolsByConnection(ids, 25); len(rows) > 0 {
+			return protocolHistories(rows, nvt)
+		}
+	}
 
 	// 1) NVT i adresa — tačan pogodak. Više protokola za istu adresu
 	// (različiti datumi) svodi se na najnoviji.
