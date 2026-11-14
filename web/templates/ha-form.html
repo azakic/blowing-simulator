@@ -31,7 +31,7 @@
 
         <div class="ui-hero">
             <div>
-                <div class="ui-kicker">Hausanschlussprotokoll · Westnetz 1.5.1</div>
+                <div class="ui-kicker">{{if .ProtocolTitle}}{{.ProtocolTitle}}{{else}}Hausanschlussprotokoll · Westnetz 1.5.1{{end}}</div>
                 <h1>{{if .IsEdit}}HaP #{{.HA.ID}} bearbeiten{{else}}Neues HA-Protokoll{{end}}</h1>
                 <p class="ui-sub">{{if .HA.Address}}{{.HA.Address}}{{if .HA.City}}, {{.HA.City}}{{end}}{{else}}Alles ausfüllen, was vorliegt — Fotos sind optional, im Feld aber erwartet.{{end}}</p>
                 <div class="ui-chips">

@@ -818,6 +818,9 @@ func main() {
 	if err := ensureSnapshotColumns(db); err != nil {
 		log.Fatal("Failed to ensure snapshot columns:", err)
 	}
+	if err := ensureProviderColumns(db); err != nil {
+		log.Fatal("Failed to ensure provider columns:", err)
+	}
 	if err := backfillProjects(db); err != nil {
 		log.Fatal("Failed to backfill projects:", err)
 	}

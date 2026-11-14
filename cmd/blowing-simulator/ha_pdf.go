@@ -313,7 +313,11 @@ func buildHAPDF(h haRow, photos []haPhotoRow, images map[string][]byte, onts []o
 	footerRow("", x0+150, 14, "Seite 1 von 1", x0+164, 26)
 	footTop += 5
 	footerRow("Ersteller:", x0+1, 20, "Louis Vieting", x0+22, 70)
-	footerRow("Version:", x0+150, 14, "1.5.1", x0+164, 26)
+	version := h.TemplateVersion
+	if version == "" {
+		version = providerProfileFor("westnetz").Version
+	}
+	footerRow("Version:", x0+150, 14, version, x0+164, 26)
 	footTop += 5
 	footerRow("Freigabe:", x0+1, 20, "Roland Wehn", x0+22, 70)
 	footerRow("Stand:", x0+150, 14, "22.05.2023", x0+164, 26)

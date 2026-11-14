@@ -37,7 +37,7 @@ func TestAdminProjectsTemplateRenders(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 	out := buf.String()
-	for _, want := range []string{"Westnetz (HaP 1.5.1)", "Telekom", "name=\"provider\""} {
+	for _, want := range []string{"Westnetz 1.5.1", "Telekom (Entwurf)", "name=\"provider\""} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stranica ne sadrži %q", want)
 		}

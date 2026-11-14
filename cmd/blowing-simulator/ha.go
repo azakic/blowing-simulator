@@ -182,6 +182,8 @@ type haRow struct {
 	CheckFiber      bool            `db:"check_fiber"`
 	CheckComplete   bool            `db:"check_complete"`
 	CheckClean      bool            `db:"check_clean"`
+	Provider        string          `db:"provider"`
+	TemplateVersion string          `db:"template_version"`
 	CreatedBy       sql.NullInt64   `db:"created_by"`
 	CreatedAt       string          `db:"created_at"`
 	CreatorEmail    sql.NullString  `db:"creator_email"`
@@ -201,6 +203,8 @@ const haSelect = `
 	       h.mux_number, h.mux_fibers, h.splices, h.fiber_colors,
 	       h.cable_charge, h.cable_length_m,
 	       h.check_fiber, h.check_complete, h.check_clean,
+	       coalesce(h.provider,'') AS provider,
+	       coalesce(h.template_version,'') AS template_version,
 	       h.created_by, to_char(h.created_at, 'YYYY-MM-DD HH24:MI') AS created_at,
 	       u.email AS creator_email,
 	       (SELECT count(*) FROM ha_photos p WHERE p.ha_id = h.id) AS photos
@@ -489,6 +493,7 @@ func renderHAForm(w http.ResponseWriter, r *http.Request, claims *AuthClaims, h 
 		"Selected":         splitColors(h.FiberColors),
 		"Projects":         projects,
 		"Orgs":             orgs,
+		"ProtocolTitle":    protocolTitle(h.Provider),
 		"DefaultDate":      defDate,
 		"DefaultDateHuman": defDateHuman,
 		"DefaultFirma":     defFirma,
@@ -664,6 +669,14 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 	if err != nil {
 		return 0, "Could not save: " + err.Error()
 	}
+	// Verzija obrasca je snapshot (provajder se ne menja; vidi projects.provider).
+	if prof := providerProfileFor(provider); prof.Version != "" {
+		if _, err := db.Exec(`UPDATE ha_protocols SET template_version=$1 WHERE id=$2`,
+			prof.Version, id); err != nil {
+			log.Printf("ha %d: template version: %v", id, err)
+		}
+	}
+
 	// Zadatak iz kog je HaP nastao ostaje "in progress" dok HaP nije kompletan.
 	syncTaskFromHA(taskID)
 

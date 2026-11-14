@@ -89,29 +89,17 @@ func backfillProjects(db *sqlx.DB) error {
 
 // --- upiti za admin stranu ---
 
-// projectProviders su vrste protokola koje projekat može da nosi.
-var projectProviders = []struct{ Value, Label string }{
-	{"westnetz", "Westnetz (HaP 1.5.1)"},
-	{"telekom", "Telekom"},
-	{"verzatel", "Verzatel"},
-}
+// projectProviders su vrste protokola koje projekat može da nosi — lista
+// dolazi iz profila provajdera (providers.go), da ne postoji duplo.
+var projectProviders = providerChoices()
 
-func validProjectProvider(v string) bool {
-	for _, p := range projectProviders {
-		if p.Value == v {
-			return true
-		}
-	}
-	return false
-}
+func validProjectProvider(v string) bool { return validProvider(v) }
 
 func projectProviderLabel(v string) string {
-	for _, p := range projectProviders {
-		if p.Value == v {
-			return p.Label
-		}
+	if v == "" {
+		return ""
 	}
-	return v
+	return providerLabel(v)
 }
 
 type projectRow2 struct {
