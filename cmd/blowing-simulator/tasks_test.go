@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"html/template"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -181,5 +184,46 @@ func TestMapsURL(t *testing.T) {
 	}
 	if mapsURL("   ") != "" {
 		t.Error("prazna adresa mora dati prazan link")
+	}
+}
+
+// Forma za novi zadatak je zasebna strana (/tasks/new) i mora da se parsira
+// sa istim funkcijama koje handler registruje.
+func TestTaskNewTemplateRenders(t *testing.T) {
+	tmpl, err := template.New("task-new.html").Funcs(template.FuncMap{
+		"csrfToken": func() string { return "tok" },
+		"hours":     hourValues,
+		"minutes":   minuteValues,
+	}).ParseFiles("../../web/templates/task-new.html")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, map[string]any{
+		"Projects": []struct {
+			ID     int64
+			Number string
+			Name   string
+		}{{1, "VMS235612", "Volmarstein"}},
+		"Orgs":     []Org{{ID: 1, Name: "Wolken-ASM"}},
+		"Users":    []taskUserOption{},
+		"IsStaff":  true,
+		"UserRole": "admin",
+		"IsAdmin":  true,
+	})
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		`action="/tasks/new"`, `name="street_number"`, `name="postcode"`,
+		`name="city"`, `name="client_mobile"`, `name="client_email"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("forma ne sadrži %q", want)
+		}
+	}
+	if strings.Contains(out, `name="title"`) {
+		t.Error("Title polja više nema")
 	}
 }

@@ -872,6 +872,7 @@ func main() {
 	http.HandleFunc("/admin/import", requireAuth(withCSRF(AdminImportHandler), "admin"))
 	// Zadaci sa terena (faza 2 projekata) — svi prijavljeni vide svoj opseg.
 	http.HandleFunc("/tasks", requireAuth(withCSRF(TasksHandler), "viewer", "editor", "partner", "admin"))
+	http.HandleFunc("/tasks/new", requireAuth(withCSRF(TaskNewHandler), "viewer", "editor", "partner", "admin"))
 	http.HandleFunc("/tasks/view", requireAuth(withCSRF(TaskDetailHandler), "viewer", "editor", "partner", "admin"))
 	// .ics izvoz za „Add to calendar“ na telefonu (GET, bez CSRF-a).
 	http.HandleFunc("/tasks/ics", requireAuth(TaskICSHandler, "viewer", "editor", "partner", "admin"))

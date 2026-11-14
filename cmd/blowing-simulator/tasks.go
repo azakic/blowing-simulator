@@ -449,6 +449,43 @@ func taskProjectOptions(r *http.Request) []taskProjectOption {
 //
 //	GET  /tasks?status=&project=&mine=1&org=
 //	POST /tasks  action=create|set-status|delete
+type taskUserOption struct {
+	ID      int64          `db:"id"`
+	Email   string         `db:"email"`
+	OrgID   sql.NullInt64  `db:"org_id"`
+	OrgName sql.NullString `db:"org_name"`
+}
+
+// taskAssignableUsers vraća korisnike koje trenutni korisnik sme da dodeli.
+func taskAssignableUsers(r *http.Request) []taskUserOption {
+	claims := GetAuthClaims(r)
+	var users []taskUserOption
+	q := `SELECT u.id, u.email, u.org_id, o.name AS org_name
+		FROM users u LEFT JOIN orgs o ON o.id = u.org_id
+		WHERE coalesce(u.status,'active') = 'active' ORDER BY u.email`
+	var args []interface{}
+	if claims != nil && !canSeeAllTasks(r) {
+		q = `SELECT u.id, u.email, u.org_id, o.name AS org_name
+			FROM users u LEFT JOIN orgs o ON o.id = u.org_id
+			WHERE coalesce(u.status,'active') = 'active' AND u.org_id = $1 ORDER BY u.email`
+		args = append(args, userOrgID(claims.UserID))
+	}
+	_ = db.Select(&users, q, args...)
+	return users
+}
+
+// taskFormOptions priprema opcije za formu zadatka (novi i izmena).
+func taskFormOptions(r *http.Request) (projects []taskProjectOption, canCreate bool) {
+	projects = taskProjectOptions(r)
+	for _, p := range projects {
+		if canCreateTask(r, p.ID) {
+			canCreate = true
+			break
+		}
+	}
+	return projects, canCreate
+}
+
 func TasksHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetAuthClaims(r)
 	if claims == nil {
@@ -545,36 +582,9 @@ func TasksHandler(w http.ResponseWriter, r *http.Request) {
 		counts[c.Status] = c.N
 	}
 
-	projects := taskProjectOptions(r)
-
+	projects, canCreate := taskFormOptions(r)
 	orgs, _ := listOrgs()
-
-	type userOption struct {
-		ID      int64          `db:"id"`
-		Email   string         `db:"email"`
-		OrgID   sql.NullInt64  `db:"org_id"`
-		OrgName sql.NullString `db:"org_name"`
-	}
-	var users []userOption
-	usersQuery := `SELECT u.id, u.email, u.org_id, o.name AS org_name
-		FROM users u LEFT JOIN orgs o ON o.id = u.org_id
-		WHERE coalesce(u.status,'active') = 'active' ORDER BY u.email`
-	userArgs := []interface{}{}
-	if !canSeeAllTasks(r) {
-		usersQuery = `SELECT u.id, u.email, u.org_id, o.name AS org_name
-			FROM users u LEFT JOIN orgs o ON o.id = u.org_id
-			WHERE coalesce(u.status,'active') = 'active' AND u.org_id = $1 ORDER BY u.email`
-		userArgs = append(userArgs, userOrgID(claims.UserID))
-	}
-	_ = db.Select(&users, usersQuery, userArgs...)
-
-	canCreate := false
-	for _, p := range projects {
-		if canCreateTask(r, p.ID) {
-			canCreate = true
-			break
-		}
-	}
+	users := taskAssignableUsers(r)
 
 	tmpl, err := template.New("tasks.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).
 		Funcs(template.FuncMap{
@@ -606,6 +616,55 @@ func TasksHandler(w http.ResponseWriter, r *http.Request) {
 		"IsAdmin":     isAdminRole(r),
 		"IsOrgAdmin":  isOrgAdminRequest(r),
 		"Message":     r.URL.Query().Get("msg"),
+	})
+}
+
+// TaskNewHandler prikazuje formu za novi zadatak na zasebnoj strani
+// (/tasks/new), da lista zadataka ostane pregled posla koji radnici rade.
+func TaskNewHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetAuthClaims(r)
+	if claims == nil {
+		http.Redirect(w, r, "/login?next=/tasks/new", http.StatusFound)
+		return
+	}
+	if r.Method == http.MethodPost {
+		id, msg := createTask(r, claims)
+		if id > 0 {
+			http.Redirect(w, r, "/tasks/view?id="+strconv.FormatInt(id, 10)+"&msg="+url.QueryEscape(msg), http.StatusFound)
+			return
+		}
+		renderTaskNew(w, r, msg)
+		return
+	}
+	renderTaskNew(w, r, "")
+}
+
+func renderTaskNew(w http.ResponseWriter, r *http.Request, message string) {
+	projects, canCreate := taskFormOptions(r)
+	if !canCreate {
+		http.Error(w, "You are not allowed to create tasks.", http.StatusForbidden)
+		return
+	}
+	orgs, _ := listOrgs()
+	tmpl, err := template.New("task-new.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).
+		Funcs(template.FuncMap{
+			"hours":   hourValues,
+			"minutes": minuteValues,
+		}).
+		ParseFiles("web/templates/task-new.html")
+	if err != nil {
+		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = tmpl.Execute(w, map[string]any{
+		"Projects":   projects,
+		"Orgs":       orgs,
+		"Users":      taskAssignableUsers(r),
+		"IsStaff":    canSeeAllTasks(r),
+		"UserRole":   userRole(r),
+		"IsAdmin":    isAdminRole(r),
+		"IsOrgAdmin": isOrgAdminRequest(r),
+		"Message":    message,
 	})
 }
 
