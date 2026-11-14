@@ -47,6 +47,21 @@
             <section class="ui-card">
                 <h2><span class="n">1</span> Work order <span class="hint">Anschlussnehmer, Adresse &amp; NVT, Auftrag</span></h2>
                 <div class="ui-grid">
+                    <p class="ui-lbl" style="grid-column:1/-1;margin:.1rem 0 -.3rem;">Adresse &amp; NVT</p>
+                    <label class="field"><span>Straße und Hausnummer *</span>
+                        <input type="text" name="street_number" id="task-address" required placeholder="Goethestraße 28" autocomplete="off">
+                    </label>
+                    <label class="field"><span>PLZ</span>
+                        <input type="text" inputmode="numeric" name="postcode" id="task-postcode" maxlength="10" autocomplete="off" placeholder="58300">
+                    </label>
+                    <label class="field"><span>Ort</span>
+                        <input type="text" name="city" id="task-city" maxlength="120" autocomplete="off" placeholder="Wetter (Ruhr)">
+                    </label>
+                    <label class="field"><span>NVT *</span>
+                        <input type="text" name="nvt" id="task-nvt" required placeholder="NVT 1V3400">
+                    </label>
+                    <p id="task-lookup-hint" class="note" style="display:none;grid-column:1/-1;margin:0;"></p>
+
                     <p class="ui-lbl" style="grid-column:1/-1;margin:.1rem 0 -.3rem;">Anschlussnehmer</p>
                     <label class="field"><span>Nachname</span>
                         <input type="text" name="client_last_name" maxlength="100" autocomplete="off">
@@ -67,24 +82,10 @@
                         <input type="email" inputmode="email" name="client_email" maxlength="120" autocomplete="off">
                     </label>
 
-                    <p class="ui-lbl" style="grid-column:1/-1;margin:.1rem 0 -.3rem;">Adresse &amp; NVT</p>
-                    <label class="field"><span>Straße und Hausnummer *</span>
-                        <input type="text" name="street_number" id="task-address" required placeholder="Goethestraße 28" autocomplete="off">
-                    </label>
-                    <label class="field"><span>PLZ</span>
-                        <input type="text" inputmode="numeric" name="postcode" id="task-postcode" maxlength="10" autocomplete="off" placeholder="58300">
-                    </label>
-                    <label class="field"><span>Ort</span>
-                        <input type="text" name="city" id="task-city" maxlength="120" autocomplete="off" placeholder="Wetter (Ruhr)">
-                    </label>
-                    <label class="field"><span>NVT *</span>
-                        <input type="text" name="nvt" id="task-nvt" required placeholder="NVT 1V3400">
-                    </label>
-                    <p id="task-lookup-hint" class="note" style="display:none;grid-column:1/-1;margin:0;"></p>
-
                     <p class="ui-lbl" style="grid-column:1/-1;margin:.1rem 0 -.3rem;">Auftrag</p>
                     <label class="field"><span>Project *</span>
                         <select name="project_id" required>
+                            <option value="">— choose —</option>
                             {{range .Projects}}<option value="{{.ID}}">{{.Number}}{{if .Name}} — {{.Name}}{{end}}</option>{{end}}
                         </select>
                     </label>

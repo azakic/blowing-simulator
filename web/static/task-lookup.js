@@ -33,7 +33,34 @@
     fetch('/ha/lookup' + q, { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
-        if (!d || !d.found || !d.best) {
+        if (!d || !d.found) {
+          hint.textContent = 'Kein Eintrag im Verzeichnis — Name und NVT bitte manuell eintragen.';
+          hint.style.display = 'block';
+          return;
+        }
+        // Pogodak iz ranije importovanog protokola (Fremco/Jetting): preuzmi
+        // NVT i projektni broj, ostalo popuni rucno.
+        if (d.source === 'protocol' && d.protocol) {
+          var pr = d.protocol;
+          setIfEmpty(nvt, pr.nvt);
+          if (pr.project_number) {
+            var sel = document.querySelector('select[name="project_id"]');
+            if (sel && !sel.value) {
+              for (var i = 0; i < sel.options.length; i++) {
+                var txt = (sel.options[i].textContent || '').trim();
+                if (txt.indexOf(pr.project_number) === 0) { sel.selectedIndex = i; break; }
+              }
+            }
+          }
+          var meta = [];
+          if (pr.protocol_type) { meta.push(pr.protocol_type); }
+          if (pr.protocol_date) { meta.push(pr.protocol_date); }
+          if (pr.project_number) { meta.push('Projekt ' + pr.project_number); }
+          hint.textContent = 'Aus importiertem Protokoll (' + meta.join(', ') + ') übernommen.';
+          hint.style.display = 'block';
+          return;
+        }
+        if (!d.best) {
           hint.textContent = 'Kein Eintrag im Verzeichnis — Name und NVT bitte manuell eintragen.';
           hint.style.display = 'block';
           return;

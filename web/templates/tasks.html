@@ -24,6 +24,8 @@
         .tk-meta { display: flex; flex-wrap: wrap; gap: .2rem .9rem; font-size: .78rem; color: var(--muted); }
         .tk-meta a { color: var(--muted); text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
         .tk-meta a:hover { color: var(--blue); text-decoration: underline; }
+        .tk-addr { color: var(--ink); font-weight: 600; }
+        .tk-addr a { color: var(--ink); }
         .tk-overdue { font-size: .68rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--red); }
         .tk-actions { display: flex; flex-wrap: wrap; gap: .35rem; justify-content: flex-end; align-items: flex-start; }
         .tk-actions form { display: inline; margin: 0; }
@@ -122,8 +124,8 @@
                         </div>
                         <a class="tk-title" href="/tasks/view?id={{.ID}}">{{.Title}}</a>
                         <div class="tk-meta">
+                            {{if .Address}}<span class="tk-addr">📍 <a href="{{mapsURL .Address}}" target="_blank" rel="noopener" title="In Google Maps öffnen">{{.Address}}</a>{{if .NVT}} · NVT {{.NVT}}{{end}}</span>{{end}}
                             <span>Project <a class="project-link" href="/reports/project?project={{.Project}}">{{.Project}}</a></span>
-                            {{if .Address}}<span>📍 <a href="{{mapsURL .Address}}" target="_blank" rel="noopener" title="In Google Maps öffnen">{{.Address}}</a>{{if .NVT}} · {{.NVT}}{{end}}</span>{{end}}
                             <span>👤 {{if .UserEmail.Valid}}{{.UserEmail.String}}{{else}}—{{end}}{{if .OrgName.Valid}} ({{.OrgName.String}}){{end}}</span>
                             {{if .ClientPhone}}<span>📞 <a href="tel:{{.ClientPhone}}">{{.ClientPhone}}</a></span>{{end}}
                             <span>📅 {{if .DueDate.Valid}}{{dueLabel .DueDate.String}}{{if .DueTime.Valid}} {{dotTime .DueTime.String}}{{end}}{{else}}—{{end}}</span>

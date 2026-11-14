@@ -118,3 +118,35 @@ func customerNameParts(kunde string) (first, last, company string) {
 	first, last = splitKunde(kunde)
 	return first, last, ""
 }
+
+// nvtFromSection vadi NVT iz spojenog polja importovanih protokola
+// („Mühlenstr 13f / NVt 1V2800“, „Dammstr.3 / 1V2200_095658“).
+var (
+	nvtVRe    = regexp.MustCompile(`(?i)(\d{1,2}\s*v\s*\d{3,6})`)
+	nvtDotted = regexp.MustCompile(`\b(\d{1,2}[.,]\d{1,2})\b`)
+)
+
+func nvtFromSection(s string) string {
+	if m := nvtVRe.FindStringSubmatch(s); m != nil {
+		return strings.ToUpper(strings.ReplaceAll(m[1], " ", ""))
+	}
+	if m := nvtDotted.FindStringSubmatch(s); m != nil {
+		return strings.ReplaceAll(m[1], ",", ".")
+	}
+	return ""
+}
+
+// addressSlug normalizuje adresu za poređenje sa importovanim protokolima:
+// mala slova, bez razmaka i interpunkcije („Dammstr. 9“ → „dammstr9“).
+func addressSlug(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(strings.TrimSpace(s)) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == 'ä' || r == 'ö' || r == 'ü' || r == 'ß':
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}

@@ -806,10 +806,22 @@ type lookupMatch struct {
 	LastName    string `json:"last_name"`
 }
 
+// protocolHistory su podaci iz ranije importovanog protokola (Fremco/Jetting)
+// za istu adresu ili NVT — koristi se kad direktorijum nema pogodak.
+type protocolHistory struct {
+	Address       string `json:"address"`
+	NVT           string `json:"nvt"`
+	ProjectNumber string `json:"project_number"`
+	ProtocolType  string `json:"protocol_type"`
+	ProtocolDate  string `json:"protocol_date"`
+}
+
 type lookupResponse struct {
-	Found   bool          `json:"found"`
-	Best    *lookupMatch  `json:"best,omitempty"`
-	Matches []lookupMatch `json:"matches,omitempty"`
+	Found    bool             `json:"found"`
+	Source   string           `json:"source,omitempty"`
+	Best     *lookupMatch     `json:"best,omitempty"`
+	Matches  []lookupMatch    `json:"matches,omitempty"`
+	Protocol *protocolHistory `json:"protocol,omitempty"`
 }
 
 const customerSelect = `SELECT id, address, nvt, kunde, phone, mobile,
@@ -915,6 +927,42 @@ func customerForPrefill(nvt, address string) (customerRow, bool) {
 	return customerRow{}, false
 }
 
+// findProtocolHistory traži ranije importovan protokol (Fremco/Jetting) za
+// istu adresu ili NVT. Vraća projektni broj i NVT, da forma može da ih preuzme.
+func findProtocolHistory(nvt, address string) (protocolHistory, bool) {
+	var row struct {
+		Address       string `db:"address"`
+		ProjectNumber string `db:"project_number"`
+		ProtocolType  string `db:"protocol_type"`
+		ProtocolDate  string `db:"protocol_date"`
+		SectionNVT    string `db:"section_nvt"`
+	}
+	err := db.Get(&row, `SELECT coalesce(address,'') AS address,
+			coalesce(project_number,'') AS project_number,
+			coalesce(protocol_type,'') AS protocol_type,
+			coalesce(to_char(protocol_date,'YYYY-MM-DD'),'') AS protocol_date,
+			coalesce(section_nvt,'') AS section_nvt
+		FROM protocols
+		WHERE ($1 <> '' AND regexp_replace(lower(coalesce(address,'')), '[^a-z0-9äöüß]', '', 'g') = $1)
+		   OR ($2 <> '' AND lower(coalesce(section_nvt,'')) LIKE '%' || $2 || '%')
+		ORDER BY protocol_date DESC NULLS LAST, id DESC
+		LIMIT 1`, addressSlug(address), strings.ToLower(strings.TrimSpace(nvt)))
+	if err != nil {
+		return protocolHistory{}, false
+	}
+	p := protocolHistory{
+		Address:       row.Address,
+		NVT:           nvtFromSection(row.SectionNVT),
+		ProjectNumber: row.ProjectNumber,
+		ProtocolType:  row.ProtocolType,
+		ProtocolDate:  row.ProtocolDate,
+	}
+	if p.NVT == "" {
+		p.NVT = strings.TrimSpace(nvt)
+	}
+	return p, true
+}
+
 // HALookupHandler vraća najbolji pogodak iz direktorijuma za zadati NVT ili
 // adresu; HaP forma njime popunjava prazna polja klijenta.
 func HALookupHandler(w http.ResponseWriter, r *http.Request) {
@@ -932,6 +980,12 @@ func HALookupHandler(w http.ResponseWriter, r *http.Request) {
 
 	rows := findCustomers(nvt, addr)
 	if len(rows) == 0 {
+		// Nema u direktorijumu — probaj ranije importovane protokole
+		// (Fremco/Jetting): nose projektni broj i NVT za istu adresu.
+		if p, ok := findProtocolHistory(nvt, addr); ok {
+			writeJSON(w, lookupResponse{Found: true, Source: "protocol", Protocol: &p})
+			return
+		}
 		log.Printf("ha lookup: no match nvt=%q address=%q", nvt, addr)
 		writeJSON(w, resp)
 		return

@@ -81,6 +81,20 @@
                     <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                     <input type="hidden" name="action" value="update">
                     <input type="hidden" name="id" value="{{.Task.ID}}">
+                    <p class="ui-lbl" style="flex:1 1 100%;margin:0;">Adresse &amp; NVT</p>
+                    <label class="field" style="flex:2 1 220px;"><span>Straße und Hausnummer *</span>
+                        <input type="text" name="street_number" id="task-address" required value="{{.Task.StreetNumber}}" autocomplete="off" placeholder="Goethestraße 28">
+                    </label>
+                    <label class="field"><span>PLZ</span>
+                        <input type="text" inputmode="numeric" name="postcode" id="task-postcode" maxlength="10" value="{{.Task.Postcode}}" autocomplete="off">
+                    </label>
+                    <label class="field"><span>Ort</span>
+                        <input type="text" name="city" id="task-city" maxlength="120" value="{{.Task.City}}" autocomplete="off">
+                    </label>
+                    <label class="field"><span>NVT *</span>
+                        <input type="text" name="nvt" id="task-nvt" required value="{{.Task.NVT}}">
+                    </label>
+                    <p id="task-lookup-hint" class="note" style="display:none;flex:1 1 100%;margin:0;"></p>
                     <p class="ui-lbl" style="flex:1 1 100%;margin:0;">Anschlussnehmer</p>
                     <label class="field" style="flex:2 1 200px;"><span>Nachname</span>
                         <input type="text" name="client_last_name" maxlength="100" value="{{.Task.ClientLast}}" autocomplete="off">
@@ -141,20 +155,6 @@
                             {{range .Users}}<option value="{{.ID}}" {{if and $.Task.UserID.Valid (eq $.Task.UserID.Int64 .ID)}}selected{{end}}>{{.Email}}</option>{{end}}
                         </select>
                     </label>
-                    <p class="ui-lbl" style="flex:1 1 100%;margin:0;">Adresse &amp; NVT</p>
-                    <label class="field" style="flex:2 1 220px;"><span>Straße und Hausnummer *</span>
-                        <input type="text" name="street_number" id="task-address" required value="{{.Task.StreetNumber}}" autocomplete="off" placeholder="Goethestraße 28">
-                    </label>
-                    <label class="field"><span>PLZ</span>
-                        <input type="text" inputmode="numeric" name="postcode" id="task-postcode" maxlength="10" value="{{.Task.Postcode}}" autocomplete="off">
-                    </label>
-                    <label class="field"><span>Ort</span>
-                        <input type="text" name="city" id="task-city" maxlength="120" value="{{.Task.City}}" autocomplete="off">
-                    </label>
-                    <label class="field"><span>NVT *</span>
-                        <input type="text" name="nvt" id="task-nvt" required value="{{.Task.NVT}}">
-                    </label>
-                    <p id="task-lookup-hint" class="note" style="display:none;flex:1 1 100%;margin:0;"></p>
                     <label class="field" style="flex:1 1 100%;"><span>Description</span>
                         <textarea name="description" rows="4">{{.Task.Description}}</textarea>
                     </label>

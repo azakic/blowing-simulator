@@ -67,3 +67,34 @@ func TestCustomerNameParts(t *testing.T) {
 		}
 	}
 }
+
+func TestNVTFromSection(t *testing.T) {
+	cases := map[string]string{
+		"Mühlenstr 13f / NVt 1V2800": "1V2800",
+		"Dammstr.15 / 1V2200":        "1V2200",
+		"Dammstr.11 NVT1V2200":       "1V2200",
+		"Dammstr.3 / 1V2200_095658":  "1V2200",
+		"Goethestraße 28 / NVT 1.09": "1.09",
+		"":                           "",
+		"nema nvt ovde":              "",
+	}
+	for in, want := range cases {
+		if got := nvtFromSection(in); got != want {
+			t.Errorf("nvtFromSection(%q) = %q, očekivano %q", in, got, want)
+		}
+	}
+}
+
+func TestAddressSlug(t *testing.T) {
+	cases := map[string]string{
+		"Dammstr. 9":     "dammstr9",
+		"Mühlenstr 13f":  "mühlenstr13f",
+		"An der Borg 25": "anderborg25",
+		"  Dammstr.9  ":  "dammstr9",
+	}
+	for in, want := range cases {
+		if got := addressSlug(in); got != want {
+			t.Errorf("addressSlug(%q) = %q, očekivano %q", in, got, want)
+		}
+	}
+}
