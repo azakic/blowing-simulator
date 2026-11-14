@@ -60,6 +60,7 @@ func ensureCustomerSchema(db *sqlx.DB) error {
 		`ALTER TABLE ha_customers ADD COLUMN IF NOT EXISTS house_number TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_customers ADD COLUMN IF NOT EXISTS postcode TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_customers ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_customers ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_customers ADD COLUMN IF NOT EXISTS street_key TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_ha_customers_street_key ON ha_customers (street_key)`,
 		// NVT nije jedinstven (npr. „1.25“ deli više adresa) — ključ za
@@ -103,6 +104,7 @@ type customerRow struct {
 	HouseNumber string `db:"house_number" json:"house_number"`
 	Postcode    string `db:"postcode" json:"postcode"`
 	City        string `db:"city" json:"city"`
+	Email       string `db:"email" json:"email"`
 	Source      string `db:"source" json:"-"`
 }
 
@@ -364,10 +366,15 @@ func detectDelimiter(data []byte) rune {
 // --- mapiranje kolona ---
 
 type customerCols struct {
-	address, nvt, kunde, phone, mobile int
+	address, nvt, kunde, phone, mobile, postcode, city, email int
 }
 
-var customerColDefaults = customerCols{address: 0, nvt: 1, kunde: 2, phone: 3, mobile: 4}
+// Kada zaglavlje nije prepoznato, koristi se stari raspored bez mesta i
+// e-pošte (kolone -1 = nema ih).
+var customerColDefaults = customerCols{
+	address: 0, nvt: 1, kunde: 2, phone: 3, mobile: 4,
+	postcode: -1, city: -1, email: -1,
+}
 
 func (c customerCols) get(rec []string, idx int) string {
 	if idx < 0 || idx >= len(rec) {
@@ -390,11 +397,14 @@ func rowsFromTable(raw [][]string) ([]customerRow, bool) {
 			continue
 		}
 		row := customerRow{
-			Address: cleanCell(cmap.get(rec, cmap.address)),
-			NVT:     cleanCell(cmap.get(rec, cmap.nvt)),
-			Kunde:   cleanCell(cmap.get(rec, cmap.kunde)),
-			Phone:   cleanCell(cmap.get(rec, cmap.phone)),
-			Mobile:  cleanCell(cmap.get(rec, cmap.mobile)),
+			Address:  cleanCell(cmap.get(rec, cmap.address)),
+			NVT:      cleanCell(cmap.get(rec, cmap.nvt)),
+			Kunde:    cleanCell(cmap.get(rec, cmap.kunde)),
+			Phone:    cleanCell(cmap.get(rec, cmap.phone)),
+			Mobile:   cleanCell(cmap.get(rec, cmap.mobile)),
+			Postcode: cleanCell(cmap.get(rec, cmap.postcode)),
+			City:     cleanCell(cmap.get(rec, cmap.city)),
+			Email:    cleanCell(cmap.get(rec, cmap.email)),
 		}
 		if row.Address == "" && row.NVT == "" && row.Kunde == "" && row.Phone == "" && row.Mobile == "" {
 			continue
@@ -418,7 +428,7 @@ func detectHeader(raw [][]string) (int, customerCols, bool) {
 }
 
 func matchHeader(rec []string) (customerCols, bool) {
-	m := customerCols{-1, -1, -1, -1, -1}
+	m := customerCols{-1, -1, -1, -1, -1, -1, -1, -1}
 	found := 0
 	for i, cell := range rec {
 		k := normalizeHeader(cell)
@@ -430,6 +440,12 @@ func matchHeader(rec []string) (customerCols, bool) {
 			m.mobile, found = i, found+1
 		case m.phone < 0 && isPhoneHeader(k):
 			m.phone, found = i, found+1
+		case m.email < 0 && isEmailHeader(k):
+			m.email, found = i, found+1
+		case m.postcode < 0 && isPostcodeHeader(k):
+			m.postcode, found = i, found+1
+		case m.city < 0 && isCityHeader(k):
+			m.city, found = i, found+1
 		case m.address < 0 && isAddressHeader(k):
 			m.address, found = i, found+1
 		case m.nvt < 0 && strings.Contains(k, "nvt"):
@@ -462,6 +478,40 @@ func isPhoneHeader(k string) bool {
 		return true
 	}
 	return strings.Contains(k, "telefon")
+}
+
+func isPostcodeHeader(k string) bool {
+	switch k {
+	case "plz", "postleitzahl", "postcode", "zip", "zipcode", "postleitnummer":
+		return true
+	}
+	return false
+}
+
+// isCityHeader prihvata i Ortsteil, jer se u praksi javlja kao „Ort“ kolona.
+func isCityHeader(k string) bool {
+	switch k {
+	case "ort", "ortsteil", "stadt", "gemeinde", "wohnort", "city":
+		return true
+	}
+	return false
+}
+
+func isEmailHeader(k string) bool {
+	return k == "mail" || strings.Contains(k, "email")
+}
+
+// importAddressParts deli adresu, a PLZ/Ort dopunjuje iz zasebnih kolona
+// (Excel može da ih ima odvojeno, a ne mora ni jedno ni drugo).
+func importAddressParts(row customerRow) (street, houseNo, postcode, city string) {
+	street, houseNo, postcode, city = parseAddress(row.Address)
+	if postcode == "" {
+		postcode = strings.TrimSpace(row.Postcode)
+	}
+	if city == "" {
+		city = strings.TrimSpace(row.City)
+	}
+	return street, houseNo, postcode, city
 }
 
 func isKundeHeader(k string) bool {
@@ -705,7 +755,7 @@ func importCustomers(r *http.Request) *customerImportResult {
 	for i, row := range parsed.Rows {
 		nvtKey := customerKey(row.NVT)
 		addrKey := customerKey(row.Address)
-		st, houseNo, plz, city := parseAddress(row.Address)
+		st, houseNo, plz, city := importAddressParts(row)
 		sKey := streetKey(st, houseNo)
 		if nvtKey == "" && addrKey == "" {
 			res.Skipped++
@@ -716,15 +766,15 @@ func importCustomers(r *http.Request) *customerImportResult {
 			// Adresa je ključ za spajanje; NVT se samo osvežava.
 			err = tx.Get(&inserted, `INSERT INTO ha_customers
 					(address, nvt, kunde, phone, mobile,
-					 street, house_number, postcode, city, street_key,
+					 street, house_number, postcode, city, email, street_key,
 					 nvt_key, address_key, source, imported_by)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 				ON CONFLICT (address_key) WHERE address_key <> ''
 				DO UPDATE SET address=EXCLUDED.address, nvt=EXCLUDED.nvt,
 					kunde=EXCLUDED.kunde, phone=EXCLUDED.phone, mobile=EXCLUDED.mobile,
 					street=EXCLUDED.street, house_number=EXCLUDED.house_number,
 					postcode=EXCLUDED.postcode, city=EXCLUDED.city,
-					street_key=EXCLUDED.street_key,
+					email=EXCLUDED.email, street_key=EXCLUDED.street_key,
 					nvt_key=EXCLUDED.nvt_key, source=EXCLUDED.source,
 					imported_by=EXCLUDED.imported_by, updated_at=NOW()
 				WHERE ha_customers.address IS DISTINCT FROM EXCLUDED.address
@@ -732,31 +782,33 @@ func importCustomers(r *http.Request) *customerImportResult {
 					OR ha_customers.kunde IS DISTINCT FROM EXCLUDED.kunde
 					OR ha_customers.phone IS DISTINCT FROM EXCLUDED.phone
 					OR ha_customers.mobile IS DISTINCT FROM EXCLUDED.mobile
+					OR ha_customers.email IS DISTINCT FROM EXCLUDED.email
 					OR ha_customers.nvt_key IS DISTINCT FROM EXCLUDED.nvt_key
 					OR ha_customers.street_key IS DISTINCT FROM EXCLUDED.street_key
 				RETURNING (xmax = 0) AS inserted`,
 				row.Address, row.NVT, row.Kunde, row.Phone, row.Mobile,
-				st, houseNo, plz, city, sKey,
+				st, houseNo, plz, city, row.Email, sKey,
 				nvtKey, addrKey, res.Filename, userID)
 		} else {
 			err = tx.Get(&inserted, `INSERT INTO ha_customers
 					(address, nvt, kunde, phone, mobile,
-					 street, house_number, postcode, city, street_key,
+					 street, house_number, postcode, city, email, street_key,
 					 nvt_key, address_key, source, imported_by)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 				ON CONFLICT (nvt_key, kunde) WHERE address_key = ''
 				DO UPDATE SET phone=EXCLUDED.phone, mobile=EXCLUDED.mobile,
 					street=EXCLUDED.street, house_number=EXCLUDED.house_number,
 					postcode=EXCLUDED.postcode, city=EXCLUDED.city,
-					street_key=EXCLUDED.street_key,
+					email=EXCLUDED.email, street_key=EXCLUDED.street_key,
 					source=EXCLUDED.source, imported_by=EXCLUDED.imported_by,
 					updated_at=NOW()
 				WHERE ha_customers.phone IS DISTINCT FROM EXCLUDED.phone
 					OR ha_customers.mobile IS DISTINCT FROM EXCLUDED.mobile
+					OR ha_customers.email IS DISTINCT FROM EXCLUDED.email
 					OR ha_customers.street_key IS DISTINCT FROM EXCLUDED.street_key
 				RETURNING (xmax = 0) AS inserted`,
 				row.Address, row.NVT, row.Kunde, row.Phone, row.Mobile,
-				st, houseNo, plz, city, sKey,
+				st, houseNo, plz, city, row.Email, sKey,
 				nvtKey, addrKey, res.Filename, userID)
 		}
 		if err != nil {
@@ -805,6 +857,7 @@ type lookupMatch struct {
 	Company     string `json:"company"`
 	Phone       string `json:"phone"`
 	Mobile      string `json:"mobile"`
+	Email       string `json:"email,omitempty"`
 	FirstName   string `json:"first_name"`
 	LastName    string `json:"last_name"`
 }
@@ -833,7 +886,8 @@ type lookupResponse struct {
 }
 
 const customerSelect = `SELECT id, address, nvt, kunde, phone, mobile,
-		street, house_number, postcode, city FROM ha_customers`
+		street, house_number, postcode, city, coalesce(email,'') AS email
+		FROM ha_customers`
 
 // nvtKeyOf normalizuje NVT za poređenje: mala slova, bez razmaka
 // („1 V 2200“ i „1V2200“ su isti priključak).
@@ -1295,7 +1349,8 @@ func HALookupHandler(w http.ResponseWriter, r *http.Request) {
 			Street: row.Street, HouseNumber: row.HouseNumber,
 			Postcode: row.Postcode, City: row.City,
 			Company: company,
-			Phone:   row.Phone, Mobile: row.Mobile, FirstName: first, LastName: last,
+			Phone:   row.Phone, Mobile: row.Mobile, Email: row.Email,
+			FirstName: first, LastName: last,
 		})
 	}
 	resp.Found = true
