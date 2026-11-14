@@ -380,6 +380,23 @@ func renderHAForm(w http.ResponseWriter, r *http.Request, claims *AuthClaims, h 
 	}
 	var projects []projectOption
 	_ = db.Select(&projects, `SELECT id, number FROM projects WHERE status = 'active' ORDER BY number`)
+	// Projekat HaP-a mora biti u listi i kad više nije aktivan; inače select
+	// prikaže „—“ i čuvanje bi izgubilo vezu.
+	if h.ProjectID.Valid {
+		found := false
+		for _, p := range projects {
+			if p.ID == h.ProjectID.Int64 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			var cur projectOption
+			if err := db.Get(&cur, `SELECT id, number FROM projects WHERE id = $1`, h.ProjectID.Int64); err == nil {
+				projects = append([]projectOption{cur}, projects...)
+			}
+		}
+	}
 
 	orgs, _ := listOrgs()
 
@@ -888,6 +905,18 @@ func updateHA(r *http.Request, h haRow) string {
 	if date == "" {
 		date = h.ProtocolDate
 	}
+	// Projekat i organizacija se čitaju iz forme kao u createHA — ranije ih
+	// UPDATE nije dirao, pa se promena nije pamtila.
+	var projectID int64
+	if v, err := strconv.ParseInt(r.FormValue("project_id"), 10, 64); err == nil && v > 0 {
+		projectID = v
+	}
+	orgID := h.OrgID.Int64
+	if claims := GetAuthClaims(r); claims != nil && seesAllProtocols(claims.Role) {
+		if v, err := strconv.ParseInt(r.FormValue("org_id"), 10, 64); err == nil && v > 0 {
+			orgID = v
+		}
+	}
 	_, err := db.Exec(`UPDATE ha_protocols SET
 			auftragnehmer=$1, address=$2, city=$3, bauabschnitt=$4,
 			client_last_name=$5, client_first_name=$6, units=NULLIF($7,'')::int,
@@ -898,6 +927,7 @@ func updateHA(r *http.Request, h haRow) string {
 			nvt=$20, client_phone=$21, client_mobile=$22,
 			check_fiber=$23, check_complete=$24, check_clean=$25,
 			rohr=$27, rohr_color=$28, roehrchen_color=$29,
+			project_id=$30, org_id=$31,
 			updated_at=NOW()
 		WHERE id=$26`,
 		strings.TrimSpace(r.FormValue("auftragnehmer")),
@@ -928,7 +958,8 @@ func updateHA(r *http.Request, h haRow) string {
 		h.ID,
 		parseRohr(r.FormValue("rohr")),
 		strings.TrimSpace(r.FormValue("rohr_color")),
-		strings.TrimSpace(r.FormValue("roehrchen_color")))
+		strings.TrimSpace(r.FormValue("roehrchen_color")),
+		nullableID(projectID), nullableID(orgID))
 	if err != nil {
 		return "Could not save: " + err.Error()
 	}
