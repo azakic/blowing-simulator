@@ -216,3 +216,18 @@ func TestParseVolmarsteinSample(t *testing.T) {
 		t.Errorf("očekivani redovi nisu pronađeni (vwv=%v, heinz=%v)", vwv, heinz)
 	}
 }
+
+// Adrese u zadacima često imaju grad, a u Excelu su bez — lookup mora da
+// proba i deo pre zareza.
+func TestAddressLookupKeys(t *testing.T) {
+	got := addressLookupKeys("Grünewalder Straße 11, Volmarstein")
+	if len(got) != 2 || got[0] != "grünewalder straße 11, volmarstein" || got[1] != "grünewalder straße 11" {
+		t.Fatalf("addressLookupKeys = %#v", got)
+	}
+	if got := addressLookupKeys("Am Kornacker 14"); len(got) != 1 || got[0] != "am kornacker 14" {
+		t.Fatalf("bez zareza = %#v", got)
+	}
+	if got := addressLookupKeys("   "); got != nil {
+		t.Fatalf("prazno = %#v", got)
+	}
+}

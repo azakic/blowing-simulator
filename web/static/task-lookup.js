@@ -32,7 +32,8 @@
         setIfEmpty(nvt, b.nvt);
         setIfEmpty(document.querySelector('input[name="client_last_name"]'), b.last_name);
         setIfEmpty(document.querySelector('input[name="client_first_name"]'), b.first_name);
-        setIfEmpty(document.querySelector('input[name="client_phone"]'), b.phone);
+        // Direktorijum često ima samo mobilni (Telefon je prazan).
+        setIfEmpty(document.querySelector('input[name="client_phone"]'), b.phone || b.mobile);
         var parts = [];
         if (b.kunde) { parts.push(b.kunde); }
         if (b.phone) { parts.push('Tel ' + b.phone); }
