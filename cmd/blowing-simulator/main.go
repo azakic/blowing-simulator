@@ -835,6 +835,10 @@ func main() {
 	if err := backfillConnections(db); err != nil {
 		log.Fatal("Failed to backfill connections:", err)
 	}
+	// Stari NVT zapisi („N-1.31“) spajaju se sa istim bez prefiksa.
+	if err := backfillConnectionNVTKeys(db); err != nil {
+		log.Fatal("Failed to normalize connection NVT keys:", err)
+	}
 
 	// Javna strana, ali meni i tile-ovi zavise od role → claims ako ih ima.
 	http.HandleFunc("/", withOptionalAuth(IndexHandler))

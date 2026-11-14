@@ -892,7 +892,15 @@ const customerSelect = `SELECT id, address, nvt, kunde, phone, mobile,
 // nvtKeyOf normalizuje NVT za poređenje: mala slova, bez razmaka
 // („1 V 2200“ i „1V2200“ su isti priključak).
 func nvtKeyOf(s string) string {
-	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(s), " ", ""))
+	k := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(s), " ", ""))
+	// „N-1.31“, „NVT 1.31“ i „1.31“ su isti priključak — prefiks se skida,
+	// inače se isti NVT u zadatku (N-1.31) i HaP-u (1.31) ne spoji.
+	k = strings.TrimPrefix(k, "nvt")
+	k = strings.TrimPrefix(k, "n-")
+	if len(k) > 1 && k[0] == 'n' && k[1] >= '0' && k[1] <= '9' {
+		k = k[1:]
+	}
+	return k
 }
 
 // hasPlace javlja da li red ima PLZ ili grad. Excel uvoz ih zasad ne
@@ -1239,7 +1247,7 @@ func pickProtocolByPlace(rows []protocolHistoryRow, address string) (protocolHis
 // novih veza; ne pravi grešku ako nema pogodaka.
 func linkMatchingProtocols(taskID int64, address, nvt string) int {
 	slug := addressMatchKey(address)
-	nvtKey := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(nvt), " ", ""))
+	nvtKey := nvtKeyOf(nvt)
 	if taskID <= 0 || slug == "" || nvtKey == "" {
 		return 0
 	}
@@ -1274,7 +1282,7 @@ func linkMatchingProtocols(taskID int64, address, nvt string) int {
 // NVT kao novi protokol (obrnuti smer od linkMatchingProtocols).
 func linkTasksToProtocol(protocolID int, address, nvt string) int {
 	slug := addressMatchKey(address)
-	nvtKey := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(nvt), " ", ""))
+	nvtKey := nvtKeyOf(nvt)
 	if protocolID <= 0 || slug == "" || nvtKey == "" {
 		return 0
 	}

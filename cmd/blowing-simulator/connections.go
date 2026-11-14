@@ -219,3 +219,73 @@ func backfillConnections(db *sqlx.DB) error {
 	}
 	return nil
 }
+
+// backfillConnectionNVTKeys normalizuje `nvt_key` i spaja objekte koji su
+// posle normalizacije isti („N-1.31“ i „1.31“). Idempotentno; sve veze
+// (zadaci, HaP, protokoli) prelaze na objekat koji ostaje.
+func backfillConnectionNVTKeys(db *sqlx.DB) error {
+	ctx := context.Background()
+	var rows []struct {
+		ID        int64  `db:"id"`
+		StreetKey string `db:"street_key"`
+		NVT       string `db:"nvt"`
+		NVTKey    string `db:"nvt_key"`
+	}
+	if err := db.SelectContext(ctx, &rows, `SELECT id, coalesce(street_key,'') AS street_key,
+			coalesce(nvt,'') AS nvt, coalesce(nvt_key,'') AS nvt_key
+		FROM connections`); err != nil {
+		return err
+	}
+
+	merged := 0
+	for _, r := range rows {
+		want := nvtKeyOf(r.NVT)
+		if want == r.NVTKey {
+			continue
+		}
+		var keepID int64
+		err := db.GetContext(ctx, &keepID, `SELECT id FROM connections
+			WHERE street_key = $1 AND nvt_key = $2 AND id <> $3 LIMIT 1`,
+			r.StreetKey, want, r.ID)
+		if err == nil && keepID > 0 {
+			if mergeConnections(db, r.ID, keepID) {
+				merged++
+			} else {
+				log.Printf("connections: merge %d -> %d failed", r.ID, keepID)
+			}
+			continue
+		}
+		if _, err := db.ExecContext(ctx, `UPDATE connections SET nvt_key=$1, updated_at=NOW()
+			WHERE id=$2`, want, r.ID); err != nil {
+			log.Printf("connections: key %d: %v", r.ID, err)
+		}
+	}
+	if merged > 0 {
+		log.Printf("connections: %d duplicate object(s) merged", merged)
+	}
+	return nil
+}
+
+// mergeConnections prebacuje sve veze sa `from` na `keep` i briše duplikat.
+func mergeConnections(db *sqlx.DB, from, keep int64) bool {
+	tx, err := db.Beginx()
+	if err != nil {
+		return false
+	}
+	for _, q := range []string{
+		`UPDATE tasks SET connection_id=$1 WHERE connection_id=$2`,
+		`UPDATE ha_protocols SET connection_id=$1 WHERE connection_id=$2`,
+		`UPDATE protocols SET connection_id=$1 WHERE connection_id=$2`,
+	} {
+		if _, err := tx.Exec(q, keep, from); err != nil {
+			_ = tx.Rollback()
+			log.Printf("connections merge: %v", err)
+			return false
+		}
+	}
+	if _, err := tx.Exec(`DELETE FROM connections WHERE id=$1`, from); err != nil {
+		_ = tx.Rollback()
+		return false
+	}
+	return tx.Commit() == nil
+}
