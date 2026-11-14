@@ -31,6 +31,9 @@ type nominatimSearchItem struct {
 		Town         string `json:"town"`
 		Village      string `json:"village"`
 		Municipality string `json:"municipality"`
+		Suburb       string `json:"suburb"`
+		Borough      string `json:"borough"`
+		CityDistrict string `json:"city_district"`
 	} `json:"address"`
 }
 
@@ -91,6 +94,21 @@ func cityOf(a nominatimSearchItem) string {
 	return ""
 }
 
+// placesOf vraća sve nivoe imena mesta: grad, opštinu i delove (Ortsteil).
+// Korisnik često piše „Volmarstein“, a OSM to vodi kao suburb „Wetter (Ruhr)“.
+func placesOf(a nominatimSearchItem) []string {
+	var out []string
+	for _, v := range []string{
+		a.Address.City, a.Address.Town, a.Address.Village, a.Address.Municipality,
+		a.Address.Suburb, a.Address.Borough, a.Address.CityDistrict,
+	} {
+		if s := strings.TrimSpace(v); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 func citiesFromSearch(items []nominatimSearchItem) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -142,8 +160,17 @@ func postcodesFromSearch(items []nominatimSearchItem, street, city string) []str
 		if !sameStreet(it, street) {
 			continue
 		}
-		if city != "" && !sameCity(cityOf(it), city) {
-			continue
+		if city != "" {
+			matched := false
+			for _, p := range placesOf(it) {
+				if sameCity(p, city) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
 		}
 		p := strings.TrimSpace(it.Address.Postcode)
 		if p == "" || seen[p] {

@@ -52,3 +52,20 @@ func TestPostcodesFromSearch(t *testing.T) {
 		t.Fatalf("dva PLZ = %#v", got)
 	}
 }
+
+// Korisnik često upiše Ortsteil („Volmarstein“), a OSM vodi grad kao
+// „Wetter (Ruhr)“ sa suburb „Volmarstein“ — i to mora da se prihvati.
+func TestPostcodesFromSearchOrtsteil(t *testing.T) {
+	it := searchItem("An der Borg", "25", "58300", "Wetter (Ruhr)")
+	it.Address.Suburb = "Volmarstein"
+	items := []nominatimSearchItem{it}
+	if got := postcodesFromSearch(items, "An der Borg 25", "Volmarstein"); len(got) != 1 || got[0] != "58300" {
+		t.Fatalf("Ortsteil = %#v", got)
+	}
+	if got := postcodesFromSearch(items, "An der Borg 25", "Wetter"); len(got) != 1 || got[0] != "58300" {
+		t.Fatalf("grad = %#v", got)
+	}
+	if got := postcodesFromSearch(items, "An der Borg 25", "Herdecke"); len(got) != 0 {
+		t.Fatalf("pogrešan grad = %#v", got)
+	}
+}
