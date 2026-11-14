@@ -332,7 +332,6 @@ func haPrefillFromTask(r *http.Request, taskID int64) haRow {
 	// Ime klijenta iz zadatka ide direktno u HaP (ista polja).
 	h.ClientFirstName = t.ClientFirst
 	h.ClientLastName = t.ClientLast
-	h.ClientPhone = t.ClientPhone
 
 	// Predikcija: ako direktorijum klijenata već ima ovu adresu (ili
 	// jedinstven NVT), popuni klijenta i telefone odmah, bez čekanja na JS.
@@ -342,13 +341,22 @@ func haPrefillFromTask(r *http.Request, taskID int64) haRow {
 		if h.ClientFirstName == "" && h.ClientLastName == "" {
 			h.ClientFirstName, h.ClientLastName = first, last
 		}
-		if h.ClientPhone == "" {
-			h.ClientPhone = c.Phone
-		}
 		h.ClientMobile = c.Mobile
 		if h.NVT == "" {
 			h.NVT = c.NVT
 		}
+		// Zadatak ima jedan broj; ako je to mobilni iz direktorijuma, ide u
+		// Mobil (već popunjeno), a Telefon ostaje fiksni iz direktorijuma.
+		switch {
+		case t.ClientPhone == "":
+			h.ClientPhone = c.Phone
+		case customerKey(t.ClientPhone) == customerKey(c.Mobile) && c.Mobile != "":
+			h.ClientPhone = c.Phone
+		default:
+			h.ClientPhone = t.ClientPhone
+		}
+	} else {
+		h.ClientPhone = t.ClientPhone
 	}
 	return h
 }
