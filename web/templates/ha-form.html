@@ -41,7 +41,7 @@
                     {{if .HA.TaskID.Valid}}<a class="ui-chip" href="/tasks/view?id={{.HA.TaskID.Int64}}">Aufgabe #{{.HA.TaskID.Int64}} →</a>{{end}}
                 </div>
             </div>
-            <div class="ui-hero-actions">
+            <div class="ui-hero-actions ui-mobile-hide">
                 <button class="btn btn-primary" type="submit" form="ha-form">{{if .IsEdit}}Speichern{{else}}HaP anlegen{{end}}</button>
                 <a class="btn" href="{{if .IsEdit}}/ha/view?id={{.HA.ID}}{{else}}/ha{{end}}">Abbrechen</a>
             </div>

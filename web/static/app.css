@@ -449,7 +449,8 @@ tbody tr:hover td { background: #f9fbfd; }
             body.ui-body { padding-bottom: 5.4rem; }
             .ui-hero { padding: 1.1rem; border-radius: 16px; }
             .ui-hero h1 { font-size: 1.3rem; }
-            .ui-hero-actions { display: none; }
+            /* Skriva se samo tamo gde postoji fiksna traka na dnu. */
+            .ui-mobile-hide { display: none; }
             .ui-card { padding: .85rem .85rem 1rem; border-radius: 14px; }
             .ui-card > h2 { flex-wrap: wrap; }
             .ui-card > h2 .hint { margin-left: 0; flex-basis: 100%; }
