@@ -195,8 +195,6 @@ func TestHAFormClientFieldsAndRemarks(t *testing.T) {
 		`name="client_company"`, `value="Hausverwaltung Meier GmbH"`,
 		`name="client_email"`, `name="remarks"`, `Zugang hinten`,
 		`name="start_time"`, `value="13:52"`,
-		`name="photo_sig_kunde"`, "Unterschrift Kunde",
-		`name="photo_sig_monteur"`, `name="photo_sig_pruefer"`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("forma ne sadrži %q", want)
@@ -204,6 +202,8 @@ func TestHAFormClientFieldsAndRemarks(t *testing.T) {
 	}
 }
 
+// Potpisi su dozvoljene vrste (za buduće provajdere), ali Westnetz HaP se
+// potpisuje na papiru — zato ih forma ne prikazuje kao slotove.
 func TestHAPhotoKindsUniqueAndSignatures(t *testing.T) {
 	seen := map[string]bool{}
 	for _, k := range haPhotoKinds {
@@ -213,15 +213,17 @@ func TestHAPhotoKindsUniqueAndSignatures(t *testing.T) {
 		seen[k.Key] = true
 	}
 	for _, k := range []string{"sig_monteur", "sig_pruefer", "sig_kunde"} {
-		found := false
+		if !validHAKind(k) {
+			t.Errorf("potpis %q nije dozvoljena vrsta", k)
+		}
 		for _, slot := range haSlotPhotoKinds {
 			if slot.Key == k {
-				found = true
+				t.Errorf("potpis %q ne treba da bude slot Westnetz forme", k)
 			}
 		}
-		if !found {
-			t.Errorf("potpis %q nije u slotovima forme", k)
-		}
+	}
+	if len(haSlotPhotoKinds) != 5 {
+		t.Errorf("slotova = %d, očekivano 5 (Bild 1–4 + Licht test)", len(haSlotPhotoKinds))
 	}
 }
 

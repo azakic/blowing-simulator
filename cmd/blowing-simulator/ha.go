@@ -39,6 +39,8 @@ var haPhotoKinds = []haPhotoKind{
 	{"ont_label", "ONT Aufkleber"},
 	{"apl_label", "APL Aufkleber"},
 	{"light_test", "Licht test"},
+	// Potpisi: Westnetz se potpisuje na papiru, pa nisu slot u formi; vrste
+	// ostaju dozvoljene za buduće provajdere (npr. Telekom).
 	{"sig_monteur", "Unterschrift Monteur"},
 	{"sig_pruefer", "Unterschrift Prüfer"},
 	{"sig_kunde", "Unterschrift Kunde"},
@@ -52,9 +54,6 @@ var haSlotPhotoKinds = []haPhotoKind{
 	{"bild3", "Bild 3 — APL geschlossen / Aufkleber"},
 	{"bild4", "Bild 4 — Foto ONT"},
 	{"light_test", "Licht test"},
-	{"sig_monteur", "Unterschrift Monteur"},
-	{"sig_pruefer", "Unterschrift Prüfer"},
-	{"sig_kunde", "Unterschrift Kunde"},
 }
 
 func validHAKind(kind string) bool {
