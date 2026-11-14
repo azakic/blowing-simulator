@@ -198,7 +198,9 @@ func AdminProjectsHandler(w http.ResponseWriter, r *http.Request) {
 		usersByProject[x.ProjectID] = append(usersByProject[x.ProjectID], projectUserRow{UserID: x.UserID, Email: x.Email, Role: x.Role})
 	}
 
-	tmpl, err := template.New("admin-projects.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).ParseFiles("web/templates/admin-projects.html")
+	tmpl, err := template.New("admin-projects.html").Funcs(template.FuncMap(csrfTemplateFuncs(r))).
+		Funcs(template.FuncMap{"ProviderLabel": projectProviderLabel}).
+		ParseFiles("web/templates/admin-projects.html")
 	if err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -213,7 +215,6 @@ func AdminProjectsHandler(w http.ResponseWriter, r *http.Request) {
 		"OrgsByProject":  orgsByProject,
 		"UsersByProject": usersByProject,
 		"Providers":      projectProviders,
-		"ProviderLabel":  projectProviderLabel,
 		"Message":        r.URL.Query().Get("msg"),
 	})
 }
