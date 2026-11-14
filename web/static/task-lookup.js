@@ -11,9 +11,32 @@
   if (!street || !hint) { return; }
   var timer = null;
 
-  function setIfEmpty(el, value) {
-    if (el && value && !el.value.trim()) { el.value = value; }
+  // Polja koja je korisnik dirao ne popunjavamo automatski: kada obriše
+  // adresu ili NVT, sledeći lookup ih ne sme vratiti (izgleda kao petlja).
+  var touched = {};
+  ['task-address', 'task-postcode', 'task-city', 'task-nvt'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) { el.addEventListener('input', function () { touched[id] = true; }); }
+  });
+
+  function fill(el, value) {
+    if (!el || !value || touched[el.id] || el.value.trim()) { return false; }
+    el.value = value;
+    return true;
   }
+  function setIfEmpty(el, value) { fill(el, value); }
+
+  // „SM209214964“ → izaberi opciju projekta koja počinje tim brojem.
+  function selectProject(number) {
+    if (!number) { return; }
+    var sel = document.querySelector('select[name="project_id"]');
+    if (!sel || sel.value) { return; }
+    for (var i = 0; i < sel.options.length; i++) {
+      var txt = (sel.options[i].textContent || '').trim();
+      if (txt.indexOf(number) === 0) { sel.selectedIndex = i; return; }
+    }
+  }
+
   function pick(name) { return document.querySelector('input[name="' + name + '"]'); }
   function val(el) { return el ? (el.value || '').trim() : ''; }
 
@@ -94,7 +117,39 @@
     hint.style.display = 'block';
   }
 
-  function lookup() {
+  // NVT pokriva više adresa u protokolima: klik upiše adresu, NVT i projekt.
+  function showProtocolCandidates(list) {
+    hint.textContent = list.length + ' Adressen zu diesem NVT — bitte wählen:';
+    var box = document.createElement('span');
+    box.className = 'lookup-choices';
+    list.forEach(function (p) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'lookup-choice';
+      var parts = [p.address || '(ohne Adresse)'];
+      if (p.project_number) { parts.push('Projekt ' + p.project_number); }
+      var meta = [];
+      if (p.protocol_type) { meta.push(p.protocol_type); }
+      if (p.protocol_date) { meta.push(p.protocol_date); }
+      if (meta.length) { parts.push(meta.join(', ')); }
+      btn.textContent = parts.join(' · ');
+      btn.addEventListener('click', function () {
+        if (p.address) { street.value = p.address; }
+        if (p.nvt) { nvt.value = p.nvt; }
+        // Eksplicitan izbor: GPS sme ponovo da dopuni PLZ/Ort.
+        touched['task-postcode'] = false;
+        touched['task-city'] = false;
+        selectProject(p.project_number);
+        // GPS dopunjava PLZ/Ort već u drugom prolazu (protokol ga nosi).
+        lookup(true);
+      });
+      box.appendChild(btn);
+    });
+    hint.appendChild(box);
+    hint.style.display = 'block';
+  }
+
+  function lookup(repass) {
     var addr = composedAddress();
     var n = val(nvt);
     if (addr.length < 3 && !n) { return; }
@@ -103,33 +158,23 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d || !d.found) {
-          hint.textContent = d && d.ambiguous
-            ? 'Mehrere Einträge für diese Adresse — bitte NVT eingeben.'
-            : 'Kein Eintrag im Verzeichnis — Name und NVT bitte manuell eintragen.';
+          hint.textContent = 'Kein Eintrag im Verzeichnis — Name und NVT bitte manuell eintragen.';
           hint.style.display = 'block';
           return;
         }
-        // Pogodak iz ranije importovanog protokola (Fremco/Jetting): preuzmi
-        // NVT i projektni broj, ostalo popuni rucno.
+        // Više adresa pod istim NVT-om u importovanim protokolima
+        // (Fremco/Jetting) — prikaži sve, jer najnoviji pogodak ume da bude
+        // pogrešna adresa iz istog NVT-a.
+        if (d.source === 'protocol' && d.protocols && d.protocols.length > 1) {
+          showProtocolCandidates(d.protocols);
+          return;
+        }
+        // Jedan pogodak iz protokola: dopuni NVT, ulicu i projekt.
         if (d.source === 'protocol' && d.protocol) {
           var pr = d.protocol;
-          // NVT je prvo polje: iz protokola odmah dopuni i ulicu/broj, pa
-          // drugi prolaz može da nađe klijenta u direktorijumu.
-          var filledStreet = false;
-          if (!val(street) && pr.address) {
-            street.value = pr.address;
-            filledStreet = true;
-          }
+          var filledStreet = fill(street, pr.address);
           setIfEmpty(nvt, pr.nvt);
-          if (pr.project_number) {
-            var sel = document.querySelector('select[name="project_id"]');
-            if (sel && !sel.value) {
-              for (var i = 0; i < sel.options.length; i++) {
-                var txt = (sel.options[i].textContent || '').trim();
-                if (txt.indexOf(pr.project_number) === 0) { sel.selectedIndex = i; break; }
-              }
-            }
-          }
+          selectProject(pr.project_number);
           var meta = [];
           if (pr.protocol_type) { meta.push(pr.protocol_type); }
           if (pr.protocol_date) { meta.push(pr.protocol_date); }
@@ -137,7 +182,8 @@
           hint.textContent = 'Aus importiertem Protokoll (' + meta.join(', ') + ') übernommen.';
           hint.style.display = 'block';
           verifyWithGps(pr);
-          if (filledStreet) { lookup(); }
+          // Drugi prolaz: sa popunjenom adresom probaj i direktorijum.
+          if (filledStreet && !repass) { lookup(true); }
           return;
         }
         if (!d.best) {
@@ -161,9 +207,7 @@
         setIfEmpty(pick('client_phone'), b.phone || b.mobile);
         setIfEmpty(pick('client_mobile'), b.mobile);
         setIfEmpty(pick('client_email'), b.email);
-        if (!val(street) && (b.street || b.house_number)) {
-          street.value = (b.street + ' ' + (b.house_number || '')).trim();
-        }
+        fill(street, (b.street + ' ' + (b.house_number || '')).trim());
         setIfEmpty(postcode, b.postcode);
         setIfEmpty(city, b.city);
         var parts = [];
@@ -177,7 +221,7 @@
       .catch(function () {});
   }
 
-  function schedule() { clearTimeout(timer); timer = setTimeout(lookup, 350); }
+  function schedule() { clearTimeout(timer); timer = setTimeout(function () { lookup(); }, 350); }
   street.addEventListener('blur', schedule);
   street.addEventListener('change', schedule);
   if (postcode) { postcode.addEventListener('blur', schedule); postcode.addEventListener('change', schedule); }

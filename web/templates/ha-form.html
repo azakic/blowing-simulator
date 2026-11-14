@@ -479,9 +479,7 @@
                     .then(function (r) { return r.ok ? r.json() : null; })
                     .then(function (d) {
                         if (!d || !d.found || !d.best) {
-                            hint.textContent = d && d.ambiguous
-                                ? 'Mehrere Einträge für diese Adresse — bitte NVT eingeben.'
-                                : 'Kein Eintrag im Verzeichnis — Name, Telefon und NVT bitte manuell eintragen.';
+                            hint.textContent = 'Kein Eintrag im Verzeichnis — Name, Telefon und NVT bitte manuell eintragen.';
                             hint.style.display = 'block';
                             return;
                         }

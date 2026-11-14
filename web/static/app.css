@@ -486,6 +486,8 @@ tbody tr:hover td { background: #f9fbfd; }
     flex-direction: column;
     gap: 6px;
     margin-top: 8px;
+    max-height: 45vh;
+    overflow-y: auto;
 }
 .lookup-choice {
     display: block;

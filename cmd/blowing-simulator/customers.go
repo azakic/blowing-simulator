@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -821,14 +822,14 @@ type protocolHistory struct {
 }
 
 type lookupResponse struct {
-	Found    bool             `json:"found"`
-	Source   string           `json:"source,omitempty"`
-	Best     *lookupMatch     `json:"best,omitempty"`
-	Matches  []lookupMatch    `json:"matches,omitempty"`
+	Found   bool          `json:"found"`
+	Source  string        `json:"source,omitempty"`
+	Best    *lookupMatch  `json:"best,omitempty"`
+	Matches []lookupMatch `json:"matches,omitempty"`
+	// Protocol: jedan pogodak iz importovanih protokola (popunjava se sam).
 	Protocol *protocolHistory `json:"protocol,omitempty"`
-	// Ambiguous: ista ulica i broj postoje u više mesta, pa lookup ne
-	// pogađa — forma traži NVT umesto da popuni pogrešnog klijenta.
-	Ambiguous bool `json:"ambiguous,omitempty"`
+	// Protocols: više adresa za isti NVT — forma prikazuje listu.
+	Protocols []protocolHistory `json:"protocols,omitempty"`
 }
 
 const customerSelect = `SELECT id, address, nvt, kunde, phone, mobile,
@@ -957,7 +958,7 @@ func findCustomers(nvt, addr string) []customerRow {
 		var rows []customerRow
 		if err := db.Select(&rows, customerSelect+`
 			WHERE lower(replace(coalesce(nvt_key,''), ' ', '')) = $1
-			ORDER BY address_key LIMIT 5`, k); err == nil && len(rows) > 0 {
+			ORDER BY address_key LIMIT 25`, k); err == nil && len(rows) > 0 {
 			return rows
 		}
 	}
@@ -1044,14 +1045,23 @@ const protocolHistorySelect = `SELECT p.id,
 	FROM protocols p
 	LEFT JOIN protocol_summary s ON s.protocol_id = p.id`
 
-// protocolCandidates vraća do 5 protokola za zadati uslov (uslov je uvek
-// literal iz ovog fajla, vrednosti idu kao parametri).
-func protocolCandidates(where string, args ...any) []protocolHistoryRow {
+// Uslovi pretrage nad importovanim protokolima. NVT se poredi bez razmaka
+// („1V3400“, „1 V 3400“, „Holsteiner Weide 13 / 1V3400“), adresa po
+// normalizovanom ključu ulice+broja.
+const (
+	protocolNVTExpr     = `lower(replace(coalesce(p.section_nvt,''), ' ', ''))`
+	protocolAddressExpr = `regexp_replace(lower(coalesce(p.address,'')), '[^a-z0-9äöüß]', '', 'g')`
+)
+
+// protocolCandidates vraća protokole za zadati uslov (uslov je literal iz
+// ovog fajla, vrednosti idu kao parametri), najnovije prvo.
+func protocolCandidates(limit int, where string, args ...any) []protocolHistoryRow {
 	var rows []protocolHistoryRow
-	if err := db.Select(&rows, protocolHistorySelect+`
-		WHERE `+where+`
+	q := fmt.Sprintf(`%s
+		WHERE %s
 		ORDER BY p.protocol_date DESC NULLS LAST, p.id DESC
-		LIMIT 5`, args...); err != nil {
+		LIMIT %d`, protocolHistorySelect, where, limit)
+	if err := db.Select(&rows, q, args...); err != nil {
 		return nil
 	}
 	return rows
@@ -1074,40 +1084,68 @@ func protocolHistoryOf(row protocolHistoryRow, typedNVT string) protocolHistory 
 	return p
 }
 
-// protocolHistoryMatch je rezultat pretrage: pogodak, ili „dvosmisleno“ —
-// ista ulica i broj u više mesta, pa forma treba da traži NVT.
-type protocolHistoryMatch struct {
-	Protocol  protocolHistory
-	Found     bool
-	Ambiguous bool
+// protocolHistories pretvara redove u listu za formu: jedna stavka po
+// adresi (najnoviji protokol), poređano po adresi. Jedan NVT ume da pokrije
+// dvadesetak adresa, pa se u formi prikazuje lista, a ne jedan pogodak.
+func protocolHistories(rows []protocolHistoryRow, typedNVT string) []protocolHistory {
+	seen := make(map[string]bool, len(rows))
+	out := make([]protocolHistory, 0, len(rows))
+	for _, row := range rows {
+		key := addressMatchKey(row.Address)
+		if key == "" {
+			key = customerKey(row.Address)
+		}
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, protocolHistoryOf(row, typedNVT))
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return strings.ToLower(out[i].Address) < strings.ToLower(out[j].Address)
+	})
+	return out
 }
 
-// findProtocolHistory traži ranije importovan protokol (Fremco/Jetting) za
-// isti NVT, pa za istu adresu. Kada adresa postoji u više mesta i nema NVT,
-// ne pogađa — vraća Ambiguous, jer je pogrešan projekat gori od praznog.
-func findProtocolHistory(nvt, address string) protocolHistoryMatch {
-	if k := nvtKeyOf(nvt); k != "" {
-		if rows := protocolCandidates(
-			`lower(replace(coalesce(p.section_nvt,''), ' ', '')) LIKE '%'||$1||'%'`, k); len(rows) > 0 {
-			return protocolHistoryMatch{Protocol: protocolHistoryOf(rows[0], nvt), Found: true}
+// findProtocolHistory traži ranije importovane protokole (Fremco/Jetting):
+// prvo NVT i adresa zajedno, pa sve adrese pod tim NVT-om, pa sama adresa.
+// Vraća praznu listu kada nema pogotka; više stavki znači „korisnik bira“ —
+// pogrešan projekat je gori od praznog polja.
+func findProtocolHistory(nvt, address string) []protocolHistory {
+	nvtK := nvtKeyOf(nvt)
+	slug := addressMatchKey(address)
+
+	// 1) NVT i adresa — tačan pogodak. Više protokola za istu adresu
+	// (različiti datumi) svodi se na najnoviji.
+	if nvtK != "" && slug != "" {
+		rows := protocolCandidates(1,
+			protocolNVTExpr+` LIKE '%'||$1||'%' AND `+protocolAddressExpr+` = $2`, nvtK, slug)
+		if len(rows) > 0 {
+			return []protocolHistory{protocolHistoryOf(rows[0], nvt)}
 		}
 	}
-	slug := addressMatchKey(address)
-	if slug == "" {
-		return protocolHistoryMatch{}
+	// 2) samo NVT — sve adrese iz importovanih protokola pod tim NVT-om.
+	if nvtK != "" {
+		rows := protocolCandidates(25, protocolNVTExpr+` LIKE '%'||$1||'%'`, nvtK)
+		if len(rows) > 0 {
+			return protocolHistories(rows, nvt)
+		}
 	}
-	rows := protocolCandidates(
-		`regexp_replace(lower(coalesce(p.address,'')), '[^a-z0-9äöüß]', '', 'g') = $1`, slug)
+	// 3) samo adresa.
+	if slug == "" {
+		return nil
+	}
+	rows := protocolCandidates(5, protocolAddressExpr+` = $1`, slug)
 	switch {
 	case len(rows) == 0:
-		return protocolHistoryMatch{}
+		return nil
 	case len(rows) == 1:
-		return protocolHistoryMatch{Protocol: protocolHistoryOf(rows[0], nvt), Found: true}
+		return []protocolHistory{protocolHistoryOf(rows[0], nvt)}
 	}
 	if row, ok := pickProtocolByPlace(rows, address); ok {
-		return protocolHistoryMatch{Protocol: protocolHistoryOf(row, nvt), Found: true}
+		return []protocolHistory{protocolHistoryOf(row, nvt)}
 	}
-	return protocolHistoryMatch{Ambiguous: true}
+	return protocolHistories(rows, nvt)
 }
 
 // pickProtocolByPlace bira protokol čije GPS mesto odgovara upisanom
@@ -1233,16 +1271,16 @@ func HALookupHandler(w http.ResponseWriter, r *http.Request) {
 	if len(rows) == 0 {
 		// Nema u direktorijumu — probaj ranije importovane protokole
 		// (Fremco/Jetting): nose projektni broj i NVT za istu adresu.
-		if m := findProtocolHistory(nvt, addr); m.Found {
-			p := m.Protocol
+		switch hist := findProtocolHistory(nvt, addr); len(hist) {
+		case 0:
+			log.Printf("ha lookup: no match nvt=%q address=%q", nvt, addr)
+			writeJSON(w, resp)
+		case 1:
+			p := hist[0]
 			writeJSON(w, lookupResponse{Found: true, Source: "protocol", Protocol: &p})
-			return
-		} else if m.Ambiguous {
-			writeJSON(w, lookupResponse{Ambiguous: true})
-			return
+		default:
+			writeJSON(w, lookupResponse{Found: true, Source: "protocol", Protocols: hist})
 		}
-		log.Printf("ha lookup: no match nvt=%q address=%q", nvt, addr)
-		writeJSON(w, resp)
 		return
 	}
 
