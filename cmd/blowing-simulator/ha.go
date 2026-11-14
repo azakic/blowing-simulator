@@ -605,6 +605,11 @@ func createHA(r *http.Request, claims *AuthClaims) (int64, string) {
 		return 0, "Could not save: " + err.Error()
 	}
 
+	if !providerFormSupported(provider) {
+		return 0, "Das Protokollformular für " + providerProfileFor(provider).Label +
+			" ist noch nicht implementiert (aktuell nur Westnetz)."
+	}
+
 	var id int64
 	err = db.Get(&id, `INSERT INTO ha_protocols
 			(task_id, project_id, org_id, auftragnehmer, address, city, bauabschnitt,

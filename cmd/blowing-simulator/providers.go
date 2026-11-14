@@ -251,6 +251,13 @@ func protocolTitle(key string) string {
 	return title
 }
 
+// providerFormSupported vraća true kada postoji forma/PDF za provajdera.
+// Westnetz je implementiran; Telekom/Verzatel još ne — do tada se HaP za te
+// projekte ne sme izdati (izdao bi se pogrešan obrazac).
+func providerFormSupported(key string) bool {
+	return key == "westnetz"
+}
+
 // providerFieldKeys vraća ključeve polja (za proveru u testovima i budući
 // render forme).
 func providerFieldKeys(key string) map[string]providerField {

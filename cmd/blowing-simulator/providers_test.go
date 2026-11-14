@@ -208,3 +208,14 @@ func TestTelekomProfileSpec(t *testing.T) {
 		t.Error("univerzalna polja ne idu u extra")
 	}
 }
+
+func TestProviderFormSupported(t *testing.T) {
+	if !providerFormSupported("westnetz") {
+		t.Error("westnetz mora imati formu")
+	}
+	for _, k := range []string{"telekom", "verzatel"} {
+		if providerFormSupported(k) {
+			t.Errorf("%s još nema formu — HaP ne sme da se izda", k)
+		}
+	}
+}
