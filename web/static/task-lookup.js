@@ -113,6 +113,13 @@
         // NVT i projektni broj, ostalo popuni rucno.
         if (d.source === 'protocol' && d.protocol) {
           var pr = d.protocol;
+          // NVT je prvo polje: iz protokola odmah dopuni i ulicu/broj, pa
+          // drugi prolaz može da nađe klijenta u direktorijumu.
+          var filledStreet = false;
+          if (!val(street) && pr.address) {
+            street.value = pr.address;
+            filledStreet = true;
+          }
           setIfEmpty(nvt, pr.nvt);
           if (pr.project_number) {
             var sel = document.querySelector('select[name="project_id"]');
@@ -130,6 +137,7 @@
           hint.textContent = 'Aus importiertem Protokoll (' + meta.join(', ') + ') übernommen.';
           hint.style.display = 'block';
           verifyWithGps(pr);
+          if (filledStreet) { lookup(); }
           return;
         }
         if (!d.best) {

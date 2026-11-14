@@ -32,7 +32,7 @@
             <div>
                 <div class="ui-kicker">Tasks · new work order</div>
                 <h1>New task</h1>
-                <p class="ui-sub">Adresse und NVT füllen den Kunden aus dem Verzeichnis; PLZ und Ort ergänzen sich gegenseitig.</p>
+                <p class="ui-sub">NVT zuerst — er ergänzt Adresse, Projekt und Kunde aus dem Verzeichnis und aus importierten Protokollen (Fremco/Jetting). PLZ und Ort ergänzen sich gegenseitig.</p>
             </div>
             <div class="ui-hero-actions ui-mobile-hide">
                 <button class="btn btn-primary" type="submit" form="task-form">Create task</button>
@@ -45,9 +45,12 @@
         <form method="POST" action="/tasks/new" id="task-form" autocomplete="off">
             <input type="hidden" name="csrf_token" value="{{csrfToken}}">
             <section class="ui-card">
-                <h2><span class="n">1</span> Work order <span class="hint">Anschlussnehmer, Adresse &amp; NVT, Auftrag</span></h2>
+                <h2><span class="n">1</span> Work order <span class="hint">NVT &amp; Adresse, Anschlussnehmer, Auftrag</span></h2>
                 <div class="ui-grid">
                     <p class="ui-lbl" style="grid-column:1/-1;margin:.1rem 0 -.3rem;">Adresse &amp; NVT</p>
+                    <label class="field"><span>NVT *</span>
+                        <input type="text" name="nvt" id="task-nvt" required placeholder="NVT 1V3400" autocomplete="off" autocapitalize="characters" spellcheck="false">
+                    </label>
                     <label class="field"><span>Straße und Hausnummer *</span>
                         <input type="text" name="street_number" id="task-address" required placeholder="Goethestraße 28" autocomplete="off">
                     </label>
@@ -56,9 +59,6 @@
                     </label>
                     <label class="field"><span>Ort</span>
                         <input type="text" name="city" id="task-city" maxlength="120" autocomplete="off" placeholder="Wetter (Ruhr)">
-                    </label>
-                    <label class="field"><span>NVT *</span>
-                        <input type="text" name="nvt" id="task-nvt" required placeholder="NVT 1V3400">
                     </label>
                     <p id="task-lookup-hint" class="note" style="display:none;grid-column:1/-1;margin:0;"></p>
 

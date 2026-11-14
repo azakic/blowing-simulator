@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"html/template"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -225,5 +226,24 @@ func TestTaskNewTemplateRenders(t *testing.T) {
 	}
 	if strings.Contains(out, `name="title"`) {
 		t.Error("Title polja više nema")
+	}
+}
+
+// NVT je prvo polje u obe forme zadatka: on pokreće predikciju
+// (direktorijum iz Excela, Fremco/Jetting protokoli), pa adresa dolazi druga.
+func TestTaskFormsNVTFirst(t *testing.T) {
+	for _, name := range []string{"task-new.html", "task-detail.html"} {
+		b, err := os.ReadFile("../../web/templates/" + name)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		nvt := bytes.Index(b, []byte(`name="nvt"`))
+		street := bytes.Index(b, []byte(`name="street_number"`))
+		if nvt < 0 || street < 0 {
+			t.Fatalf("%s: nema nvt/street_number polja (nvt=%d street=%d)", name, nvt, street)
+		}
+		if nvt > street {
+			t.Errorf("%s: NVT mora biti pre polja Straße und Hausnummer", name)
+		}
 	}
 }
