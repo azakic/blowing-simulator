@@ -163,6 +163,10 @@ func SaveFremcoProtocol(db *sqlx.DB, protocol *simulator.FremcoProtocol, ownerID
 	}
 
 	log.Printf("SaveFremcoProtocol: Transaction committed successfully for protocol ID %d", protocolID)
+	// Ako za istu adresu i NVT već postoji zadatak, veži ga odmah.
+	linkTasksToProtocol(protocolID,
+		extractAddressFromSectionNVT(protocol.ProtocolInfo.SectionNVT),
+		nvtFromSection(protocol.ProtocolInfo.SectionNVT))
 	return protocolID, nil
 }
 
@@ -264,6 +268,10 @@ func SaveJettingProtocol(db *sqlx.DB, protocol *simulator.JettingProtocol, owner
 		return 0, fmt.Errorf("failed to commit transaction: %v", err)
 	}
 
+	// Ako za istu adresu i NVT već postoji zadatak, veži ga odmah.
+	linkTasksToProtocol(protocolID,
+		extractAddressFromSectionNVT(protocol.ProtocolInfo.SectionNVT),
+		nvtFromSection(protocol.ProtocolInfo.SectionNVT))
 	return protocolID, nil
 }
 

@@ -999,6 +999,42 @@ func linkMatchingProtocols(taskID int64, address, nvt string) int {
 	return linked
 }
 
+// linkTasksToProtocol veže postojeće zadatke koji imaju istu ulicu+broj i
+// NVT kao novi protokol (obrnuti smer od linkMatchingProtocols).
+func linkTasksToProtocol(protocolID int, address, nvt string) int {
+	slug := addressMatchKey(address)
+	nvtKey := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(nvt), " ", ""))
+	if protocolID <= 0 || slug == "" || nvtKey == "" {
+		return 0
+	}
+	var ids []int64
+	if err := db.Select(&ids, `SELECT t.id FROM tasks t
+		WHERE coalesce(t.nvt,'') <> ''
+		  AND regexp_replace(lower(coalesce(t.street,'') || coalesce(t.house_number,'')), '[^a-z0-9äöüß]', '', 'g') = $1
+		  AND lower(replace(t.nvt, ' ', '')) LIKE '%' || $2 || '%'
+		ORDER BY t.id DESC
+		LIMIT 10`, slug, nvtKey); err != nil {
+		log.Printf("protocol %d link tasks: %v", protocolID, err)
+		return 0
+	}
+	linked := 0
+	for _, tid := range ids {
+		res, err := db.Exec(`INSERT INTO task_protocols (task_id, protocol_id)
+			VALUES ($1,$2) ON CONFLICT DO NOTHING`, tid, protocolID)
+		if err != nil {
+			log.Printf("protocol %d link task %d: %v", protocolID, tid, err)
+			continue
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			linked++
+		}
+	}
+	if linked > 0 {
+		log.Printf("protocol %d linked to %d task(s)", protocolID, linked)
+	}
+	return linked
+}
+
 // HALookupHandler vraća najbolji pogodak iz direktorijuma za zadati NVT ili
 // adresu; HaP forma njime popunjava prazna polja klijenta.
 func HALookupHandler(w http.ResponseWriter, r *http.Request) {
