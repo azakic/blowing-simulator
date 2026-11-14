@@ -61,6 +61,37 @@
       .catch(function () {});
   }
 
+  // Više pogodaka (ista ulica u drugom mestu ili jedan NVT za više adresa):
+  // ništa se ne popunjava samo — ponudi izbor, jer je pogrešan klijent gori
+  // od praznog polja. Klik popuni adresu i NVT i odmah ponovi lookup.
+  function showCandidates(matches) {
+    hint.textContent = 'Mehrere Einträge (' + matches.length + ') — bitte wählen:';
+    var list = document.createElement('span');
+    list.className = 'lookup-choices';
+    matches.forEach(function (m) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'lookup-choice';
+      var line = ((m.street || '') + ' ' + (m.house_number || '')).trim() || m.address;
+      var parts = [line];
+      var place = ((m.postcode || '') + ' ' + (m.city || '')).trim();
+      if (place) { parts.push(place); }
+      if (m.nvt) { parts.push('NVT ' + m.nvt); }
+      if (m.kunde) { parts.push(m.kunde); }
+      btn.textContent = parts.join(' · ');
+      btn.addEventListener('click', function () {
+        if (m.street) { street.value = (m.street + ' ' + (m.house_number || '')).trim(); }
+        if (m.postcode && postcode) { postcode.value = m.postcode; }
+        if (m.city && city) { city.value = m.city; }
+        if (m.nvt && nvt) { nvt.value = m.nvt; }
+        lookup();
+      });
+      list.appendChild(btn);
+    });
+    hint.appendChild(list);
+    hint.style.display = 'block';
+  }
+
   function lookup() {
     var addr = composedAddress();
     var n = val(nvt);
@@ -70,7 +101,9 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d || !d.found) {
-          hint.textContent = 'Kein Eintrag im Verzeichnis — Name und NVT bitte manuell eintragen.';
+          hint.textContent = d && d.ambiguous
+            ? 'Mehrere Einträge für diese Adresse — bitte NVT eingeben.'
+            : 'Kein Eintrag im Verzeichnis — Name und NVT bitte manuell eintragen.';
           hint.style.display = 'block';
           return;
         }
@@ -104,10 +137,7 @@
         }
         var b = d.best;
         if (d.matches && d.matches.length > 1) {
-          var names = d.matches.map(function (m) { return m.address; });
-          hint.textContent = 'NVT ' + (b.nvt || '') + ' covers ' + d.matches.length +
-            ' addresses: ' + names.join(' · ') + ' — type the address for an exact match.';
-          hint.style.display = 'block';
+          showCandidates(d.matches);
           return;
         }
         setIfEmpty(nvt, b.nvt);

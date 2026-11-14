@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/binary"
 	"encoding/csv"
@@ -17,6 +18,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf16"
 	"unicode/utf8"
 
@@ -824,36 +826,124 @@ type lookupResponse struct {
 	Best     *lookupMatch     `json:"best,omitempty"`
 	Matches  []lookupMatch    `json:"matches,omitempty"`
 	Protocol *protocolHistory `json:"protocol,omitempty"`
+	// Ambiguous: ista ulica i broj postoje u više mesta, pa lookup ne
+	// pogađa — forma traži NVT umesto da popuni pogrešnog klijenta.
+	Ambiguous bool `json:"ambiguous,omitempty"`
 }
 
 const customerSelect = `SELECT id, address, nvt, kunde, phone, mobile,
 		street, house_number, postcode, city FROM ha_customers`
 
-// findCustomers traži pogotke: ulica+broj (+NVT), tačna adresa, NVT (grupa
-// adresa), pa prefiks i sadržaj adrese.
-func findCustomers(nvt, addr string) []customerRow {
-	keys := addressLookupKeys(addr)
-	st, houseNo, _, _ := parseAddress(addr)
-	sk := streetKey(st, houseNo)
+// nvtKeyOf normalizuje NVT za poređenje: mala slova, bez razmaka
+// („1 V 2200“ i „1V2200“ su isti priključak).
+func nvtKeyOf(s string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(s), " ", ""))
+}
 
-	// 1) ulica+broj i NVT — najprecizniji pogodak (adresa bez grada se
-	// ponavlja, NVT je razlikuje).
-	if sk != "" && nvt != "" {
-		var rows []customerRow
-		if err := db.Select(&rows, customerSelect+`
-			WHERE street_key = $1 AND nvt_key = $2 LIMIT 5`, sk, nvt); err == nil && len(rows) > 0 {
-			return rows
+// hasPlace javlja da li red ima PLZ ili grad. Excel uvoz ih zasad ne
+// popunjava, pa se poređenje mesta preskače dok se direktorijum ne dopuni.
+func hasPlace(r customerRow) bool {
+	return strings.TrimSpace(r.Postcode) != "" || strings.TrimSpace(r.City) != ""
+}
+
+// rowMatchesPlace poredi red sa upisanim mestom: PLZ je jača od grada, a
+// grad se poredi tolerantno („Wetter“ = „Wetter (Ruhr)“).
+func rowMatchesPlace(r customerRow, postcode, city string) bool {
+	if postcode != "" {
+		if p := strings.TrimSpace(r.Postcode); p != "" {
+			return p == postcode
 		}
 	}
-	// 2) samo ulica+broj
+	if city != "" {
+		if c := strings.TrimSpace(r.City); c != "" {
+			return sameCity(c, city)
+		}
+	}
+	return true
+}
+
+// rowsSharePlace javlja da li su svi kandidati u istom mestu (ili mesto
+// nije poznato u direktorijumu).
+func rowsSharePlace(rows []customerRow) bool {
+	if len(rows) < 2 {
+		return true
+	}
+	first := rows[0]
+	for _, r := range rows[1:] {
+		if p, q := strings.TrimSpace(first.Postcode), strings.TrimSpace(r.Postcode); p != "" && q != "" && p != q {
+			return false
+		}
+		if c, d := strings.TrimSpace(first.City), strings.TrimSpace(r.City); c != "" && d != "" && !sameCity(c, d) {
+			return false
+		}
+	}
+	return true
+}
+
+// narrowCustomerRows sužava kandidate sa iste ulice i broja. Redosled je
+// namerno NVT → mesto → svi: NVT je jedini pouzdan razdvajač kada dve
+// opštine imaju istu ulicu i broj, jer uvoz iz Excela ne nosi PLZ ni grad.
+//
+// Drugi rezultat je „pouzdano“: false znači da forma ne sme ništa da
+// popuni, nego treba da ponudi izbor — bolje prazno nego pogrešan klijent.
+func narrowCustomerRows(rows []customerRow, nvt, postcode, city string) ([]customerRow, bool) {
+	if len(rows) == 0 {
+		return nil, false
+	}
+	if k := nvtKeyOf(nvt); k != "" {
+		var hit []customerRow
+		for _, r := range rows {
+			if nvtKeyOf(r.NVT) == k {
+				hit = append(hit, r)
+			}
+		}
+		if len(hit) > 0 {
+			return hit, len(hit) == 1
+		}
+	}
+	if postcode != "" || city != "" {
+		var hit []customerRow
+		known := false
+		for _, r := range rows {
+			if !hasPlace(r) {
+				continue
+			}
+			known = true
+			if rowMatchesPlace(r, postcode, city) {
+				hit = append(hit, r)
+			}
+		}
+		if len(hit) > 0 {
+			return hit, len(hit) == 1
+		}
+		if known {
+			// Upisano mesto se ne poklapa ni sa jednim kandidatom.
+			return nil, false
+		}
+		// Direktorijum ne zna mesta — nastavi sa svim kandidatima.
+	}
+	return rows, len(rows) == 1
+}
+
+// findCustomers traži pogotke: ulica+broj (+NVT, +mesto), tačna adresa, NVT
+// (grupa adresa), pa prefiks i sadržaj adrese.
+func findCustomers(nvt, addr string) []customerRow {
+	keys := addressLookupKeys(addr)
+	st, houseNo, postcode, city := parseAddress(addr)
+	sk := streetKey(st, houseNo)
+
+	// 1) ulica+broj, pa NVT, pa mesto — najprecizniji pogodak. Kandidati se
+	// sužavaju u Go-u da bi grad mogao tolerantno da se poredi.
 	if sk != "" {
 		var rows []customerRow
 		if err := db.Select(&rows, customerSelect+`
 			WHERE street_key = $1 LIMIT 5`, sk); err == nil && len(rows) > 0 {
-			return rows
+			if narrowed, _ := narrowCustomerRows(rows, nvt, postcode, city); len(narrowed) > 0 {
+				return narrowed
+			}
 		}
 	}
-	// 3) tačna adresa (ceo string / pre / posle zareza)
+	// 2) tačna adresa (ceo string / pre / posle zareza)
 	for _, k := range keys {
 		var rows []customerRow
 		if err := db.Select(&rows, customerSelect+`
@@ -861,11 +951,12 @@ func findCustomers(nvt, addr string) []customerRow {
 			return rows
 		}
 	}
-	// 4) NVT — grupa adresa
-	if nvt != "" {
+	// 3) NVT — grupa adresa
+	if k := nvtKeyOf(nvt); k != "" {
 		var rows []customerRow
 		if err := db.Select(&rows, customerSelect+`
-			WHERE nvt_key = $1 ORDER BY address_key LIMIT 5`, nvt); err == nil && len(rows) > 0 {
+			WHERE lower(replace(coalesce(nvt_key,''), ' ', '')) = $1
+			ORDER BY address_key LIMIT 5`, k); err == nil && len(rows) > 0 {
 			return rows
 		}
 	}
@@ -899,21 +990,21 @@ func findCustomers(nvt, addr string) []customerRow {
 // customerForPrefill vraća klijenta za server-side popunjavanje forme:
 // tačna adresa, ili NVT samo kada je jedinstven (NVT je obično grupa adresa).
 func customerForPrefill(nvt, address string) (customerRow, bool) {
-	var row customerRow
-	st, houseNo, _, _ := parseAddress(address)
+	st, houseNo, postcode, city := parseAddress(address)
 	if sk := streetKey(st, houseNo); sk != "" {
-		if n := customerKey(nvt); n != "" {
-			if err := db.Get(&row, customerSelect+`
-				WHERE street_key = $1 AND nvt_key = $2 LIMIT 1`, sk, n); err == nil {
-				return row, true
+		var rows []customerRow
+		if err := db.Select(&rows, customerSelect+`
+			WHERE street_key = $1 LIMIT 5`, sk); err == nil && len(rows) > 0 {
+			if hit, ok := narrowCustomerRows(rows, nvt, postcode, city); ok {
+				return hit[0], true
+			} else if len(hit) > 0 {
+				// Više kandidata (ista ulica u drugom mestu) — ne pogađaj.
+				return customerRow{}, false
 			}
-		}
-		if err := db.Get(&row, customerSelect+`
-			WHERE street_key = $1 LIMIT 1`, sk); err == nil {
-			return row, true
 		}
 	}
 	for _, a := range addressLookupKeys(address) {
+		var row customerRow
 		if err := db.Get(&row, customerSelect+`
 			WHERE address_key = $1 LIMIT 1`, a); err == nil {
 			return row, true
@@ -929,34 +1020,43 @@ func customerForPrefill(nvt, address string) (customerRow, bool) {
 	return customerRow{}, false
 }
 
-// findProtocolHistory traži ranije importovan protokol (Fremco/Jetting) za
-// istu adresu ili NVT. Vraća projektni broj i NVT, da forma može da ih preuzme.
-func findProtocolHistory(nvt, address string) (protocolHistory, bool) {
-	var row struct {
-		Address       string  `db:"address"`
-		ProjectNumber string  `db:"project_number"`
-		ProtocolType  string  `db:"protocol_type"`
-		ProtocolDate  string  `db:"protocol_date"`
-		SectionNVT    string  `db:"section_nvt"`
-		Lat           float64 `db:"lat"`
-		Lon           float64 `db:"lon"`
-	}
-	err := db.Get(&row, `SELECT coalesce(p.address,'') AS address,
-			coalesce(p.project_number,'') AS project_number,
-			coalesce(p.protocol_type,'') AS protocol_type,
-			coalesce(to_char(p.protocol_date,'YYYY-MM-DD'),'') AS protocol_date,
-			coalesce(p.section_nvt,'') AS section_nvt,
-			coalesce(s.gps_latitude, 0) AS lat,
-			coalesce(s.gps_longitude, 0) AS lon
-		FROM protocols p
-		LEFT JOIN protocol_summary s ON s.protocol_id = p.id
-		WHERE ($1 <> '' AND regexp_replace(lower(coalesce(p.address,'')), '[^a-z0-9äöüß]', '', 'g') = $1)
-		   OR ($2 <> '' AND lower(coalesce(p.section_nvt,'')) LIKE '%' || $2 || '%')
+// protocolHistoryRow je jedan kandidat iz importovanih protokola.
+type protocolHistoryRow struct {
+	ID            int64   `db:"id"`
+	Address       string  `db:"address"`
+	ProjectNumber string  `db:"project_number"`
+	ProtocolType  string  `db:"protocol_type"`
+	ProtocolDate  string  `db:"protocol_date"`
+	SectionNVT    string  `db:"section_nvt"`
+	Lat           float64 `db:"lat"`
+	Lon           float64 `db:"lon"`
+}
+
+const protocolHistorySelect = `SELECT p.id,
+		coalesce(p.address,'') AS address,
+		coalesce(p.project_number,'') AS project_number,
+		coalesce(p.protocol_type,'') AS protocol_type,
+		coalesce(to_char(p.protocol_date,'YYYY-MM-DD'),'') AS protocol_date,
+		coalesce(p.section_nvt,'') AS section_nvt,
+		coalesce(s.gps_latitude, 0) AS lat,
+		coalesce(s.gps_longitude, 0) AS lon
+	FROM protocols p
+	LEFT JOIN protocol_summary s ON s.protocol_id = p.id`
+
+// protocolCandidates vraća do 5 protokola za zadati uslov (uslov je uvek
+// literal iz ovog fajla, vrednosti idu kao parametri).
+func protocolCandidates(where string, args ...any) []protocolHistoryRow {
+	var rows []protocolHistoryRow
+	if err := db.Select(&rows, protocolHistorySelect+`
+		WHERE `+where+`
 		ORDER BY p.protocol_date DESC NULLS LAST, p.id DESC
-		LIMIT 1`, addressMatchKey(address), strings.ToLower(strings.ReplaceAll(strings.TrimSpace(nvt), " ", "")))
-	if err != nil {
-		return protocolHistory{}, false
+		LIMIT 5`, args...); err != nil {
+		return nil
 	}
+	return rows
+}
+
+func protocolHistoryOf(row protocolHistoryRow, typedNVT string) protocolHistory {
 	p := protocolHistory{
 		Address:       row.Address,
 		NVT:           nvtFromSection(row.SectionNVT),
@@ -968,9 +1068,77 @@ func findProtocolHistory(nvt, address string) (protocolHistory, bool) {
 		p.Lat, p.Lon = row.Lat, row.Lon
 	}
 	if p.NVT == "" {
-		p.NVT = strings.TrimSpace(nvt)
+		p.NVT = strings.TrimSpace(typedNVT)
 	}
-	return p, true
+	return p
+}
+
+// protocolHistoryMatch je rezultat pretrage: pogodak, ili „dvosmisleno“ —
+// ista ulica i broj u više mesta, pa forma treba da traži NVT.
+type protocolHistoryMatch struct {
+	Protocol  protocolHistory
+	Found     bool
+	Ambiguous bool
+}
+
+// findProtocolHistory traži ranije importovan protokol (Fremco/Jetting) za
+// isti NVT, pa za istu adresu. Kada adresa postoji u više mesta i nema NVT,
+// ne pogađa — vraća Ambiguous, jer je pogrešan projekat gori od praznog.
+func findProtocolHistory(nvt, address string) protocolHistoryMatch {
+	if k := nvtKeyOf(nvt); k != "" {
+		if rows := protocolCandidates(
+			`lower(replace(coalesce(p.section_nvt,''), ' ', '')) LIKE '%'||$1||'%'`, k); len(rows) > 0 {
+			return protocolHistoryMatch{Protocol: protocolHistoryOf(rows[0], nvt), Found: true}
+		}
+	}
+	slug := addressMatchKey(address)
+	if slug == "" {
+		return protocolHistoryMatch{}
+	}
+	rows := protocolCandidates(
+		`regexp_replace(lower(coalesce(p.address,'')), '[^a-z0-9äöüß]', '', 'g') = $1`, slug)
+	switch {
+	case len(rows) == 0:
+		return protocolHistoryMatch{}
+	case len(rows) == 1:
+		return protocolHistoryMatch{Protocol: protocolHistoryOf(rows[0], nvt), Found: true}
+	}
+	if row, ok := pickProtocolByPlace(rows, address); ok {
+		return protocolHistoryMatch{Protocol: protocolHistoryOf(row, nvt), Found: true}
+	}
+	return protocolHistoryMatch{Ambiguous: true}
+}
+
+// pickProtocolByPlace bira protokol čije GPS mesto odgovara upisanom
+// PLZ/Ort-u. Koristi se samo kada ista ulica+broj postoji više puta, pa su
+// koordinate jedini pouzdan razdvajač; odgovori su keširani.
+func pickProtocolByPlace(rows []protocolHistoryRow, address string) (protocolHistoryRow, bool) {
+	_, _, postcode, city := parseAddress(address)
+	if postcode == "" && city == "" {
+		return protocolHistoryRow{}, false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	defer cancel()
+	tried := 0
+	for _, row := range rows {
+		if row.Lat == 0 && row.Lon == 0 {
+			continue
+		}
+		if tried >= 3 {
+			break
+		}
+		tried++
+		place := placeByCoords(ctx, row.Lat, row.Lon)
+		if place.Ambiguous {
+			continue
+		}
+		okPost := postcode == "" || place.Postcode == "" || place.Postcode == postcode
+		okCity := city == "" || place.City == "" || sameCity(place.City, city)
+		if okPost && okCity {
+			return row, true
+		}
+	}
+	return protocolHistoryRow{}, false
 }
 
 // linkMatchingProtocols povezuje zadatak sa importovanim protokolima
@@ -1064,8 +1232,12 @@ func HALookupHandler(w http.ResponseWriter, r *http.Request) {
 	if len(rows) == 0 {
 		// Nema u direktorijumu — probaj ranije importovane protokole
 		// (Fremco/Jetting): nose projektni broj i NVT za istu adresu.
-		if p, ok := findProtocolHistory(nvt, addr); ok {
+		if m := findProtocolHistory(nvt, addr); m.Found {
+			p := m.Protocol
 			writeJSON(w, lookupResponse{Found: true, Source: "protocol", Protocol: &p})
+			return
+		} else if m.Ambiguous {
+			writeJSON(w, lookupResponse{Ambiguous: true})
 			return
 		}
 		log.Printf("ha lookup: no match nvt=%q address=%q", nvt, addr)

@@ -477,3 +477,34 @@ tbody tr:hover td { background: #f9fbfd; }
             .ui-chip { color: #000; border-color: #000; background: #fff; }
             .ui-card { box-shadow: none; break-inside: avoid; }
         }
+
+/* ---------- lookup: izbor između više pogodaka ---------- */
+/* Ista ulica u drugom mestu ili jedan NVT za više adresa: umesto
+   popunjavanja pogrešnog klijenta, ponudi listu za jedan klik. */
+.lookup-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+}
+.lookup-choice {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;
+    cursor: pointer;
+    padding: 10px 12px;
+    min-height: 42px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: .9rem;
+    line-height: 1.3;
+}
+.lookup-choice:hover,
+.lookup-choice:focus-visible {
+    border-color: var(--blue);
+    background: #f7fbff;
+}
