@@ -168,6 +168,9 @@
                         <input type="text" name="nvt" id="task-nvt" required placeholder="NVT 1V3400">
                     </label>
                     <p id="task-lookup-hint" class="note" style="display:none;grid-column:1/-1;margin:0;"></p>
+                    <label class="field"><span>Telefon (optional)</span>
+                        <input type="tel" inputmode="tel" name="client_phone" maxlength="40" autocomplete="tel" placeholder="z. B. 0170 1234567">
+                    </label>
                     <label class="field wide"><span>Description</span>
                         <textarea name="description" rows="3" placeholder="Scope, notes, access details…"></textarea>
                     </label>
@@ -197,6 +200,7 @@
                             <span>Project <a class="project-link" href="/reports/project?project={{.Project}}">{{.Project}}</a></span>
                             {{if .Address}}<span>📍 <a href="{{mapsURL .Address}}" target="_blank" rel="noopener" title="In Google Maps öffnen">{{.Address}}</a>{{if .NVT}} · {{.NVT}}{{end}}</span>{{end}}
                             <span>👤 {{if .UserEmail.Valid}}{{.UserEmail.String}}{{else}}—{{end}}{{if .OrgName.Valid}} ({{.OrgName.String}}){{end}}</span>
+                            {{if .ClientPhone}}<span>📞 <a href="tel:{{.ClientPhone}}">{{.ClientPhone}}</a></span>{{end}}
                             <span>📅 {{if .DueDate.Valid}}{{dueLabel .DueDate.String}}{{if .DueTime.Valid}} {{dotTime .DueTime.String}}{{end}}{{else}}—{{end}}</span>
                             {{if gt .Protocols 0}}<span>📄 {{.Protocols}} protocol(s)</span>{{end}}
                         </div>

@@ -48,6 +48,7 @@
         <section class="kpis">
             <div class="kpi"><div class="label">Address</div><div class="value" style="font-size:.95rem;">{{if .Task.Address}}<a class="link" href="{{mapsURL .Task.Address}}" target="_blank" rel="noopener" title="In Google Maps öffnen">{{.Task.Address}} ↗</a>{{else}}—{{end}}</div></div>
             <div class="kpi"><div class="label">NVT</div><div class="value" style="font-size:.95rem;">{{if .Task.NVT}}{{.Task.NVT}}{{else}}—{{end}}</div></div>
+            <div class="kpi"><div class="label">Telefon</div><div class="value" style="font-size:.95rem;">{{if .Task.ClientPhone}}<a class="link" href="tel:{{.Task.ClientPhone}}">{{.Task.ClientPhone}}</a>{{else}}—{{end}}</div></div>
             <div class="kpi"><div class="label">Due</div><div class="value" style="font-size:.95rem;">{{if .Task.DueDate.Valid}}{{.Task.DueDate.String}}{{if .Task.DueTime.Valid}} · {{dotTime .Task.DueTime.String}}{{end}}{{else}}—{{end}}</div></div>
             <div class="kpi"><div class="label">Assigned to</div><div class="value" style="font-size:.85rem;">{{if .Task.UserEmail.Valid}}{{.Task.UserEmail.String}}{{else}}unassigned{{end}}</div></div>
         </section>
@@ -129,6 +130,9 @@
                     <label class="field" style="flex:2 1 220px;"><span>Address *</span><input type="text" name="address" id="task-address" required value="{{.Task.Address}}"></label>
                     <label class="field"><span>NVT *</span><input type="text" name="nvt" id="task-nvt" required value="{{.Task.NVT}}"></label>
                     <p id="task-lookup-hint" class="note" style="display:none;flex:1 1 100%;margin:0;"></p>
+                    <label class="field"><span>Telefon (optional)</span>
+                        <input type="tel" inputmode="tel" name="client_phone" maxlength="40" value="{{.Task.ClientPhone}}" autocomplete="tel">
+                    </label>
                     <label class="field" style="flex:1 1 100%;"><span>Description</span>
                         <textarea name="description" rows="4">{{.Task.Description}}</textarea>
                     </label>

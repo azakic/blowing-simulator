@@ -78,6 +78,7 @@ func ensureTaskSchema(db *sqlx.DB) error {
 		// da se klijent iz zadatka prenese u HaP bez prepisivanja.
 		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS client_first_name TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS client_last_name TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS client_phone TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_tasks_org ON tasks(org_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(user_id)`,
@@ -111,6 +112,7 @@ type taskRow struct {
 	Title        string         `db:"title"`
 	ClientFirst  string         `db:"client_first_name"`
 	ClientLast   string         `db:"client_last_name"`
+	ClientPhone  string         `db:"client_phone"`
 	Description  string         `db:"description"`
 	Status       string         `db:"status"`
 	Priority     string         `db:"priority"`
@@ -132,7 +134,7 @@ const taskSelect = `
 	       t.org_id, o.name AS org_name,
 	       t.user_id, u.email AS user_email,
 	       t.title, t.description, t.status, t.priority,
-	       t.client_first_name, t.client_last_name,
+	       t.client_first_name, t.client_last_name, t.client_phone,
 	       t.address, t.nvt,
 	       to_char(t.due_date, 'YYYY-MM-DD') AS due_date,
 	       to_char(t.due_time, 'HH24:MI') AS due_time,
@@ -566,6 +568,10 @@ func createTask(r *http.Request, claims *AuthClaims) (int64, string) {
 	}
 	first := strings.TrimSpace(r.FormValue("client_first_name"))
 	last := strings.TrimSpace(r.FormValue("client_last_name"))
+	phone := strings.TrimSpace(r.FormValue("client_phone"))
+	if len(phone) > 40 {
+		phone = phone[:40]
+	}
 	title := strings.TrimSpace(r.FormValue("title"))
 	if title == "" {
 		title = taskClientName(first, last)
@@ -615,13 +621,13 @@ func createTask(r *http.Request, claims *AuthClaims) (int64, string) {
 	var newID int64
 	err := db.Get(&newID, `INSERT INTO tasks
 			(project_id, org_id, user_id, title, description, priority,
-			 client_first_name, client_last_name,
+			 client_first_name, client_last_name, client_phone,
 			 address, nvt, due_date, due_time, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULLIF($11,'')::date,
-		        NULLIF($12,'')::time, $13)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULLIF($12,'')::date,
+		        NULLIF($13,'')::time, $14)
 		RETURNING id`,
 		projectID, sqlNullInt64(orgID), sqlNullInt64(userID), title, description, priority,
-		first, last, address, nvt, due, dueTime, claims.UserID)
+		first, last, phone, address, nvt, due, dueTime, claims.UserID)
 	if err != nil {
 		return 0, "Error: " + err.Error()
 	}
@@ -818,6 +824,10 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 		}
 		first := strings.TrimSpace(r.FormValue("client_first_name"))
 		last := strings.TrimSpace(r.FormValue("client_last_name"))
+		phone := strings.TrimSpace(r.FormValue("client_phone"))
+		if len(phone) > 40 {
+			phone = phone[:40]
+		}
 		explicitTitle := strings.TrimSpace(r.FormValue("title"))
 		description := strings.TrimSpace(r.FormValue("description"))
 		if len(description) > 4000 {
@@ -879,12 +889,12 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 				priority=$4, address=$5, nvt=$6,
 				due_date=NULLIF($7,'')::date, due_time=NULLIF($8,'')::time,
 				org_id=$9, user_id=$10,
-				client_first_name=$12, client_last_name=$13,
+				client_first_name=$12, client_last_name=$13, client_phone=$14,
 				updated_at=NOW()
 			WHERE id=$11`,
 			projectID, title, description, priority, address, nvt,
 			due, dueTime, sqlNullInt64(orgID), sqlNullInt64(userID), t.ID,
-			first, last)
+			first, last, phone)
 		if err != nil {
 			return "Error: " + err.Error()
 		}
