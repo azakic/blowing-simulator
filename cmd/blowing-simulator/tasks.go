@@ -98,6 +98,52 @@ func ensureTaskSchema(db *sqlx.DB) error {
 	return nil
 }
 
+// backfillTaskClients popunjava ime, prezime i telefon u zadacima koji su
+// nastali pre tih polja. Uzima samo prazna polja iz direktorijuma klijenata
+// (ista pravila kao lookup: adresa sa/bez grada, pa jedinstven NVT).
+// Idempotentno — posle prvog prolaza nema šta da se menja.
+func backfillTaskClients(db *sqlx.DB) error {
+	var rows []struct {
+		ID      int64  `db:"id"`
+		Address string `db:"address"`
+		NVT     string `db:"nvt"`
+		Phone   string `db:"client_phone"`
+	}
+	if err := db.Select(&rows, `SELECT id, coalesce(address,'') AS address,
+			coalesce(nvt,'') AS nvt, coalesce(client_phone,'') AS client_phone
+		FROM tasks
+		WHERE client_first_name = '' AND client_last_name = ''`); err != nil {
+		return err
+	}
+	filled := 0
+	for _, t := range rows {
+		c, ok := customerForPrefill(t.NVT, t.Address)
+		if !ok {
+			continue
+		}
+		first, last := splitKunde(c.Kunde)
+		if first == "" && last == "" {
+			continue
+		}
+		phone := t.Phone
+		if phone == "" {
+			phone = c.Phone
+			if phone == "" {
+				phone = c.Mobile
+			}
+		}
+		if _, err := db.Exec(`UPDATE tasks SET client_first_name=$1, client_last_name=$2,
+				client_phone=$3 WHERE id=$4`, first, last, phone, t.ID); err != nil {
+			return err
+		}
+		filled++
+	}
+	if filled > 0 {
+		log.Printf("backfill tasks: client fields filled for %d task(s)", filled)
+	}
+	return nil
+}
+
 // --- redovi za prikaz ---
 
 type taskRow struct {

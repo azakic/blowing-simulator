@@ -814,6 +814,11 @@ func main() {
 	if err := backfillProjects(db); err != nil {
 		log.Fatal("Failed to backfill projects:", err)
 	}
+	// Stari zadaci nemaju ime/prezime/telefon — popuni iz direktorijuma
+	// (samo prazna polja, da se ništa ručno uneto ne pregazi).
+	if err := backfillTaskClients(db); err != nil {
+		log.Fatal("Failed to backfill task clients:", err)
+	}
 	if err := backfillOrgAttribution(db); err != nil {
 		log.Fatal("Failed to backfill org attribution:", err)
 	}
