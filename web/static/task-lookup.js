@@ -1,6 +1,6 @@
 // Prediktivno popunjavanje zadatka iz direktorijuma klijenata (/admin/import).
 // Kada se unese adresa (ili NVT), prazna polja se popunjavaju: NVT i naslov
-// ("HA <Kunde>"). Postojeće vrednosti se nikad ne prepisuju.
+// (ime i prezime klijenta). Postojeće vrednosti se nikad ne prepisuju.
 (function () {
   var address = document.getElementById('task-address');
   var nvt = document.getElementById('task-nvt');
@@ -30,14 +30,14 @@
           return;
         }
         setIfEmpty(nvt, b.nvt);
-        var title = document.querySelector('input[name="title"]');
-        if (b.kunde) { setIfEmpty(title, 'HA ' + b.kunde); }
+        setIfEmpty(document.querySelector('input[name="client_last_name"]'), b.last_name);
+        setIfEmpty(document.querySelector('input[name="client_first_name"]'), b.first_name);
         var parts = [];
         if (b.kunde) { parts.push(b.kunde); }
         if (b.phone) { parts.push('Tel ' + b.phone); }
         if (b.mobile) { parts.push('Mobil ' + b.mobile); }
         if (b.nvt) { parts.push('NVT ' + b.nvt); }
-        hint.textContent = 'Directory: ' + parts.join(' · ') + ' — NVT/title filled when empty.';
+        hint.textContent = 'Directory: ' + parts.join(' · ') + ' — NVT/name filled when empty.';
         hint.style.display = 'block';
       })
       .catch(function () {});

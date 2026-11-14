@@ -74,6 +74,10 @@ func ensureTaskSchema(db *sqlx.DB) error {
 		)`,
 		// Vreme roka (HH:MM) uz datum — radnik dobija tačan termin u kalendaru.
 		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS due_time TIME`,
+		// Ista polja kao HaP (ha_protocols.client_first_name/client_last_name),
+		// da se klijent iz zadatka prenese u HaP bez prepisivanja.
+		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS client_first_name TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS client_last_name TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_tasks_org ON tasks(org_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(user_id)`,
@@ -105,6 +109,8 @@ type taskRow struct {
 	UserID       sql.NullInt64  `db:"user_id"`
 	UserEmail    sql.NullString `db:"user_email"`
 	Title        string         `db:"title"`
+	ClientFirst  string         `db:"client_first_name"`
+	ClientLast   string         `db:"client_last_name"`
 	Description  string         `db:"description"`
 	Status       string         `db:"status"`
 	Priority     string         `db:"priority"`
@@ -126,6 +132,7 @@ const taskSelect = `
 	       t.org_id, o.name AS org_name,
 	       t.user_id, u.email AS user_email,
 	       t.title, t.description, t.status, t.priority,
+	       t.client_first_name, t.client_last_name,
 	       t.address, t.nvt,
 	       to_char(t.due_date, 'YYYY-MM-DD') AS due_date,
 	       to_char(t.due_time, 'HH24:MI') AS due_time,
@@ -454,6 +461,7 @@ func TasksHandler(w http.ResponseWriter, r *http.Request) {
 		Funcs(template.FuncMap{
 			"dotTime":  dotTime,
 			"dueLabel": dueLabel,
+			"mapsURL":  mapsURL,
 			"hours":    hourValues,
 			"minutes":  minuteValues,
 			"hourOf":   hourOf,
@@ -556,7 +564,12 @@ func createTask(r *http.Request, claims *AuthClaims) (int64, string) {
 	if !canCreateTask(r, projectID) {
 		return 0, "You are not allowed to create tasks on that project."
 	}
+	first := strings.TrimSpace(r.FormValue("client_first_name"))
+	last := strings.TrimSpace(r.FormValue("client_last_name"))
 	title := strings.TrimSpace(r.FormValue("title"))
+	if title == "" {
+		title = taskClientName(first, last)
+	}
 	if len(title) > 200 {
 		title = title[:200]
 	}
@@ -602,12 +615,13 @@ func createTask(r *http.Request, claims *AuthClaims) (int64, string) {
 	var newID int64
 	err := db.Get(&newID, `INSERT INTO tasks
 			(project_id, org_id, user_id, title, description, priority,
+			 client_first_name, client_last_name,
 			 address, nvt, due_date, due_time, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9,'')::date,
-		        NULLIF($10,'')::time, $11)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULLIF($11,'')::date,
+		        NULLIF($12,'')::time, $13)
 		RETURNING id`,
 		projectID, sqlNullInt64(orgID), sqlNullInt64(userID), title, description, priority,
-		address, nvt, due, dueTime, claims.UserID)
+		first, last, address, nvt, due, dueTime, claims.UserID)
 	if err != nil {
 		return 0, "Error: " + err.Error()
 	}
@@ -751,6 +765,7 @@ func TaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 		Funcs(template.FuncMap{
 			"dotTime":  dotTime,
 			"dueLabel": dueLabel,
+			"mapsURL":  mapsURL,
 			"hours":    hourValues,
 			"minutes":  func() []string { return minuteOptions(t.DueTime.String) },
 			"hourOf":   hourOf,
@@ -801,10 +816,9 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 		if !canManageTask(r, t) {
 			return "You are not allowed to change this task."
 		}
-		title := strings.TrimSpace(r.FormValue("title"))
-		if len(title) > 200 {
-			title = title[:200]
-		}
+		first := strings.TrimSpace(r.FormValue("client_first_name"))
+		last := strings.TrimSpace(r.FormValue("client_last_name"))
+		explicitTitle := strings.TrimSpace(r.FormValue("title"))
 		description := strings.TrimSpace(r.FormValue("description"))
 		if len(description) > 4000 {
 			description = description[:4000]
@@ -845,17 +859,32 @@ func handleTaskDetailAction(r *http.Request, t taskRow) string {
 		if msg := validateTaskRequired(orgID, address, nvt, due, dueTime); msg != "" {
 			return msg
 		}
+		// Naslov se izvodi iz imena klijenta. Bez imena ostaje stari naslov
+		// (da se ne pregaze postojeći), a ako ga nema — adresa.
+		title := explicitTitle
+		if title == "" {
+			title = taskClientName(first, last)
+		}
+		if title == "" {
+			title = strings.TrimSpace(t.Title)
+		}
 		if title == "" {
 			title = address
+		}
+		if len(title) > 200 {
+			title = title[:200]
 		}
 
 		_, err := db.Exec(`UPDATE tasks SET project_id=$1, title=$2, description=$3,
 				priority=$4, address=$5, nvt=$6,
 				due_date=NULLIF($7,'')::date, due_time=NULLIF($8,'')::time,
-				org_id=$9, user_id=$10, updated_at=NOW()
+				org_id=$9, user_id=$10,
+				client_first_name=$12, client_last_name=$13,
+				updated_at=NOW()
 			WHERE id=$11`,
 			projectID, title, description, priority, address, nvt,
-			due, dueTime, sqlNullInt64(orgID), sqlNullInt64(userID), t.ID)
+			due, dueTime, sqlNullInt64(orgID), sqlNullInt64(userID), t.ID,
+			first, last)
 		if err != nil {
 			return "Error: " + err.Error()
 		}
@@ -918,6 +947,25 @@ func protocolVisibleToUser(claims *AuthClaims, protocolID int) bool {
 
 // dotTime prikazuje vreme nemačkom notacijom (09:30 → 09.30).
 func dotTime(s string) string { return strings.ReplaceAll(s, ":", ".") }
+
+// taskClientName spaja ime i prezime klijenta u jedan naslov („Ime Prezime“).
+func taskClientName(first, last string) string {
+	v := strings.TrimSpace(strings.TrimSpace(first) + " " + strings.TrimSpace(last))
+	if len(v) > 200 {
+		v = v[:200]
+	}
+	return v
+}
+
+// mapsURL pravi Google Maps link za adresu; na telefonu se otvara u Maps
+// aplikaciji, na računaru u web verziji.
+func mapsURL(q string) string {
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return ""
+	}
+	return "https://www.google.com/maps/search/?api=1&query=" + url.QueryEscape(q)
+}
 
 // dueLabel ispisuje datum dospeća kao dd.mm.yyyy (baza daje YYYY-MM-DD).
 func dueLabel(v string) string {

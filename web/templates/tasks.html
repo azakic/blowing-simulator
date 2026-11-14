@@ -22,7 +22,7 @@
         .tk-title { display: block; margin: .3rem 0 .35rem; font-size: .97rem; font-weight: 700; color: var(--ink); text-decoration: none; }
         .tk-title:hover { color: var(--blue); text-decoration: underline; }
         .tk-meta { display: flex; flex-wrap: wrap; gap: .2rem .9rem; font-size: .78rem; color: var(--muted); }
-        .tk-meta a { color: var(--muted); text-decoration: none; }
+        .tk-meta a { color: var(--muted); text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
         .tk-meta a:hover { color: var(--blue); text-decoration: underline; }
         .tk-overdue { font-size: .68rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--red); }
         .tk-actions { display: flex; flex-wrap: wrap; gap: .35rem; justify-content: flex-end; align-items: flex-start; }
@@ -113,8 +113,11 @@
                 <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                 <input type="hidden" name="action" value="create">
                 <div class="ui-grid">
-                    <label class="field wide"><span>Title</span>
-                        <input type="text" name="title" maxlength="200" placeholder="optional — defaults to the address">
+                    <label class="field"><span>Nachname</span>
+                        <input type="text" name="client_last_name" maxlength="100" autocomplete="family-name">
+                    </label>
+                    <label class="field"><span>Name</span>
+                        <input type="text" name="client_first_name" maxlength="100" autocomplete="given-name">
                     </label>
                     <label class="field"><span>Project *</span>
                         <select name="project_id" required>
@@ -192,7 +195,7 @@
                         <a class="tk-title" href="/tasks/view?id={{.ID}}">{{.Title}}</a>
                         <div class="tk-meta">
                             <span>Project <a class="project-link" href="/reports/project?project={{.Project}}">{{.Project}}</a></span>
-                            {{if .Address}}<span>📍 {{.Address}}{{if .NVT}} · {{.NVT}}{{end}}</span>{{end}}
+                            {{if .Address}}<span>📍 <a href="{{mapsURL .Address}}" target="_blank" rel="noopener" title="In Google Maps öffnen">{{.Address}}</a>{{if .NVT}} · {{.NVT}}{{end}}</span>{{end}}
                             <span>👤 {{if .UserEmail.Valid}}{{.UserEmail.String}}{{else}}—{{end}}{{if .OrgName.Valid}} ({{.OrgName.String}}){{end}}</span>
                             <span>📅 {{if .DueDate.Valid}}{{dueLabel .DueDate.String}}{{if .DueTime.Valid}} {{dotTime .DueTime.String}}{{end}}{{else}}—{{end}}</span>
                             {{if gt .Protocols 0}}<span>📄 {{.Protocols}} protocol(s)</span>{{end}}

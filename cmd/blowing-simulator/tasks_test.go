@@ -158,3 +158,28 @@ func contains(s, sub string) bool {
 		return false
 	})()
 }
+
+func TestTaskClientName(t *testing.T) {
+	cases := []struct{ first, last, want string }{
+		{"Milan", "Petrović", "Milan Petrović"},
+		{"", "Petrović", "Petrović"},
+		{"Milan", "", "Milan"},
+		{"  ", " ", ""},
+	}
+	for _, c := range cases {
+		if got := taskClientName(c.first, c.last); got != c.want {
+			t.Errorf("taskClientName(%q,%q) = %q, očekivano %q", c.first, c.last, got, c.want)
+		}
+	}
+}
+
+func TestMapsURL(t *testing.T) {
+	got := mapsURL("An der Borg 25, Volmarstein")
+	want := "https://www.google.com/maps/search/?api=1&query=An+der+Borg+25%2C+Volmarstein"
+	if got != want {
+		t.Errorf("mapsURL = %q, očekivano %q", got, want)
+	}
+	if mapsURL("   ") != "" {
+		t.Error("prazna adresa mora dati prazan link")
+	}
+}

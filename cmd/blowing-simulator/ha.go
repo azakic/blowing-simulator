@@ -329,13 +329,18 @@ func haPrefillFromTask(r *http.Request, taskID int64) haRow {
 	h.Address = t.Address
 	h.NVT = t.NVT
 	h.ProjectNumber = t.Project
+	// Ime klijenta iz zadatka ide direktno u HaP (ista polja).
+	h.ClientFirstName = t.ClientFirst
+	h.ClientLastName = t.ClientLast
 
 	// Predikcija: ako direktorijum klijenata već ima ovu adresu (ili
 	// jedinstven NVT), popuni klijenta i telefone odmah, bez čekanja na JS.
 	if c, ok := customerForPrefill(t.NVT, t.Address); ok {
 		first, last := splitKunde(c.Kunde)
-		h.ClientFirstName = first
-		h.ClientLastName = last
+		// Imena iz zadatka imaju prednost nad direktorijumom.
+		if h.ClientFirstName == "" && h.ClientLastName == "" {
+			h.ClientFirstName, h.ClientLastName = first, last
+		}
 		h.ClientPhone = c.Phone
 		h.ClientMobile = c.Mobile
 		if h.NVT == "" {

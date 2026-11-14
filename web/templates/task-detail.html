@@ -46,7 +46,7 @@
         {{if .Message}}<p class="note">{{.Message}}</p>{{end}}
 
         <section class="kpis">
-            <div class="kpi"><div class="label">Address</div><div class="value" style="font-size:.95rem;">{{if .Task.Address}}{{.Task.Address}}{{else}}—{{end}}</div></div>
+            <div class="kpi"><div class="label">Address</div><div class="value" style="font-size:.95rem;">{{if .Task.Address}}<a class="link" href="{{mapsURL .Task.Address}}" target="_blank" rel="noopener" title="In Google Maps öffnen">{{.Task.Address}} ↗</a>{{else}}—{{end}}</div></div>
             <div class="kpi"><div class="label">NVT</div><div class="value" style="font-size:.95rem;">{{if .Task.NVT}}{{.Task.NVT}}{{else}}—{{end}}</div></div>
             <div class="kpi"><div class="label">Due</div><div class="value" style="font-size:.95rem;">{{if .Task.DueDate.Valid}}{{.Task.DueDate.String}}{{if .Task.DueTime.Valid}} · {{dotTime .Task.DueTime.String}}{{end}}{{else}}—{{end}}</div></div>
             <div class="kpi"><div class="label">Assigned to</div><div class="value" style="font-size:.85rem;">{{if .Task.UserEmail.Valid}}{{.Task.UserEmail.String}}{{else}}unassigned{{end}}</div></div>
@@ -80,8 +80,11 @@
                     <input type="hidden" name="csrf_token" value="{{csrfToken}}">
                     <input type="hidden" name="action" value="update">
                     <input type="hidden" name="id" value="{{.Task.ID}}">
-                    <label class="field" style="flex:2 1 260px;"><span>Title</span>
-                        <input type="text" name="title" maxlength="200" value="{{.Task.Title}}" placeholder="optional — defaults to the address">
+                    <label class="field" style="flex:2 1 200px;"><span>Nachname</span>
+                        <input type="text" name="client_last_name" maxlength="100" value="{{.Task.ClientLast}}" autocomplete="family-name">
+                    </label>
+                    <label class="field" style="flex:2 1 200px;"><span>Name</span>
+                        <input type="text" name="client_first_name" maxlength="100" value="{{.Task.ClientFirst}}" autocomplete="given-name">
                     </label>
                     <label class="field"><span>Project *</span>
                         <select name="project_id" required>
