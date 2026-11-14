@@ -445,7 +445,9 @@
             // mestu) — ne popunjavaj, ponudi izbor. Klik upiše adresu i NVT
             // i ponovi lookup, pa se klijent tada popuni tačno.
             function showCandidates(matches) {
-                hint.textContent = 'Mehrere Einträge (' + matches.length + ') — bitte wählen:';
+                hint.textContent = matches.length > 1
+                    ? 'Mehrere Einträge (' + matches.length + ') — bitte wählen:'
+                    : 'Eintrag gefunden — bitte bestätigen:';
                 var list = document.createElement('span');
                 list.className = 'lookup-choices';
                 matches.forEach(function (m) {

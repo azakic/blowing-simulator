@@ -917,8 +917,9 @@ func narrowCustomerRows(rows []customerRow, nvt, postcode, city string) ([]custo
 			return hit, len(hit) == 1
 		}
 		if known {
-			// Upisano mesto se ne poklapa ni sa jednim kandidatom.
-			return nil, false
+			// Upisano mesto se ne poklapa ni sa jednim kandidatom — vrati sve
+			// kandidate da ih radnik vidi i potvrdi, umesto da se pogodi red.
+			return rows, false
 		}
 		// Direktorijum ne zna mesta — nastavi sa svim kandidatima.
 	}

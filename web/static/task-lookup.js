@@ -65,7 +65,9 @@
   // ništa se ne popunjava samo — ponudi izbor, jer je pogrešan klijent gori
   // od praznog polja. Klik popuni adresu i NVT i odmah ponovi lookup.
   function showCandidates(matches) {
-    hint.textContent = 'Mehrere Einträge (' + matches.length + ') — bitte wählen:';
+    hint.textContent = matches.length > 1
+      ? 'Mehrere Einträge (' + matches.length + ') — bitte wählen:'
+      : 'Eintrag gefunden — bitte bestätigen:';
     var list = document.createElement('span');
     list.className = 'lookup-choices';
     matches.forEach(function (m) {

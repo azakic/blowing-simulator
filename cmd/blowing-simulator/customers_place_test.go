@@ -92,7 +92,7 @@ func TestNarrowCustomerRows(t *testing.T) {
 		{"grad Herdecke", withPlace, "", "", "Herdecke", []int64{2}, true},
 		{"bez NVT i mesta", withPlace, "", "", "", []int64{1, 2}, false},
 		{"nepoznat NVT", withPlace, "1V0000", "", "", []int64{1, 2}, false},
-		{"mesto se ne poklapa", withPlace, "", "99999", "Nirgendwo", nil, false},
+		{"mesto se ne poklapa", withPlace, "", "99999", "Nirgendwo", []int64{1, 2}, false},
 		{"mesto nepoznato u bazi", noPlace, "", "", "Wetter", []int64{1, 2}, false},
 		{"NVT bez mesta u bazi", noPlace, "1V9900", "", "", []int64{2}, true},
 		{"jedan red", onlyOne, "", "", "Wetter", []int64{1}, true},
