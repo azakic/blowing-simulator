@@ -150,3 +150,13 @@ func addressSlug(s string) string {
 	}
 	return b.String()
 }
+
+// addressMatchKey normalizuje adresu za poređenje sa importovanim
+// protokolima: uzima samo ulicu i broj (bez grada i PLZ-a).
+func addressMatchKey(raw string) string {
+	st, no, _, _ := parseAddress(raw)
+	if strings.TrimSpace(st) == "" {
+		return addressSlug(raw)
+	}
+	return addressSlug(st + " " + no)
+}

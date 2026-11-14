@@ -946,7 +946,7 @@ func findProtocolHistory(nvt, address string) (protocolHistory, bool) {
 		WHERE ($1 <> '' AND regexp_replace(lower(coalesce(address,'')), '[^a-z0-9äöüß]', '', 'g') = $1)
 		   OR ($2 <> '' AND lower(coalesce(section_nvt,'')) LIKE '%' || $2 || '%')
 		ORDER BY protocol_date DESC NULLS LAST, id DESC
-		LIMIT 1`, addressSlug(address), strings.ToLower(strings.TrimSpace(nvt)))
+		LIMIT 1`, addressMatchKey(address), strings.ToLower(strings.ReplaceAll(strings.TrimSpace(nvt), " ", "")))
 	if err != nil {
 		return protocolHistory{}, false
 	}
@@ -961,6 +961,42 @@ func findProtocolHistory(nvt, address string) (protocolHistory, bool) {
 		p.NVT = strings.TrimSpace(nvt)
 	}
 	return p, true
+}
+
+// linkMatchingProtocols povezuje zadatak sa importovanim protokolima
+// (Fremco/Jetting) koji imaju istu adresu (ulica+broj) i NVT. Vraća broj
+// novih veza; ne pravi grešku ako nema pogodaka.
+func linkMatchingProtocols(taskID int64, address, nvt string) int {
+	slug := addressMatchKey(address)
+	nvtKey := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(nvt), " ", ""))
+	if taskID <= 0 || slug == "" || nvtKey == "" {
+		return 0
+	}
+	var ids []int64
+	if err := db.Select(&ids, `SELECT id FROM protocols
+		WHERE regexp_replace(lower(coalesce(address,'')), '[^a-z0-9äöüß]', '', 'g') = $1
+		  AND lower(replace(coalesce(section_nvt,''), ' ', '')) LIKE '%' || $2 || '%'
+		ORDER BY protocol_date DESC NULLS LAST, id DESC
+		LIMIT 10`, slug, nvtKey); err != nil {
+		log.Printf("task %d link protocols: %v", taskID, err)
+		return 0
+	}
+	linked := 0
+	for _, pid := range ids {
+		res, err := db.Exec(`INSERT INTO task_protocols (task_id, protocol_id)
+			VALUES ($1,$2) ON CONFLICT DO NOTHING`, taskID, pid)
+		if err != nil {
+			log.Printf("task %d link protocol %d: %v", taskID, pid, err)
+			continue
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			linked++
+		}
+	}
+	if linked > 0 {
+		log.Printf("task %d linked to %d imported protocol(s)", taskID, linked)
+	}
+	return linked
 }
 
 // HALookupHandler vraća najbolji pogodak iz direktorijuma za zadati NVT ili

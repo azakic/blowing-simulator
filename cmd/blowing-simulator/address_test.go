@@ -98,3 +98,17 @@ func TestAddressSlug(t *testing.T) {
 		}
 	}
 }
+
+func TestAddressMatchKey(t *testing.T) {
+	cases := map[string]string{
+		"Dammstr. 9":                  "dammstr9",
+		"Dammstr. 9, 58300 Wetter":    "dammstr9",
+		"An der Borg 25, Volmarstein": "anderborg25",
+		"Mühlenstr 13f":               "mühlenstr13f",
+	}
+	for in, want := range cases {
+		if got := addressMatchKey(in); got != want {
+			t.Errorf("addressMatchKey(%q) = %q, očekivano %q", in, got, want)
+		}
+	}
+}

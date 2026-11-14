@@ -842,6 +842,10 @@ func createTask(r *http.Request, claims *AuthClaims) (int64, string) {
 	if userID > 0 {
 		notifyTaskAssigned(userID, newID)
 	}
+	// Ako za istu adresu i NVT postoji importovan protokol, veži ga odmah.
+	if n := linkMatchingProtocols(newID, address, nvt); n > 0 {
+		return newID, fmt.Sprintf("Task created. %d imported protocol(s) linked.", n)
+	}
 	return newID, "Task created."
 }
 
