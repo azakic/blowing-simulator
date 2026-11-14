@@ -212,7 +212,7 @@ func TestHAPhotoKindsUniqueAndSignatures(t *testing.T) {
 		}
 		seen[k.Key] = true
 	}
-	for _, k := range []string{"sig_monteur", "sig_pruefer", "sig_kunde"} {
+	for _, k := range []string{"sig_monteur", "sig_pruefer", "sig_kunde", "sig_eigentuemer"} {
 		if !validHAKind(k) {
 			t.Errorf("potpis %q nije dozvoljena vrsta", k)
 		}

@@ -44,6 +44,7 @@ var haPhotoKinds = []haPhotoKind{
 	{"sig_monteur", "Unterschrift Monteur"},
 	{"sig_pruefer", "Unterschrift Prüfer"},
 	{"sig_kunde", "Unterschrift Kunde"},
+	{"sig_eigentuemer", "Unterschrift Eigentümer"},
 }
 
 // haSlotPhotoKinds su fiksni slotovi koje forma prikazuje i čuva. ONT se sada

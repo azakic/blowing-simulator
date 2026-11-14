@@ -57,10 +57,13 @@ func TestProviderFallbackAndHelpers(t *testing.T) {
 	if p := providerProfileFor("nepoznat"); p.Key != "westnetz" {
 		t.Errorf("fallback = %q, ocekivano westnetz", p.Key)
 	}
+	if got := protocolTitle("telekom"); got != "Begehungs- und Übergabeprotokoll Glasfaser-Hausanschluss (HA)" {
+		t.Errorf("protocolTitle(telekom) = %q", got)
+	}
 	if got := protocolTitle("westnetz"); got != "Hausanschlussprotokoll · Westnetz 1.5.1" {
 		t.Errorf("protocolTitle = %q", got)
 	}
-	if got := providerLabel("telekom"); got != "Telekom" {
+	if got := providerLabel("telekom"); got != "Deutsche Telekom Technik GmbH telekom-ha-v1" {
 		t.Errorf("providerLabel(telekom) = %q", got)
 	}
 	if !validProvider("telekom") || validProvider("nesto") {
@@ -71,23 +74,25 @@ func TestProviderFallbackAndHelpers(t *testing.T) {
 	for _, c := range choices {
 		found[c.Value] = c.Label
 	}
-	if found["westnetz"] != "Westnetz 1.5.1" {
+	if found["westnetz"] != "Westnetz (1.5.1)" {
 		t.Errorf("westnetz label = %q", found["westnetz"])
 	}
-	if found["telekom"] != "Telekom (Entwurf)" {
+	if found["telekom"] != "Deutsche Telekom Technik GmbH (Entwurf)" {
 		t.Errorf("telekom label = %q", found["telekom"])
 	}
 }
 
-// Telekom: specifikacija po ZTV TK-Netz 39A/40 mora biti kompletna u profilu
-// (grupe, obavezna polja, enumi, fotoslotovi i potpisi).
+// Telekom: specifikacija po ZTV TK-Netz 39A/40 (Gemini predlog, usvojen).
 func TestTelekomProfileSpec(t *testing.T) {
 	p := providerProfileFor("telekom")
 	if p.Status != "draft" {
 		t.Errorf("status = %q, ocekivano draft dok ne stigne zvanicni obrazac", p.Status)
 	}
-	if len(p.Fields) < 40 {
-		t.Fatalf("telekom ima %d polja, ocekivano 40+", len(p.Fields))
+	if p.DocumentTitle == "" || p.Version == "" {
+		t.Error("document_title i version moraju biti popunjeni")
+	}
+	if len(p.Fields) < 35 {
+		t.Fatalf("telekom ima %d polja, ocekivano 35+", len(p.Fields))
 	}
 
 	groups := map[string]int{}
@@ -101,6 +106,9 @@ func TestTelekomProfileSpec(t *testing.T) {
 		switch f.Kind {
 		case "photo":
 			photos++
+			if !f.Required {
+				t.Errorf("%q: fotoslot mora biti obavezan", f.Key)
+			}
 		case "signature":
 			signs++
 		case "enum":
@@ -116,49 +124,87 @@ func TestTelekomProfileSpec(t *testing.T) {
 	if len(groups) != 6 {
 		t.Errorf("grupa = %d, ocekivano 6 (%v)", len(groups), groups)
 	}
-	if photos != 6 {
-		t.Errorf("foto slotova = %d, ocekivano 6", photos)
+	if photos != 5 {
+		t.Errorf("foto slotova = %d, ocekivano 5", photos)
 	}
 	if signs != 2 {
-		t.Errorf("potpisa = %d, ocekivano 2 (monteur + eigentumer)", signs)
+		t.Errorf("potpisa = %d, ocekivano 2 (monteur + eigentuemer)", signs)
 	}
-	if enums < 5 || extras < 20 {
-		t.Errorf("enum = %d, extra = %d", enums, extras)
+	if enums != 5 {
+		t.Errorf("enuma = %d, ocekivano 5", enums)
+	}
+	if extras < 20 {
+		t.Errorf("extra polja = %d, ocekivano 20+", extras)
 	}
 
 	for _, key := range []string{
 		"nvt", "kls_id", "units", "address", "postcode", "city",
-		"client_last_name", "client_phone", "client_email",
-		"auftraggeber", "auftragnehmer",
-		"trench_length_m", "construction_method", "surface_type", "laying_depth_m",
-		"warning_tape", "house_entry_type", "house_entry_sealed",
-		"gfap_location", "gfap_sn", "cable_route", "cable_route_length_m",
-		"fireproofing", "gfta_installed", "gfta_sn", "microduct_color", "fibre_no",
-		"blowing_protocol", "attenuation_1310_db", "attenuation_1550_db",
-		"attenuation_1625_db", "attenuation_pass", "surface_restored",
-		"foto_graben", "foto_hauseinfuehrung", "foto_ringraum",
-		"foto_gfap_offen", "foto_gfap_geschlossen", "foto_oberflaeche",
-		"remarks", "protocol_date", "start_time", "sig_monteur", "sig_kunde",
+		"client_last_name", "client_first_name", "client_company",
+		"client_phone", "client_email", "auftraggeber", "auftragnehmer",
+		"trassenlaenge_m", "bauweise", "oberflaeche", "verlegetiefe_cm",
+		"trassenwarnband", "hauseinfuehrung_typ", "abdichtung_ok",
+		"montageort_gf_ap", "gf_ap_seriennr", "leitungsweg_innen", "kabelkanal_m",
+		"brandschottung", "gf_ta_montiert", "gf_ta_seriennr", "mikrorohr_farbe",
+		"einblasprotokoll_vorhanden", "daempfung_db", "oberflaeche_wiederhergestellt",
+		"remarks", "protocol_date", "start_time",
+		"photo_graben_tiefe", "photo_hauseinfuehrung_aussen", "photo_abdichtung_innen",
+		"photo_gf_ap_ta", "photo_oberflaeche_fertig",
+		"sig_monteur", "sig_eigentuemer",
 	} {
 		if _, ok := byKey[key]; !ok {
 			t.Errorf("nedostaje polje %q", key)
 		}
 	}
-	for _, key := range []string{"nvt", "kls_id", "address", "client_last_name", "protocol_date", "gfta_sn", "sig_monteur", "sig_kunde"} {
+
+	for _, key := range []string{
+		"nvt", "kls_id", "address", "postcode", "city", "client_last_name",
+		"trassenlaenge_m", "bauweise", "hauseinfuehrung_typ", "montageort_gf_ap",
+		"gf_ap_seriennr", "protocol_date", "sig_monteur", "sig_eigentuemer",
+	} {
 		if !byKey[key].Required {
 			t.Errorf("%q treba da bude obavezno", key)
 		}
 	}
-	if len(byKey["construction_method"].Options) != 3 {
-		t.Errorf("Bauweise opcije = %v", byKey["construction_method"].Options)
+
+	// Default vrednosti iz predloga.
+	for key, want := range map[string]string{
+		"units":                         "1",
+		"verlegetiefe_cm":               "60",
+		"trassenwarnband":               "true",
+		"kabelkanal_m":                  "0",
+		"brandschottung":                "false",
+		"gf_ta_montiert":                "true",
+		"einblasprotokoll_vorhanden":    "true",
+		"oberflaeche_wiederhergestellt": "true",
+		"auftraggeber":                  "Deutsche Telekom Technik GmbH",
+	} {
+		if byKey[key].Default != want {
+			t.Errorf("%q default = %q, ocekivano %q", key, byKey[key].Default, want)
+		}
 	}
-	if len(byKey["surface_type"].Options) != 4 {
-		t.Errorf("Oberflaeche opcije = %v", byKey["surface_type"].Options)
+
+	// Enum opcije po predlogu.
+	if len(byKey["bauweise"].Options) != 3 {
+		t.Errorf("Bauweise opcije = %v", byKey["bauweise"].Options)
 	}
-	if !byKey["kls_id"].Extra || !byKey["trench_length_m"].Extra {
+	if len(byKey["oberflaeche"].Options) != 4 {
+		t.Errorf("Oberflaeche opcije = %v", byKey["oberflaeche"].Options)
+	}
+	if len(byKey["hauseinfuehrung_typ"].Options) != 3 {
+		t.Errorf("Hauseinfuehrung opcije = %v", byKey["hauseinfuehrung_typ"].Options)
+	}
+	if len(byKey["montageort_gf_ap"].Options) != 4 {
+		t.Errorf("Montageort opcije = %v", byKey["montageort_gf_ap"].Options)
+	}
+	if len(byKey["leitungsweg_innen"].Options) != 3 {
+		t.Errorf("Leitungsweg opcije = %v", byKey["leitungsweg_innen"].Options)
+	}
+
+	// Telekom-specificno ide u extra, univerzalno ne.
+	if !byKey["kls_id"].Extra || !byKey["trassenlaenge_m"].Extra || !byKey["daempfung_db"].Extra {
 		t.Error("Telekom-specificna polja moraju ici u extra")
 	}
-	if byKey["nvt"].Extra || byKey["address"].Extra {
+	if byKey["nvt"].Extra || byKey["address"].Extra || byKey["client_last_name"].Extra {
 		t.Error("univerzalna polja ne idu u extra")
 	}
 }
