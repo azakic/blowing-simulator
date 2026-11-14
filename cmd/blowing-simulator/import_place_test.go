@@ -68,3 +68,32 @@ func TestImportAddressParts(t *testing.T) {
 		t.Errorf("adresa treba da pobedi: plz=%q city=%q", plz, city)
 	}
 }
+
+func TestParseCustomerCSVWithExternalRef(t *testing.T) {
+	data := []byte("Adresse;NVT;Kunde;Kundennummer\r\n" +
+		"Am Hang 10;1.25;Heinz Schmidt;KD-100234\r\n")
+	pf, err := parseCustomerCSV("test.csv", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pf.Rows) != 1 {
+		t.Fatalf("redova = %d, očekivano 1", len(pf.Rows))
+	}
+	if got := pf.Rows[0].ExternalRef; got != "KD-100234" {
+		t.Errorf("external_ref = %q, očekivano KD-100234", got)
+	}
+}
+
+func TestExternalRefHeaders(t *testing.T) {
+	for _, h := range []string{"Kundennummer", "Kunden-Nr.", "KdNr", "Anschlussnummer", "Vertragsnummer"} {
+		if !isExternalRefHeader(normalizeHeader(h)) {
+			t.Errorf("%q nije prepoznat kao broj klijenta/priključka", h)
+		}
+	}
+	// Telefonnummer i slično ne smeju da se pomešaju.
+	for _, h := range []string{"Telefonnummer", "NVT", "Adresse", "Mobil"} {
+		if isExternalRefHeader(normalizeHeader(h)) {
+			t.Errorf("%q lažno prepoznat kao external_ref", h)
+		}
+	}
+}

@@ -61,6 +61,7 @@ func ensureCustomerSchema(db *sqlx.DB) error {
 		`ALTER TABLE ha_customers ADD COLUMN IF NOT EXISTS postcode TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_customers ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_customers ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE ha_customers ADD COLUMN IF NOT EXISTS external_ref TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE ha_customers ADD COLUMN IF NOT EXISTS street_key TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_ha_customers_street_key ON ha_customers (street_key)`,
 		// NVT nije jedinstven (npr. „1.25“ deli više adresa) — ključ za
@@ -105,6 +106,7 @@ type customerRow struct {
 	Postcode    string `db:"postcode" json:"postcode"`
 	City        string `db:"city" json:"city"`
 	Email       string `db:"email" json:"email"`
+	ExternalRef string `db:"external_ref" json:"external_ref,omitempty"`
 	Source      string `db:"source" json:"-"`
 }
 
@@ -366,14 +368,14 @@ func detectDelimiter(data []byte) rune {
 // --- mapiranje kolona ---
 
 type customerCols struct {
-	address, nvt, kunde, phone, mobile, postcode, city, email int
+	address, nvt, kunde, phone, mobile, postcode, city, email, externalRef int
 }
 
 // Kada zaglavlje nije prepoznato, koristi se stari raspored bez mesta i
 // e-pošte (kolone -1 = nema ih).
 var customerColDefaults = customerCols{
 	address: 0, nvt: 1, kunde: 2, phone: 3, mobile: 4,
-	postcode: -1, city: -1, email: -1,
+	postcode: -1, city: -1, email: -1, externalRef: -1,
 }
 
 func (c customerCols) get(rec []string, idx int) string {
@@ -397,14 +399,15 @@ func rowsFromTable(raw [][]string) ([]customerRow, bool) {
 			continue
 		}
 		row := customerRow{
-			Address:  cleanCell(cmap.get(rec, cmap.address)),
-			NVT:      cleanCell(cmap.get(rec, cmap.nvt)),
-			Kunde:    cleanCell(cmap.get(rec, cmap.kunde)),
-			Phone:    cleanCell(cmap.get(rec, cmap.phone)),
-			Mobile:   cleanCell(cmap.get(rec, cmap.mobile)),
-			Postcode: cleanCell(cmap.get(rec, cmap.postcode)),
-			City:     cleanCell(cmap.get(rec, cmap.city)),
-			Email:    cleanCell(cmap.get(rec, cmap.email)),
+			Address:     cleanCell(cmap.get(rec, cmap.address)),
+			NVT:         cleanCell(cmap.get(rec, cmap.nvt)),
+			Kunde:       cleanCell(cmap.get(rec, cmap.kunde)),
+			Phone:       cleanCell(cmap.get(rec, cmap.phone)),
+			Mobile:      cleanCell(cmap.get(rec, cmap.mobile)),
+			Postcode:    cleanCell(cmap.get(rec, cmap.postcode)),
+			City:        cleanCell(cmap.get(rec, cmap.city)),
+			Email:       cleanCell(cmap.get(rec, cmap.email)),
+			ExternalRef: cleanCell(cmap.get(rec, cmap.externalRef)),
 		}
 		if row.Address == "" && row.NVT == "" && row.Kunde == "" && row.Phone == "" && row.Mobile == "" {
 			continue
@@ -428,7 +431,7 @@ func detectHeader(raw [][]string) (int, customerCols, bool) {
 }
 
 func matchHeader(rec []string) (customerCols, bool) {
-	m := customerCols{-1, -1, -1, -1, -1, -1, -1, -1}
+	m := customerCols{-1, -1, -1, -1, -1, -1, -1, -1, -1}
 	found := 0
 	for i, cell := range rec {
 		k := normalizeHeader(cell)
@@ -442,6 +445,8 @@ func matchHeader(rec []string) (customerCols, bool) {
 			m.phone, found = i, found+1
 		case m.email < 0 && isEmailHeader(k):
 			m.email, found = i, found+1
+		case m.externalRef < 0 && isExternalRefHeader(k):
+			m.externalRef, found = i, found+1
 		case m.postcode < 0 && isPostcodeHeader(k):
 			m.postcode, found = i, found+1
 		case m.city < 0 && isCityHeader(k):
@@ -499,6 +504,17 @@ func isCityHeader(k string) bool {
 
 func isEmailHeader(k string) bool {
 	return k == "mail" || strings.Contains(k, "email")
+}
+
+// isExternalRefHeader prepoznaje Kundennummer/Anschlussnummer/Vertragsnummer
+// (u Excelu često „Kunden-Nr.“, „Anschluss-Nr.“).
+func isExternalRefHeader(k string) bool {
+	switch k {
+	case "kundennummer", "kundennr", "kundenummer", "kdnr",
+		"anschlussnummer", "anschlussnr", "vertragsnummer", "vertragsnr":
+		return true
+	}
+	return false
 }
 
 // importAddressParts deli adresu, a PLZ/Ort dopunjuje iz zasebnih kolona
@@ -766,15 +782,18 @@ func importCustomers(r *http.Request) *customerImportResult {
 			// Adresa je ključ za spajanje; NVT se samo osvežava.
 			err = tx.Get(&inserted, `INSERT INTO ha_customers
 					(address, nvt, kunde, phone, mobile,
-					 street, house_number, postcode, city, email, street_key,
+					 street, house_number, postcode, city, email, external_ref, street_key,
 					 nvt_key, address_key, source, imported_by)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 				ON CONFLICT (address_key) WHERE address_key <> ''
 				DO UPDATE SET address=EXCLUDED.address, nvt=EXCLUDED.nvt,
 					kunde=EXCLUDED.kunde, phone=EXCLUDED.phone, mobile=EXCLUDED.mobile,
 					street=EXCLUDED.street, house_number=EXCLUDED.house_number,
 					postcode=EXCLUDED.postcode, city=EXCLUDED.city,
-					email=EXCLUDED.email, street_key=EXCLUDED.street_key,
+					email=EXCLUDED.email,
+					external_ref=CASE WHEN EXCLUDED.external_ref = ''
+						THEN ha_customers.external_ref ELSE EXCLUDED.external_ref END,
+					street_key=EXCLUDED.street_key,
 					nvt_key=EXCLUDED.nvt_key, source=EXCLUDED.source,
 					imported_by=EXCLUDED.imported_by, updated_at=NOW()
 				WHERE ha_customers.address IS DISTINCT FROM EXCLUDED.address
@@ -783,32 +802,39 @@ func importCustomers(r *http.Request) *customerImportResult {
 					OR ha_customers.phone IS DISTINCT FROM EXCLUDED.phone
 					OR ha_customers.mobile IS DISTINCT FROM EXCLUDED.mobile
 					OR ha_customers.email IS DISTINCT FROM EXCLUDED.email
+					OR (EXCLUDED.external_ref <> ''
+						AND ha_customers.external_ref IS DISTINCT FROM EXCLUDED.external_ref)
 					OR ha_customers.nvt_key IS DISTINCT FROM EXCLUDED.nvt_key
 					OR ha_customers.street_key IS DISTINCT FROM EXCLUDED.street_key
 				RETURNING (xmax = 0) AS inserted`,
 				row.Address, row.NVT, row.Kunde, row.Phone, row.Mobile,
-				st, houseNo, plz, city, row.Email, sKey,
+				st, houseNo, plz, city, row.Email, row.ExternalRef, sKey,
 				nvtKey, addrKey, res.Filename, userID)
 		} else {
 			err = tx.Get(&inserted, `INSERT INTO ha_customers
 					(address, nvt, kunde, phone, mobile,
-					 street, house_number, postcode, city, email, street_key,
+					 street, house_number, postcode, city, email, external_ref, street_key,
 					 nvt_key, address_key, source, imported_by)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 				ON CONFLICT (nvt_key, kunde) WHERE address_key = ''
 				DO UPDATE SET phone=EXCLUDED.phone, mobile=EXCLUDED.mobile,
 					street=EXCLUDED.street, house_number=EXCLUDED.house_number,
 					postcode=EXCLUDED.postcode, city=EXCLUDED.city,
-					email=EXCLUDED.email, street_key=EXCLUDED.street_key,
+					email=EXCLUDED.email,
+					external_ref=CASE WHEN EXCLUDED.external_ref = ''
+						THEN ha_customers.external_ref ELSE EXCLUDED.external_ref END,
+					street_key=EXCLUDED.street_key,
 					source=EXCLUDED.source, imported_by=EXCLUDED.imported_by,
 					updated_at=NOW()
 				WHERE ha_customers.phone IS DISTINCT FROM EXCLUDED.phone
 					OR ha_customers.mobile IS DISTINCT FROM EXCLUDED.mobile
 					OR ha_customers.email IS DISTINCT FROM EXCLUDED.email
+					OR (EXCLUDED.external_ref <> ''
+						AND ha_customers.external_ref IS DISTINCT FROM EXCLUDED.external_ref)
 					OR ha_customers.street_key IS DISTINCT FROM EXCLUDED.street_key
 				RETURNING (xmax = 0) AS inserted`,
 				row.Address, row.NVT, row.Kunde, row.Phone, row.Mobile,
-				st, houseNo, plz, city, row.Email, sKey,
+				st, houseNo, plz, city, row.Email, row.ExternalRef, sKey,
 				nvtKey, addrKey, res.Filename, userID)
 		}
 		if err != nil {

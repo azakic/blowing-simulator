@@ -79,9 +79,15 @@ func connectionParts(street, houseNo, postcode, city, address, nvt string) (stri
 	return st, no, plz, ct, strings.TrimSpace(nvt)
 }
 
-// upsertConnection vraća id objekta za (ulica+broj, NVT), stvarajući ga ako
-// ne postoji. Postojeće PLZ/Ort se ne prepisuju praznim vrednostima.
+// upsertConnection vraća id objekta za (ulica+broj, NVT); spoljašnji broj
+// (Kundennummer) šalje samo uvoz direktorijuma.
 func upsertConnection(ctx context.Context, ext sqlx.ExtContext, street, houseNo, postcode, city, nvt string) (int64, error) {
+	return upsertConnectionWithRef(ctx, ext, street, houseNo, postcode, city, nvt, "")
+}
+
+// upsertConnectionWithRef kao upsertConnection, uz `external_ref` (broj
+// priključka/kupca kod provajdera). Prazne vrednosti ne prepisuju postojeće.
+func upsertConnectionWithRef(ctx context.Context, ext sqlx.ExtContext, street, houseNo, postcode, city, nvt, externalRef string) (int64, error) {
 	street = strings.TrimSpace(street)
 	houseNo = strings.TrimSpace(houseNo)
 	// Slug (bez tačaka/razmaka) da se „Dammstr.9“ i „Dammstr. 9“ spoje u isti
@@ -92,18 +98,19 @@ func upsertConnection(ctx context.Context, ext sqlx.ExtContext, street, houseNo,
 	}
 	var id int64
 	err := sqlx.GetContext(ctx, ext, &id, `INSERT INTO connections
-			(street, house_number, postcode, city, address, street_key, nvt, nvt_key)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+			(street, house_number, postcode, city, address, street_key, nvt, nvt_key, external_ref)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 		ON CONFLICT (street_key, nvt_key) WHERE street_key <> ''
 		DO UPDATE SET
 			postcode = CASE WHEN connections.postcode = '' THEN EXCLUDED.postcode ELSE connections.postcode END,
 			city     = CASE WHEN connections.city = '' THEN EXCLUDED.city ELSE connections.city END,
 			address  = CASE WHEN connections.address = '' THEN EXCLUDED.address ELSE connections.address END,
+			external_ref = CASE WHEN connections.external_ref = '' THEN EXCLUDED.external_ref ELSE connections.external_ref END,
 			updated_at = NOW()
 		RETURNING id`,
 		street, houseNo, strings.TrimSpace(postcode), strings.TrimSpace(city),
 		formatAddress(street, houseNo, postcode, city), sk,
-		strings.TrimSpace(nvt), nvtKeyOf(nvt))
+		strings.TrimSpace(nvt), nvtKeyOf(nvt), strings.TrimSpace(externalRef))
 	if err != nil {
 		return 0, err
 	}
@@ -305,18 +312,20 @@ func backfillCustomerConnections(db *sqlx.DB) error {
 		City        string `db:"city"`
 		Address     string `db:"address"`
 		NVT         string `db:"nvt"`
+		ExternalRef string `db:"external_ref"`
 	}
 	if err := db.SelectContext(ctx, &rows, `SELECT id,
 			coalesce(street,'') AS street, coalesce(house_number,'') AS house_number,
 			coalesce(postcode,'') AS postcode, coalesce(city,'') AS city,
-			coalesce(address,'') AS address, coalesce(nvt,'') AS nvt
+			coalesce(address,'') AS address, coalesce(nvt,'') AS nvt,
+			coalesce(external_ref,'') AS external_ref
 		FROM ha_customers WHERE connection_id IS NULL`); err != nil {
 		return err
 	}
 	linked := 0
 	for _, r := range rows {
 		st, no, plz, ct, nv := connectionParts(r.Street, r.HouseNumber, r.Postcode, r.City, r.Address, r.NVT)
-		id, err := upsertConnection(ctx, db, st, no, plz, ct, nv)
+		id, err := upsertConnectionWithRef(ctx, db, st, no, plz, ct, nv, r.ExternalRef)
 		if err != nil {
 			log.Printf("connections: customer %d: %v", r.ID, err)
 			continue
